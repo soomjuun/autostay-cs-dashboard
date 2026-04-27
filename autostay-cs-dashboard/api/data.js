@@ -1,6 +1,3 @@
-// Vercel Serverless Function — Channel.io API Proxy
-// Fetches real CS data and returns processed JSON for the dashboard
-
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -23,7 +20,6 @@ module.exports = async function handler(req, res) {
   };
 
   try {
-    // Fetch all data in parallel
     const [channelRes, managersRes, openRes, groupsRes, botsRes] = await Promise.all([
       fetch(`${BASE}/channel`, { headers }),
       fetch(`${BASE}/managers?limit=30&sortField=name`, { headers }),
@@ -40,7 +36,6 @@ module.exports = async function handler(req, res) {
       botsRes.json(),
     ]);
 
-    // Paginated closed chats (up to 500)
     let allChats = [];
     let nextCursor = null;
     for (let page = 0; page < 10 && allChats.length < 500; page++) {
@@ -56,7 +51,6 @@ module.exports = async function handler(req, res) {
       if (!nextCursor) break;
     }
 
-    // ── Process daily trend ──
     const dayCounts = {};
     const heatmapData = {};
     const tagCounts = {};
@@ -78,24 +72,20 @@ module.exports = async function handler(req, res) {
       const dayKey = `${dt.getMonth()+1}/${dt.getDate()}`;
       if (dayKey in dayCounts) dayCounts[dayKey]++;
 
-      // Heatmap: weekday × hour
-      const wd = dt.getDay() === 0 ? 6 : dt.getDay() - 1; // Mon=0
+      const wd = dt.getDay() === 0 ? 6 : dt.getDay() - 1;
       const hr = dt.getHours();
       const hmKey = `${wd}-${hr}`;
       heatmapData[hmKey] = (heatmapData[hmKey] || 0) + 1;
 
-      // Tags
       for (const tag of (c.tags || [])) {
         tagCounts[tag] = (tagCounts[tag] || 0) + 1;
       }
 
-      // Source
       const medium = c.source && c.source.medium ? c.source.medium.mediumType : 'other';
       if (medium === 'native') sourceCounts.native++;
       else if (medium === 'phone') sourceCounts.phone++;
       else sourceCounts.other++;
 
-      // Resolution time (ms → min)
       const resTime = c.resolutionTime;
       if (resTime && resTime > 0) {
         const mins = resTime / 1000 / 60;
@@ -107,11 +97,9 @@ module.exports = async function handler(req, res) {
         else resBuckets['8시간+']++;
       }
 
-      // Manager counts
       if (c.assigneeId) mgrCounts[c.assigneeId] = (mgrCounts[c.assigneeId] || 0) + 1;
     }
 
-    // Build manager stats
     const managers = (managersData.managers || [])
       .filter(function(m) { return !m.removed; })
       .map(function(m) {
@@ -125,7 +113,6 @@ module.exports = async function handler(req, res) {
       })
       .sort(function(a, b) { return b.count - a.count; });
 
-    // Top tags
     const topTags = Object.entries(tagCounts)
       .sort(function(a, b) { return b[1] - a[1]; })
       .slice(0, 10);
@@ -134,8 +121,6 @@ module.exports = async function handler(req, res) {
       ? Math.round(resTimes.reduce(function(a, b) { return a + b; }, 0) / resTimes.length)
       : 0;
     const openChats = openData.userChats || [];
-
-    // Peak day
     const peakEntry = Object.entries(dayCounts).sort(function(a, b) { return b[1] - a[1]; })[0];
 
     return res.json({
