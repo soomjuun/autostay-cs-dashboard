@@ -1,31 +1,47 @@
+// Vercel Serverless Function — Channel.io API Proxy  v2.1
+// Fixes: KST timezone, ?days param (7 | 30 | all), chat date-window filtering
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate');
+  // 기간 탭 전환 시 즉시 최신 데이터 반환 (캐시 비활성화)
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  const ACCESS_KEY = process.env.CHANNEL_ACCESS_KEY || '69eece38928df5646de2';
+  const ACCESS_KEY    = process.env.CHANNEL_ACCESS_KEY    || '69eece38928df5646de2';
   const ACCESS_SECRET = process.env.CHANNEL_ACCESS_SECRET || '830397bafe9ac97388edc8fa6af913c5';
   const BASE = 'https://api.channel.io/open/v5';
   const epoch = Date.now().toString();
 
   const headers = {
-    'x-access-key': ACCESS_KEY,
+    'x-access-key':    ACCESS_KEY,
     'x-access-secret': ACCESS_SECRET,
-    'x-request-at': epoch,
-    'Content-Type': 'application/json',
+    'x-request-at':    epoch,
+    'Content-Type':    'application/json',
   };
 
+  // ── Parse query params ──────────────────────────────────────────────────────
+  const daysParam = req.query && req.query.days;
+  // 'all' = no date filter (most recent 500 chats regardless of date)
+  // 7 or 30 = filter to last N days
+  const days = (!daysParam || daysParam === 'all') ? null : parseInt(daysParam) || 30;
+
+  // ── KST helper (+9h shift so .getHours()/.getDay()/.getDate() return KST) ──
+  const KST_MS = 9 * 3600 * 1000;
+  const toKST  = (ts) => new Date(ts + KST_MS);
+
   try {
+    // Fetch channel metadata, managers, open chats, groups, bots in parallel
     const [channelRes, managersRes, openRes, groupsRes, botsRes] = await Promise.all([
-      fetch(`${BASE}/channel`, { headers }),
-      fetch(`${BASE}/managers?limit=30&sortField=name`, { headers }),
+      fetch(`${BASE}/channel`,                                        { headers }),
+      fetch(`${BASE}/managers?limit=30&sortField=name`,              { headers }),
       fetch(`${BASE}/user-chats?limit=50&state=opened&sortOrder=desc`, { headers }),
-      fetch(`${BASE}/groups`, { headers }),
-      fetch(`${BASE}/bots`, { headers }),
+      fetch(`${BASE}/groups`,                                         { headers }),
+      fetch(`${BASE}/bots`,                                           { headers }),
     ]);
 
     const [channelData, managersData, openData, groupsData, botsData] = await Promise.all([
@@ -36,6 +52,7 @@ module.exports = async function handler(req, res) {
       botsRes.json(),
     ]);
 
+    // ── Paginated closed chats (up to 500) ──────────────────────────────────
     let allChats = [];
     let nextCursor = null;
     for (let page = 0; page < 10 && allChats.length < 500; page++) {
@@ -51,101 +68,135 @@ module.exports = async function handler(req, res) {
       if (!nextCursor) break;
     }
 
-    const dayCounts = {};
-    const heatmapData = {};
-    const tagCounts = {};
-    const sourceCounts = { native: 0, phone: 0, other: 0 };
-    const resBuckets = { '0~5분': 0, '5~30분': 0, '30분~2시간': 0, '2~8시간': 0, '8시간+': 0 };
-    const mgrCounts = {};
-    const resTimes = [];
+    // ── Date cutoff for windowed modes ──────────────────────────────────────
+    const cutoffMs = days ? (Date.now() - days * 24 * 3600 * 1000) : null;
 
-    const now = new Date();
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(now.getDate() - i);
-      const key = `${d.getMonth()+1}/${d.getDate()}`;
+    // ── Pre-build dayCounts window ───────────────────────────────────────────
+    const dayCounts = {};
+    const windowDays = days || 90; // 'all' mode shows up to 90-day grid
+    const nowKST = toKST(Date.now());
+    for (let i = windowDays - 1; i >= 0; i--) {
+      const d = new Date(nowKST.getTime() - i * 24 * 3600 * 1000);
+      const key = `${d.getMonth() + 1}/${d.getDate()}`;
       dayCounts[key] = 0;
     }
 
+    // ── Process chats ────────────────────────────────────────────────────────
+    const heatmapData = {};
+    const tagCounts   = {};
+    const sourceCounts = { native: 0, phone: 0, other: 0 };
+    const resBuckets   = { '0~5분': 0, '5~30분': 0, '30분~2시간': 0, '2~8시간': 0, '8시간+': 0 };
+    const mgrCounts   = {};
+    const resTimes    = [];
+    let   processed   = 0;
+
     for (const c of allChats) {
-      const dt = new Date(c.createdAt);
-      const dayKey = `${dt.getMonth()+1}/${dt.getDate()}`;
+      // Apply date filter
+      if (cutoffMs && c.createdAt < cutoffMs) continue;
+      processed++;
+
+      const dt = toKST(c.createdAt); // KST Date
+
+      // Daily trend (KST date)
+      const dayKey = `${dt.getMonth() + 1}/${dt.getDate()}`;
       if (dayKey in dayCounts) dayCounts[dayKey]++;
 
-      const wd = dt.getDay() === 0 ? 6 : dt.getDay() - 1;
-      const hr = dt.getHours();
-      const hmKey = `${wd}-${hr}`;
+      // Heatmap: weekday(Mon=0 … Sun=6) × hour in KST
+      const rawDay = dt.getDay(); // 0=Sun in KST
+      const wd     = rawDay === 0 ? 6 : rawDay - 1; // convert: Mon=0, Sun=6
+      const hr     = dt.getHours(); // KST 0-23
+      const hmKey  = `${wd}-${hr}`;
       heatmapData[hmKey] = (heatmapData[hmKey] || 0) + 1;
 
+      // Tags
       for (const tag of (c.tags || [])) {
         tagCounts[tag] = (tagCounts[tag] || 0) + 1;
       }
 
+      // Source / medium
       const medium = c.source && c.source.medium ? c.source.medium.mediumType : 'other';
-      if (medium === 'native') sourceCounts.native++;
-      else if (medium === 'phone') sourceCounts.phone++;
-      else sourceCounts.other++;
+      if      (medium === 'native') sourceCounts.native++;
+      else if (medium === 'phone')  sourceCounts.phone++;
+      else                           sourceCounts.other++;
 
+      // Resolution time (ms → min)
       const resTime = c.resolutionTime;
       if (resTime && resTime > 0) {
         const mins = resTime / 1000 / 60;
         resTimes.push(mins);
-        if (mins < 5) resBuckets['0~5분']++;
-        else if (mins < 30) resBuckets['5~30분']++;
+        if      (mins < 5)   resBuckets['0~5분']++;
+        else if (mins < 30)  resBuckets['5~30분']++;
         else if (mins < 120) resBuckets['30분~2시간']++;
         else if (mins < 480) resBuckets['2~8시간']++;
-        else resBuckets['8시간+']++;
+        else                  resBuckets['8시간+']++;
       }
 
+      // Manager attribution
       if (c.assigneeId) mgrCounts[c.assigneeId] = (mgrCounts[c.assigneeId] || 0) + 1;
     }
 
+    // For 'all' mode, trim leading/trailing zero-days from the trend
+    let trendDayCounts = dayCounts;
+    if (!days) {
+      const entries = Object.entries(dayCounts);
+      const firstNonZero = entries.findIndex(([, v]) => v > 0);
+      if (firstNonZero > 0) {
+        trendDayCounts = Object.fromEntries(entries.slice(Math.max(0, firstNonZero - 1)));
+      }
+    }
+
+    // ── Build manager stats ──────────────────────────────────────────────────
     const managers = (managersData.managers || [])
       .filter(function(m) { return !m.removed; })
       .map(function(m) {
         return {
-          id: m.id,
-          name: m.name,
+          id:            m.id,
+          name:          m.name,
           operatorScore: Math.round((m.operatorScore || 0) * 10) / 10,
-          touchScore: Math.round((m.touchScore || 0) * 10) / 10,
-          count: mgrCounts[m.id] || 0,
+          touchScore:    Math.round((m.touchScore    || 0) * 10) / 10,
+          count:         mgrCounts[m.id] || 0,
         };
       })
       .sort(function(a, b) { return b.count - a.count; });
 
+    // ── Top 10 tags ──────────────────────────────────────────────────────────
     const topTags = Object.entries(tagCounts)
       .sort(function(a, b) { return b[1] - a[1]; })
       .slice(0, 10);
 
+    // ── Averages & peaks ─────────────────────────────────────────────────────
     const avgRes = resTimes.length
       ? Math.round(resTimes.reduce(function(a, b) { return a + b; }, 0) / resTimes.length)
       : 0;
-    const openChats = openData.userChats || [];
-    const peakEntry = Object.entries(dayCounts).sort(function(a, b) { return b[1] - a[1]; })[0];
+
+    const openChats  = openData.userChats || [];
+    const peakEntry  = Object.entries(trendDayCounts)
+      .sort(function(a, b) { return b[1] - a[1]; })[0];
 
     return res.json({
       updatedAt: new Date().toISOString(),
-      channel: channelData.channel || {},
+      range:     days ? `${days}d` : 'all',
+      channel:   channelData.channel || {},
       summary: {
-        totalChats: allChats.length,
-        openChats: openChats.length,
+        totalChats:      processed,
+        openChats:       openChats.length,
         avgResolutionMin: avgRes,
         peakDay: peakEntry ? { label: peakEntry[0], count: peakEntry[1] } : null,
       },
       dailyTrend: {
-        labels: Object.keys(dayCounts),
-        values: Object.values(dayCounts),
+        labels: Object.keys(trendDayCounts),
+        values: Object.values(trendDayCounts),
       },
       tags: {
         labels: topTags.map(function(t) { return t[0]; }),
         values: topTags.map(function(t) { return t[1]; }),
       },
-      sources: sourceCounts,
+      sources:           sourceCounts,
       resolutionBuckets: resBuckets,
-      heatmap: heatmapData,
-      managers: managers,
-      groups: groupsData.groups || [],
-      bots: botsData.bots || [],
+      heatmap:           heatmapData,
+      managers:          managers,
+      groups:            groupsData.groups  || [],
+      bots:              botsData.bots      || [],
     });
 
   } catch (err) {

@@ -882,7 +882,7 @@ function agentComment(m, rank) {
 function renderManagerRows(managers, total, avgRes) {
   const tbody = document.getElementById('managerTbody');
   if (!managers.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="tbl-loading">담당자 데이터 없음</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="tbl-loading">담당자 데이터 없음</td></tr>';
     return;
   }
   // 정렬된 인덱스 (원본 rank는 count 순 기준)
@@ -890,6 +890,8 @@ function renderManagerRows(managers, total, avgRes) {
 
   tbody.innerHTML = sorted.map((m, i) => {
     const origRank = managers.indexOf(m); // count 기준 원래 순위
+    const displayRank = origRank + 1;     // 1-based 순위
+    const rankClass = displayRank === 1 ? 'r1' : displayRank === 2 ? 'r2' : displayRank === 3 ? 'r3' : 'rn';
     const topPct = total > 0 ? Math.round(m.count / total * 100) : 0;
     const touchPct = Math.min(m.touchScore, 100);
     const isActive = m.count > 0;
@@ -899,9 +901,13 @@ function renderManagerRows(managers, total, avgRes) {
     const opColor = m.operatorScore > 30 ? 'var(--teal)' : m.operatorScore > 10 ? '#b45309' : 'var(--muted)';
     const tcColor = m.touchScore > 50 ? 'var(--teal)' : m.touchScore > 20 ? '#b45309' : 'var(--muted)';
     const comment = agentComment(m, origRank);
+    const rowStyle = !isActive ? 'opacity:.55' : '';
 
     return `
-      <tr>
+      <tr style="${rowStyle}">
+        <td style="text-align:center;padding:11px 6px">
+          <span class="agent-rank ${rankClass}">${isActive ? displayRank : '—'}</span>
+        </td>
         <td>
           <div class="agent-name-cell">
             <div class="agent-avatar" style="${avatarStyle(origRank)}">${initials(m.name)}</div>
@@ -912,20 +918,20 @@ function renderManagerRows(managers, total, avgRes) {
         <td>
           ${isActive ? `
             <div class="score-cell">
-              <div class="score-bar" style="width:70px"><div class="score-fill" style="width:${topPct}%"></div></div>
-              <span style="font-size:10.5px;color:var(--muted)">${topPct}%</span>
+              <div class="score-bar" style="width:54px;flex-shrink:0"><div class="score-fill" style="width:${topPct}%"></div></div>
+              <span style="font-size:10.5px;color:var(--muted);width:30px;text-align:right;flex-shrink:0">${topPct}%</span>
             </div>` : '—'}
         </td>
         <td class="num-r">
-          <div class="score-cell" style="justify-content:flex-end">
-            <div class="score-bar"><div class="score-fill" style="width:${Math.min(m.operatorScore, 100)}%;background:${opColor}"></div></div>
-            <span style="font-weight:700;color:${opColor}">${m.operatorScore}</span>
+          <div class="score-cell-fixed">
+            <div class="score-bar-fixed"><div class="score-fill" style="width:${Math.min(m.operatorScore, 100)}%;background:${opColor}"></div></div>
+            <span class="score-num" style="color:${opColor}">${m.operatorScore}</span>
           </div>
         </td>
         <td class="num-r">
-          <div class="score-cell" style="justify-content:flex-end">
-            <div class="score-bar"><div class="score-fill" style="width:${touchPct}%;background:${tcColor}"></div></div>
-            <span style="font-weight:700;color:${tcColor}">${m.touchScore}</span>
+          <div class="score-cell-fixed">
+            <div class="score-bar-fixed"><div class="score-fill" style="width:${touchPct}%;background:${tcColor}"></div></div>
+            <span class="score-num" style="color:${tcColor}">${m.touchScore}</span>
           </div>
         </td>
         <td class="num-r" style="color:var(--muted);font-size:11px">${isActive && avgRes != null ? Math.round(avgRes) + '분' : '—'}</td>
@@ -1068,7 +1074,8 @@ function initCollapsibles() {
 /* ─── Fetch ─────────────────────────────────────────────────────────────── */
 async function fetchData() {
   const qs = currentDays === 'all' ? 'days=all' : `days=${currentDays}`;
-  const res = await fetch(`/api/data?${qs}`);
+  const ts = Date.now(); // 캐시 무효화 — 기간 탭 전환마다 새 요청 보장
+  const res = await fetch(`/api/data?${qs}&_t=${ts}`, { cache: 'no-store' });
   if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
   return res.json();
 }

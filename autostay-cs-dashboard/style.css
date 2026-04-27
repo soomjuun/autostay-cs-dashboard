@@ -523,8 +523,26 @@ body {
 }
 .agent-name { font-weight: 700; font-size: 12px; }
 .score-cell { display: flex; align-items: center; gap: 6px; }
-.score-bar { width: 56px; height: 4px; background: var(--gray-bg); border-radius: 2px; overflow: hidden; }
-.score-fill { height: 100%; border-radius: 2px; background: var(--teal); }
+.score-bar { width: 56px; height: 4px; background: var(--gray-bg); border-radius: 2px; overflow: hidden; flex-shrink: 0; }
+.score-fill { height: 100%; border-radius: 2px; background: var(--teal); transition: width .6s cubic-bezier(.4,0,.2,1); }
+
+/* ─── 정렬 고정 score-cell (담당자 테이블 Operator/Touch Score) ─────────── */
+.score-cell-fixed {
+  display: flex; align-items: center; gap: 6px;
+  justify-content: flex-end;
+}
+.score-bar-fixed {
+  width: 54px; height: 4px; background: var(--gray-bg);
+  border-radius: 2px; overflow: hidden; flex-shrink: 0;
+  transition: opacity .2s;
+}
+.score-num {
+  width: 42px; text-align: right; font-weight: 700;
+  font-variant-numeric: tabular-nums; font-size: 11.5px;
+  flex-shrink: 0;
+}
+/* num-r td 내 정렬 고정: 항상 우측 정렬 유지 */
+.agent-table td.num-r { text-align: right; }
 .badge-top { background: var(--teal-s); color: var(--teal); font-size: 9.5px; font-weight: 700; padding: 2px 7px; border-radius: 10px; }
 .badge-warn { background: var(--amber-bg); color: var(--amber); font-size: 9.5px; font-weight: 700; padding: 2px 7px; border-radius: 10px; }
 .badge-off { background: var(--gray-bg); color: var(--gray); font-size: 9.5px; font-weight: 700; padding: 2px 7px; border-radius: 10px; }
@@ -691,3 +709,206 @@ body {
   .toolbar-left, .toolbar-right { justify-content: space-between; }
   .alert-strip { flex-direction: column; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ULTRA ENHANCEMENT — 극도 고도화 스타일
+═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Hero 섹션 강화 ─────────────────────────────────────────────────────── */
+.hero {
+  background: linear-gradient(135deg, #fff 0%, #f8fffe 50%, #f0fdf9 100%);
+}
+.hero::after {
+  content: ''; position: absolute; right: -40px; top: -40px;
+  width: 260px; height: 260px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(15,118,110,.06) 0%, transparent 70%);
+  pointer-events: none;
+}
+.hero-copy h1 {
+  background: linear-gradient(135deg, #1c1917 0%, var(--teal) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ─── KPI 카드 강화 ──────────────────────────────────────────────────────── */
+.kpi-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 14px 16px;
+  box-shadow: var(--shadow); transition: box-shadow .2s, transform .15s;
+  position: relative; overflow: hidden;
+}
+.kpi-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: var(--border); border-radius: 2px 2px 0 0;
+  transition: background .2s;
+}
+.kpi-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.kpi-card:hover::before { background: var(--teal); }
+.kpi-card.a-green::before { background: var(--green); }
+.kpi-card.a-amber::before { background: var(--amber); }
+.kpi-card.a-rose::before  { background: var(--rose); }
+.kpi-label {
+  font-size: 9.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--subtle); margin-bottom: 6px;
+}
+.kpi-value {
+  font-size: 26px; font-weight: 900; letter-spacing: -.05em; line-height: 1;
+  color: var(--text);
+}
+.kpi-value .unit { font-size: 14px; font-weight: 600; color: var(--muted); margin-left: 2px; }
+.kpi-meta { margin-top: 6px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.delta { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 5px; }
+.delta.good    { background: var(--green-bg); color: var(--green); }
+.delta.bad     { background: var(--rose-bg); color: var(--rose); }
+.delta.neutral { background: var(--gray-bg); color: var(--gray); }
+.delta-lbl { font-size: 10px; color: var(--subtle); }
+
+/* ─── 섹션 헤더 강화 ─────────────────────────────────────────────────────── */
+.section-header {
+  background: transparent;
+  padding: 10px 0 10px;
+}
+.section-title {
+  font-size: 14px; font-weight: 800; letter-spacing: -.03em; flex: 1;
+}
+.section-tag {
+  font-size: 9.5px; font-weight: 700; padding: 3px 9px;
+  border-radius: 10px; background: var(--teal-s); color: var(--teal);
+  letter-spacing: .04em; text-transform: uppercase;
+}
+.collapse-toggle {
+  background: none; border: none; cursor: pointer;
+  color: var(--subtle); font-size: 12px; padding: 4px 7px;
+  border-radius: 5px; transition: background .15s;
+  font-family: inherit;
+}
+.collapse-toggle:hover { background: var(--gray-bg); color: var(--text); }
+
+/* ─── 패널 강화 ──────────────────────────────────────────────────────────── */
+.panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 18px 20px;
+  box-shadow: var(--shadow); transition: box-shadow .2s;
+  position: relative; overflow: hidden;
+}
+.panel:hover { box-shadow: 0 2px 12px rgba(28,25,23,.08); }
+.panel-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 16px; gap: 12px;
+}
+.panel-title { font-size: 13px; font-weight: 800; letter-spacing: -.02em; margin-bottom: 3px; }
+.panel-sub { font-size: 10.5px; color: var(--muted); }
+.panel-badge {
+  display: inline-block; font-size: 9.5px; font-weight: 700; padding: 2px 8px;
+  border-radius: 8px; background: var(--teal-s); color: var(--teal); margin-left: 5px;
+}
+.real-badge {
+  font-size: 9.5px; font-weight: 700; padding: 3px 9px; border-radius: 8px;
+  background: var(--green-bg); color: var(--green); white-space: nowrap;
+  border: 1px solid #bbf7d0; flex-shrink: 0;
+}
+
+/* ─── 담당자 테이블 극도 강화 ────────────────────────────────────────────── */
+.agent-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.agent-table th {
+  font-size: 9.5px; font-weight: 700; color: var(--muted);
+  padding: 9px 12px; background: #f8fafb;
+  border-bottom: 2px solid var(--border);
+  text-transform: uppercase; letter-spacing: .05em; white-space: nowrap;
+}
+.agent-table td {
+  padding: 11px 12px; font-size: 11.5px;
+  border-bottom: 1px solid var(--border-soft);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+  vertical-align: middle;
+}
+.agent-table tbody tr { transition: background .12s; }
+.agent-table tbody tr:hover td { background: #f8fffe; }
+.agent-table tbody tr:last-child td { border-bottom: none; }
+
+/* 순위 컬럼 */
+.agent-rank {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 6px;
+  font-size: 10px; font-weight: 800; flex-shrink: 0;
+}
+.agent-rank.r1 { background: linear-gradient(135deg,#f59e0b,#d97706); color:#fff; }
+.agent-rank.r2 { background: linear-gradient(135deg,#9ca3af,#6b7280); color:#fff; }
+.agent-rank.r3 { background: linear-gradient(135deg,#b45309,#92400e); color:#fff; }
+.agent-rank.rn { background: var(--gray-bg); color: var(--muted); }
+
+/* ─── Agent table colgroup 9컬럼 ─────────────────────────────────────────── */
+.agent-table colgroup col:nth-child(1) { width: 36px; }   /* 순위 */
+.agent-table colgroup col:nth-child(2) { width: 130px; }  /* 담당자 */
+.agent-table colgroup col:nth-child(3) { width: 78px; }   /* 처리건수 */
+.agent-table colgroup col:nth-child(4) { width: 100px; }  /* 비중 */
+.agent-table colgroup col:nth-child(5) { width: 140px; }  /* Operator Score */
+.agent-table colgroup col:nth-child(6) { width: 140px; }  /* Touch Score */
+.agent-table colgroup col:nth-child(7) { width: 100px; }  /* 평균 해결시간 */
+.agent-table colgroup col:nth-child(8) { width: 70px; }   /* 상태 */
+.agent-table colgroup col:nth-child(9) { width: auto; }   /* 코멘트 */
+
+/* ─── 분석 기간 탭 강화 ──────────────────────────────────────────────────── */
+.range-tabs { border-radius: 9px; box-shadow: inset 0 1px 2px rgba(28,25,23,.06); }
+.range-tab {
+  font-size: 11.5px; padding: 6px 16px;
+  position: relative;
+}
+.range-tab.active {
+  background: linear-gradient(135deg, var(--teal-d), var(--teal));
+  box-shadow: 0 1px 4px rgba(15,118,110,.3);
+}
+/* 분석 기간 표시 뱃지 강화 */
+.range-indicator {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 10.5px; color: var(--muted); font-weight: 500;
+}
+.range-indicator strong { color: var(--teal); font-weight: 700; }
+
+/* ─── VOC 강화 ───────────────────────────────────────────────────────────── */
+.voc-item {
+  border-radius: 9px;
+  transition: box-shadow .15s, transform .1s;
+}
+.voc-item:hover {
+  box-shadow: var(--shadow); transform: translateX(2px);
+}
+.voc-keyword { font-size: 13px; font-weight: 800; letter-spacing: -.02em; }
+
+/* ─── 해결시간 강화 ──────────────────────────────────────────────────────── */
+.res-summary {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 10px; margin-bottom: 14px;
+}
+.res-stat {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 12px; text-align: center;
+}
+.res-stat-val { font-size: 20px; font-weight: 900; color: var(--teal); letter-spacing: -.04em; }
+.res-stat-lbl { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+/* ─── Action Center 강화 ─────────────────────────────────────────────────── */
+.ac-card {
+  border-top: 2px solid var(--border-soft);
+  transition: border-top-color .2s, box-shadow .2s;
+}
+.ac-card:hover { border-top-color: var(--teal); }
+
+/* ─── 스크롤바 커스텀 ────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--subtle); }
+
+/* ─── 로딩 오버레이 강화 ─────────────────────────────────────────────────── */
+#loadingOverlay {
+  background: linear-gradient(135deg, #faf9f6 0%, #f0fdf9 100%);
+}
+.load-logo {
+  background: linear-gradient(135deg, var(--teal-d), var(--teal));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ─── 전체 선택 효과 강화 ────────────────────────────────────────────────── */
+::selection { background: var(--teal-s); color: var(--teal-d); }
