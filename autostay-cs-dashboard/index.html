@@ -95,11 +95,12 @@
       <div class="range-tabs" id="rangeTabs">
         <button class="range-tab" data-range="7">7일</button>
         <button class="range-tab active" data-range="30">30일</button>
-        <button class="range-tab" data-range="all">전체</button>
+        <button class="range-tab" data-range="all">최근 500건</button>
       </div>
     </div>
     <div class="toolbar-right">
       <div class="sync-dot-wrap"><span class="sync-dot"></span><span>API 연결됨</span></div>
+      <button class="csv-btn" id="csvDownloadBtn">↓ CSV 내보내기</button>
       <button class="refresh-btn" id="refreshBtn">↻ 새로고침</button>
     </div>
   </div>
@@ -173,7 +174,7 @@
           <div class="panel-header">
             <div>
               <div class="panel-title">일별 CS 인입 추이 <span class="panel-badge" id="trendBadge">30일</span></div>
-              <div class="panel-sub">채널톡 closed 채팅 기준 · 붉은 막대 = 피크</div>
+              <div class="panel-sub">채널톡 closed 채팅 기준 · 붉은 막대 = 피크 · KST</div>
             </div>
             <div class="trend-legend" id="trendLegend"></div>
           </div>
@@ -184,6 +185,8 @@
             <div class="ts"><span class="ts-val green" id="trendOpen">—</span><span class="ts-lbl">현재 오픈</span></div>
           </div>
           <div class="ch-280"><canvas id="trendChart"></canvas></div>
+          <!-- 피크 분석 패널 (항목 #9) -->
+          <div class="peak-analysis-panel" id="peakAnalysisPanel" style="display:none"></div>
         </article>
 
         <article class="panel col-4">
@@ -342,7 +345,7 @@
             <tr><td colspan="9" class="tbl-loading">로딩 중…</td></tr>
           </tbody>
         </table>
-        <div class="tbl-note">※ operatorScore·touchScore는 채널톡 managers API 실데이터 / 평균 해결시간은 전체 기준</div>
+        <div class="tbl-note" id="agentTblNote">※ Operator Score · Touch Score: 채널톡 API 실데이터 / 평균 해결시간: 해당 담당자 처리 건 실측값</div>
       </article>
     </div>
   </section>
@@ -364,6 +367,34 @@
       </div>
     </div>
   </section>
+
+  <!-- 8시간+ Drill-Down 모달 (항목 #6) -->
+  <div class="modal-overlay" id="longChatsModal" style="display:none">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title">8시간+ 해결 채팅 상세</div>
+          <div class="modal-sub">날짜 · 해결시간 · 태그 · 담당자 기준</div>
+        </div>
+        <button class="modal-close" onclick="closeLongChatsPanel()">✕</button>
+      </div>
+      <div class="modal-body">
+        <table class="long-chats-table">
+          <thead>
+            <tr>
+              <th>날짜</th>
+              <th>해결 시간</th>
+              <th>태그</th>
+              <th>담당자</th>
+            </tr>
+          </thead>
+          <tbody id="longChatsBody">
+            <tr><td colspan="4" style="text-align:center;padding:20px;color:var(--muted)">로딩 중…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
   <!-- Footer -->
   <div class="footer-note">

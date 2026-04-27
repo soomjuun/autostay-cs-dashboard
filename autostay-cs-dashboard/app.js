@@ -1,6 +1,6 @@
-// Autostay CS Dashboard — app.js  (v3.0 — Enhanced)
-// Fetches from /api/data (Vercel serverless) → renders hero, action center,
-// health score, insights, alert strip, charts, heatmap, manager table, bots/groups
+// Autostay CS Dashboard — app.js  v3.1
+// 14개 항목 반영: 담당자별 해결시간, CS점수 감점 요인, 컴플레인 분리,
+// 8시간+ drill-down, 피크 분석, 실패 상태, CSV 다운로드, VOC 표현 등
 
 'use strict';
 
@@ -33,8 +33,9 @@ Chart.defaults.borderColor = '#f1efe8';
 
 let charts = {};
 let lastData = null;
-let currentDays = 30;   // 7 | 30 | 'all'
+let currentDays = 30;
 let refreshTimer = null;
+let lastSuccessTime = null; // 항목 #10: 마지막 성공 동기화 시각
 
 /* ─── Loading Helpers ───────────────────────────────────────────────────── */
 function setStep(id, done = false) {
@@ -68,43 +69,52 @@ function computeHealthScore(d) {
   const rb = d.resolutionBuckets || {};
   const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
 
-  // 1. Complaint rate penalty
   const complaints = (d.tags?.labels || []).reduce((acc, lbl, i) => {
     if (lbl.includes('컴플레인')) acc += (d.tags.values[i] || 0);
     return acc;
   }, 0);
   const complaintRate = complaints / total;
-  if (complaintRate > 0.20)      score -= 25;
-  else if (complaintRate > 0.15) score -= 18;
-  else if (complaintRate > 0.10) score -= 10;
-  else if (complaintRate > 0.05) score -= 4;
+  let deductComplaint = 0;
+  if (complaintRate > 0.20)      deductComplaint = 25;
+  else if (complaintRate > 0.15) deductComplaint = 18;
+  else if (complaintRate > 0.10) deductComplaint = 10;
+  else if (complaintRate > 0.05) deductComplaint = 4;
+  score -= deductComplaint;
 
-  // 2. Slow resolution penalty
   const slowRate = (rb['8시간+'] || 0) / resTotal;
   const medRate  = (rb['2~8시간'] || 0) / resTotal;
-  if (slowRate > 0.50)      score -= 20;
-  else if (slowRate > 0.35) score -= 14;
-  else if (slowRate > 0.20) score -= 8;
-  if (medRate > 0.30)       score -= 5;
+  let deductSlow = 0;
+  if (slowRate > 0.50)      deductSlow = 20;
+  else if (slowRate > 0.35) deductSlow = 14;
+  else if (slowRate > 0.20) deductSlow = 8;
+  if (medRate > 0.30)       deductSlow += 5;
+  score -= deductSlow;
 
-  // 3. Manager concentration penalty
   const managers = (d.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
+  let deductConc = 0;
   if (managers.length > 0) {
     const topPct = (managers[0].count || 0) / total;
-    if (topPct > 0.85)      score -= 20;
-    else if (topPct > 0.70) score -= 12;
-    else if (topPct > 0.55) score -= 5;
+    if (topPct > 0.85)      deductConc = 20;
+    else if (topPct > 0.70) deductConc = 12;
+    else if (topPct > 0.55) deductConc = 5;
   }
+  score -= deductConc;
 
-  // 4. Quick resolution bonus
   const quickRate = ((rb['0~5분'] || 0) + (rb['5~30분'] || 0)) / resTotal;
   if (quickRate > 0.50)      score += 10;
   else if (quickRate > 0.30) score += 5;
 
-  // 5. Open chats penalty
   if (d.summary.openChats > 10) score -= 5;
 
-  return Math.max(0, Math.min(100, Math.round(score)));
+  return {
+    score: Math.max(0, Math.min(100, Math.round(score))),
+    deductComplaint,
+    deductSlow,
+    deductConc,
+    complaintPct: Math.round(complaintRate * 100),
+    slowPct: Math.round(slowRate * 100),
+    topPct: managers.length > 0 ? Math.round((managers[0].count || 0) / total * 100) : 0,
+  };
 }
 
 function getGrade(score) {
@@ -115,55 +125,52 @@ function getGrade(score) {
 }
 
 /* ─── Auto-Insights ─────────────────────────────────────────────────────── */
-function generateInsights(d, score) {
+function generateInsights(d, scoreObj) {
+  const score = scoreObj.score;
   const insights = [];
   const total = d.summary.totalChats || 1;
   const rb = d.resolutionBuckets || {};
   const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
   const managers = (d.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
 
-  const complaints = (d.tags?.labels || []).reduce((acc, lbl, i) => {
-    if (lbl.includes('컴플레인')) acc += (d.tags.values[i] || 0);
-    return acc;
-  }, 0);
-  const complaintPct = Math.round(complaints / total * 100);
+  const complaintPct = scoreObj.complaintPct;
   if (complaintPct >= 15) {
-    insights.push({ type: 'danger', icon: '⚠', text: `컴플레인 ${complaintPct}% — 즉각 대응 필요` });
+    insights.push({ type: 'danger', icon: '경고', text: `컴플레인 ${complaintPct}% — 즉각 대응 필요` });
   } else if (complaintPct >= 8) {
-    insights.push({ type: 'warn', icon: '!', text: `컴플레인 ${complaintPct}% — 주의 모니터링` });
+    insights.push({ type: 'warn', icon: '주의', text: `컴플레인 ${complaintPct}% — 주의 모니터링` });
   }
 
   if (managers.length > 0) {
     const topPct = Math.round((managers[0].count || 0) / total * 100);
     if (topPct > 80) {
-      insights.push({ type: 'danger', icon: '👤', text: `${managers[0].name} 집중도 ${topPct}% — 번아웃 위험` });
+      insights.push({ type: 'danger', icon: '집중', text: `${managers[0].name} 집중도 ${topPct}% — 번아웃 위험` });
     } else if (topPct > 60) {
-      insights.push({ type: 'warn', icon: '👤', text: `${managers[0].name} 집중도 ${topPct}% — 분산 권장` });
+      insights.push({ type: 'warn', icon: '분산', text: `${managers[0].name} 집중도 ${topPct}% — 분산 권장` });
     }
   }
 
   const slowPct = Math.round((rb['8시간+'] || 0) / resTotal * 100);
   if (slowPct > 40) {
-    insights.push({ type: 'warn', icon: '⏱', text: `8시간+ 해결 ${slowPct}% — 비동기 정책 검토` });
+    insights.push({ type: 'warn', icon: '지연', text: `8시간+ 해결 ${slowPct}% — 비동기 정책 검토` });
   }
 
   const quickPct = Math.round(((rb['0~5분'] || 0) + (rb['5~30분'] || 0)) / resTotal * 100);
   if (quickPct >= 40) {
-    insights.push({ type: 'good', icon: '✓', text: `30분 내 해결 ${quickPct}% — 신속 대응 양호` });
+    insights.push({ type: 'good', icon: '양호', text: `30분 내 해결 ${quickPct}% — 신속 대응 양호` });
   }
 
   const subIdx = (d.tags?.labels || []).findIndex(l => l.includes('정기구독'));
   if (subIdx >= 0) {
     const subPct = Math.round((d.tags.values[subIdx] || 0) / total * 100);
     if (subPct >= 25) {
-      insights.push({ type: 'info', icon: '🔄', text: `구독 관련 문의 ${subPct}% — 자동화 플로우 점검` });
+      insights.push({ type: 'info', icon: '자동화', text: `구독 관련 문의 ${subPct}% — 자동화 플로우 점검` });
     }
   }
 
   if (d.summary.openChats > 0) {
-    insights.push({ type: 'warn', icon: '💬', text: `미해결 오픈 채팅 ${d.summary.openChats}건` });
+    insights.push({ type: 'warn', icon: '대기', text: `미해결 오픈 채팅 ${d.summary.openChats}건` });
   } else {
-    insights.push({ type: 'good', icon: '✓', text: '현재 미해결 채팅 없음' });
+    insights.push({ type: 'good', icon: '완료', text: '현재 미해결 채팅 없음' });
   }
 
   const vals = (d.dailyTrend?.values || []).filter(v => v > 0);
@@ -171,22 +178,17 @@ function generateInsights(d, score) {
     const peak = Math.max(...vals);
     const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
     if (peak > avg * 3) {
-      insights.push({ type: 'info', icon: '📈', text: `${d.summary.peakDay?.label} 급증 피크 (${peak}건 · 평균 ${Math.round(avg)}건 대비)` });
+      insights.push({ type: 'info', icon: '피크', text: `${d.summary.peakDay?.label} 피크 (${peak}건 · 평균 ${Math.round(avg)}건 대비)` });
     }
   }
 
   return insights;
 }
 
-/* ─── Render: Health Score ──────────────────────────────────────────────── */
-function renderHealthScore(score, d) {
+/* ─── Render: Health Score + 감점 요인 (항목 #4) ───────────────────────── */
+function renderHealthScore(scoreObj, d) {
+  const { score, deductComplaint, deductSlow, deductConc, complaintPct, slowPct, topPct } = scoreObj;
   const { grade, label, color } = getGrade(score);
-  const total = d.summary.totalChats || 1;
-  const managers = (d.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
-  const complaints = (d.tags?.labels || []).reduce((acc, lbl, i) => {
-    if (lbl.includes('컴플레인')) acc += (d.tags.values[i] || 0);
-    return acc;
-  }, 0);
 
   const arcLen = 188.5;
   const fill = document.getElementById('gaugeFill');
@@ -206,10 +208,16 @@ function renderHealthScore(score, d) {
   const sg = document.getElementById('healthGrade');
   if (sg) { sg.textContent = `${grade} · ${label}`; sg.style.color = color; }
 
+  // 감점 요인 표시
   const ss = document.getElementById('healthSub');
   if (ss) {
-    const topPct = managers.length > 0 ? Math.round((managers[0].count || 0) / total * 100) : 0;
-    ss.textContent = `컴플레인 ${Math.round(complaints / total * 100)}% · 집중도 ${topPct}%`;
+    const factors = [];
+    if (deductComplaint > 0) factors.push(`컴플레인율 ${complaintPct}% (-${deductComplaint}점)`);
+    if (deductSlow > 0)      factors.push(`8시간+ ${slowPct}% (-${deductSlow}점)`);
+    if (deductConc > 0)      factors.push(`집중도 ${topPct}% (-${deductConc}점)`);
+    ss.innerHTML = factors.length
+      ? `<span class="health-factor-list">${factors.map(f => `<span class="hf">${f}</span>`).join('')}</span>`
+      : '<span style="color:var(--green)">감점 요인 없음</span>';
   }
 }
 
@@ -223,7 +231,7 @@ function renderInsights(insights) {
     <div class="insights-label">자동 인사이트</div>
     ${insights.map(ins => `
       <div class="insight-chip ${ins.type}">
-        <span class="insight-icon">${ins.icon}</span>
+        <span class="insight-icon insight-label-badge">${ins.icon}</span>
         <span>${ins.text}</span>
       </div>
     `).join('')}
@@ -231,7 +239,8 @@ function renderInsights(insights) {
 }
 
 /* ─── Render: Alert Strip ───────────────────────────────────────────────── */
-function renderAlertStrip(d, score) {
+function renderAlertStrip(d, scoreObj) {
+  const score = scoreObj.score;
   const strip = document.getElementById('alertStrip');
   if (!strip) return;
   const alerts = [];
@@ -244,7 +253,7 @@ function renderAlertStrip(d, score) {
     const topPct = Math.round((managers[0].count || 0) / total * 100);
     if (topPct > 70) {
       alerts.push({
-        level: 'danger', icon: '🔴',
+        level: 'danger', icon: '과부하',
         title: '담당자 과부하',
         body: `${managers[0].name}이(가) 전체 ${topPct}% (${managers[0].count}건) 단독 처리 중. 업무 분산 필요.`
       });
@@ -258,7 +267,7 @@ function renderAlertStrip(d, score) {
   const complaintPct = Math.round(complaints / total * 100);
   if (complaintPct >= 15) {
     alerts.push({
-      level: 'danger', icon: '🚨',
+      level: 'danger', icon: '긴급',
       title: '컴플레인 급증',
       body: `컴플레인 태그 ${complaintPct}% (${complaints}건) — 서비스 품질 즉시 점검 권장.`
     });
@@ -267,7 +276,7 @@ function renderAlertStrip(d, score) {
   const slowPct = Math.round((rb['8시간+'] || 0) / resTotal * 100);
   if (slowPct > 40) {
     alerts.push({
-      level: 'warn', icon: '⏱',
+      level: 'warn', icon: '지연',
       title: '장시간 미해결 다수',
       body: `전체의 ${slowPct}%가 8시간 이상 소요. 비동기 응답 정책 검토 권장.`
     });
@@ -275,8 +284,8 @@ function renderAlertStrip(d, score) {
 
   if (score < 50) {
     alerts.push({
-      level: 'danger', icon: '⚡',
-      title: 'CS 건강 위험 단계 (D등급)',
+      level: 'danger', icon: 'D등급',
+      title: 'CS 건강 위험 단계',
       body: `CS 건강 점수 ${score}점 — 복합 위험 상태. 긴급 CS 운영 개선 필요.`
     });
   }
@@ -285,7 +294,7 @@ function renderAlertStrip(d, score) {
   strip.style.display = 'flex';
   strip.innerHTML = alerts.map(a => `
     <div class="alert-item ${a.level}">
-      <div class="al-icon">${a.icon}</div>
+      <div class="al-icon al-label-badge">${a.icon}</div>
       <div class="al-text">
         <div class="al-title">${a.title}</div>
         <div class="al-body">${a.body}</div>
@@ -295,7 +304,8 @@ function renderAlertStrip(d, score) {
 }
 
 /* ─── Render: Action Command Center ────────────────────────────────────── */
-function renderActionCenter(d, score, insights) {
+function renderActionCenter(d, scoreObj, insights) {
+  const score = scoreObj.score;
   const total = d.summary.totalChats || 1;
   const rb = d.resolutionBuckets || {};
   const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
@@ -314,20 +324,20 @@ function renderActionCenter(d, score, insights) {
 
   if (d.summary.openChats > 0) {
     todayItems.push({
-      type: 'danger', icon: '💬',
+      type: 'danger', label: '즉시',
       title: `미해결 오픈 채팅 ${d.summary.openChats}건`,
       desc: '즉시 확인 및 응답 필요 — 고객 대기 중'
     });
   }
   if (complaintPct >= 15) {
     todayItems.push({
-      type: 'danger', icon: '🚨',
+      type: 'danger', label: '긴급',
       title: `컴플레인 ${complaintPct}% (${complaints}건)`,
       desc: '서비스 불만 급증 — 원인 파악 및 즉시 대응'
     });
   } else if (complaintPct >= 8) {
     todayItems.push({
-      type: 'warn', icon: '⚠',
+      type: 'warn', label: '주의',
       title: `컴플레인 ${complaintPct}% (${complaints}건)`,
       desc: '지속 모니터링 — 추이 관찰 권장'
     });
@@ -336,32 +346,37 @@ function renderActionCenter(d, score, insights) {
     const topPct2 = Math.round((managers[0].count || 0) / total * 100);
     if (topPct2 > 70) {
       todayItems.push({
-        type: 'danger', icon: '👤',
+        type: 'danger', label: '분산필요',
         title: `${managers[0].name} 집중도 ${topPct2}%`,
-        desc: '단독 처리 과부하 — 담당자 추가 배정 검토'
+        desc: '단독 처리 과부하 — 담당자 추가 배정 검토 · 재배정 큐 확인'
       });
     }
   }
+  // 8시간+ 건이 많으면 drill-down 안내 (항목 #7 연계)
+  if ((rb['8시간+'] || 0) > 0) {
+    todayItems.push({
+      type: 'info', label: '확인',
+      title: `8시간+ 미해결 ${rb['8시간+'] || 0}건`,
+      desc: `<a class="ac-drill-link" href="#" onclick="openLongChatsPanel();return false;">▸ 상세 목록 보기 (날짜·태그·담당자)</a>`
+    });
+  }
+
   if (todayItems.length === 0) {
-    todayItems.push({ type: 'good', icon: '✅', title: '조치 필요 항목 없음', desc: 'CS 상태 양호 — 정기 모니터링 유지' });
+    todayItems.push({ type: 'good', label: '정상', title: '조치 필요 항목 없음', desc: 'CS 상태 양호 — 정기 모니터링 유지' });
   }
 
   const countEl = document.getElementById('acTodayCount');
   const urgentCount = todayItems.filter(i => i.type === 'danger').length;
   if (countEl) {
-    if (urgentCount > 0) {
-      countEl.textContent = urgentCount;
-      countEl.style.display = 'inline-flex';
-    } else {
-      countEl.style.display = 'none';
-    }
+    if (urgentCount > 0) { countEl.textContent = urgentCount; countEl.style.display = 'inline-flex'; }
+    else                 { countEl.style.display = 'none'; }
   }
 
   const todayBody = document.getElementById('acTodayBody');
   if (todayBody) {
     todayBody.innerHTML = todayItems.map(item => `
       <div class="ac-item ${item.type}">
-        <div class="ac-item-icon">${item.icon}</div>
+        <div class="ac-item-icon ac-label-badge">${item.label}</div>
         <div class="ac-item-text">
           <div class="ac-item-title">${item.title}</div>
           <div class="ac-item-desc">${item.desc}</div>
@@ -372,24 +387,24 @@ function renderActionCenter(d, score, insights) {
 
   // ── 카드 2: 주요 리스크 TOP 3 ──
   const riskItems = [];
-  if (score < 50) riskItems.push({ type: 'danger', icon: '⚡', title: `CS 건강 D등급 (${score}점)`, desc: '복합 위험 상태 — 긴급 CS 운영 점검 필요' });
-  if (complaintPct >= 10) riskItems.push({ type: 'danger', icon: '😡', title: `컴플레인율 ${complaintPct}%`, desc: '서비스 품질 하락 신호 — 즉시 대응' });
-  if (slowPct > 30) riskItems.push({ type: 'warn', icon: '⏳', title: `8시간+ 해결 ${slowPct}%`, desc: '비동기 채팅 관리 정책 점검 필요' });
+  if (score < 50) riskItems.push({ type: 'danger', label: 'D등급', title: `CS 건강 D등급 (${score}점)`, desc: '복합 위험 상태 — 긴급 CS 운영 점검 필요' });
+  if (complaintPct >= 10) riskItems.push({ type: 'danger', label: '불만', title: `컴플레인율 ${complaintPct}%`, desc: '서비스 품질 하락 신호 — 즉시 대응' });
+  if (slowPct > 30) riskItems.push({ type: 'warn', label: '지연', title: `8시간+ 해결 ${slowPct}%`, desc: '비동기 채팅 관리 정책 점검 필요' });
   if (managers.length > 0) {
     const topRisk = Math.round((managers[0].count || 0) / total * 100);
-    if (topRisk > 60) riskItems.push({ type: 'warn', icon: '🔁', title: `${managers[0].name} 집중 ${topRisk}%`, desc: '업무 분산 및 백업 담당자 지정 권장' });
+    if (topRisk > 60) riskItems.push({ type: 'warn', label: '집중', title: `${managers[0].name} 집중 ${topRisk}%`, desc: '업무 분산 및 백업 담당자 지정 권장' });
   }
-  if (d.summary.openChats > 5) riskItems.push({ type: 'warn', icon: '📭', title: `미응답 오픈 ${d.summary.openChats}건`, desc: '고객 대기 장기화 — 우선 처리 필요' });
-  if (quickPct < 20) riskItems.push({ type: 'warn', icon: '🐢', title: `30분 내 해결 ${quickPct}%`, desc: '응답 속도 개선 필요 — SLA 기준 수립 권장' });
+  if (d.summary.openChats > 5) riskItems.push({ type: 'warn', label: '대기', title: `미응답 오픈 ${d.summary.openChats}건`, desc: '고객 대기 장기화 — 우선 처리 필요' });
+  if (quickPct < 20) riskItems.push({ type: 'warn', label: '속도', title: `30분 내 해결 ${quickPct}%`, desc: '응답 속도 개선 필요 — SLA 기준 수립 권장' });
 
   const topRisks = riskItems.slice(0, 3);
-  if (topRisks.length === 0) topRisks.push({ type: 'good', icon: '✅', title: '주요 리스크 없음', desc: 'CS 지표 정상 범위 유지 중' });
+  if (topRisks.length === 0) topRisks.push({ type: 'good', label: '정상', title: '주요 리스크 없음', desc: 'CS 지표 정상 범위 유지 중' });
 
   const riskBody = document.getElementById('acRiskBody');
   if (riskBody) {
     riskBody.innerHTML = topRisks.map(item => `
       <div class="ac-item ${item.type}">
-        <div class="ac-item-icon">${item.icon}</div>
+        <div class="ac-item-icon ac-label-badge">${item.label}</div>
         <div class="ac-item-text">
           <div class="ac-item-title">${item.title}</div>
           <div class="ac-item-desc">${item.desc}</div>
@@ -401,7 +416,7 @@ function renderActionCenter(d, score, insights) {
   // ── 카드 3: VOC 알림 ──
   const { tags } = d;
   const vocBadge = document.getElementById('acVocBadge');
-  const vocBody = document.getElementById('acVocBody');
+  const vocBody  = document.getElementById('acVocBody');
 
   const risingTags = (tags?.labels || [])
     .map((lbl, i) => ({ lbl, cnt: tags.values[i] || 0, pct: Math.round((tags.values[i] || 0) / total * 100) }))
@@ -420,12 +435,12 @@ function renderActionCenter(d, score, insights) {
       vocBody.innerHTML = '<div class="ac-empty">10% 이상 VOC 없음 — 분산 분포 양호</div>';
     } else {
       vocBody.innerHTML = risingTags.map(t => {
-        const ctx = VOC_CONTEXTS[t.lbl] || '관련 문의';
+        const ctx  = VOC_CONTEXTS[t.lbl] || '관련 문의';
         const type = t.pct >= 15 ? 'danger' : 'warn';
-        const icon = t.lbl.includes('컴플레인') ? '😡' : t.lbl.includes('구독') ? '🔄' : t.lbl.includes('탈퇴') ? '🚪' : '💬';
+        const lbl  = t.lbl.includes('컴플레인') ? '불만' : t.lbl.includes('구독') ? '구독' : t.lbl.includes('탈퇴') ? '탈퇴' : '문의';
         return `
           <div class="ac-item ${type}">
-            <div class="ac-item-icon">${icon}</div>
+            <div class="ac-item-icon ac-label-badge">${lbl}</div>
             <div class="ac-item-text">
               <div class="ac-item-title">#${t.lbl} · ${t.pct}% (${t.cnt}건)</div>
               <div class="ac-item-desc">${ctx}</div>
@@ -437,46 +452,52 @@ function renderActionCenter(d, score, insights) {
   }
 }
 
-/* ─── Render: KPI Grid ──────────────────────────────────────────────────── */
+/* ─── Render: KPI Grid (항목 #2 — 데이터 수집 기준 명시) ──────────────── */
 function renderKPIs(d) {
   const { summary } = d;
   const managers = (d.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
-  const topMgr = managers[0];
-  const totalChats = summary.totalChats;
-  const openChats = summary.openChats;
-  const avgRes = summary.avgResolutionMin;
-  const peakCount = summary.peakDay?.count || 0;
-  const peakLabel = summary.peakDay?.label || '—';
-  const topPct = topMgr ? Math.round((topMgr.count / totalChats) * 100) : 0;
-  const rb = d.resolutionBuckets || {};
-  const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
-  const quickPct = Math.round(((rb['0~5분'] || 0) + (rb['5~30분'] || 0)) / resTotal * 100);
+  const topMgr   = managers[0];
+  const totalChats  = summary.totalChats;
+  const openChats   = summary.openChats;
+  const avgRes      = summary.avgResolutionMin;
+  const peakCount   = summary.peakDay?.count || 0;
+  const peakLabel   = summary.peakDay?.label || '—';
+  const topPct      = topMgr ? Math.round((topMgr.count / totalChats) * 100) : 0;
+  const rb          = d.resolutionBuckets || {};
+  const resTotal    = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
+  const quickPct    = Math.round(((rb['0~5분'] || 0) + (rb['5~30분'] || 0)) / resTotal * 100);
+
+  const TARGET_AVG_MIN  = 120;
+  const TARGET_QUICK_PCT = 60;
+  const avgResFill  = avgRes != null ? Math.min(Math.round((TARGET_AVG_MIN / Math.max(avgRes, 1)) * 100), 100) : 0;
+  const avgResClass = avgRes != null && avgRes <= TARGET_AVG_MIN ? '' : avgRes <= TARGET_AVG_MIN * 1.5 ? 'warn' : 'danger';
+  const quickFill   = Math.min(quickPct, 100);
+  const quickClass  = quickPct >= TARGET_QUICK_PCT ? '' : quickPct >= TARGET_QUICK_PCT * 0.7 ? 'warn' : 'danger';
+
+  // 수집 기준 문구 (항목 #1 — 탭 명칭, #2 — 기준 명시)
+  const rangeLabel = currentDays === 'all' ? `최근 ${d.totalCollected || '500'}건` : `${currentDays}일`;
+  const basisNote  = currentDays === 'all'
+    ? `수집 ${d.totalCollected || 0}건 중 ${totalChats}건 집계 · closed 채팅 · KST · Vercel API`
+    : `최근 ${currentDays}일 · closed 채팅 기준 · ${totalChats}건 집계 · KST 기준`;
 
   const grid = document.getElementById('kpiGrid');
   if (!grid) return;
-  // 목표값 설정
-  const TARGET_AVG_MIN = 120;  // 평균 해결시간 목표: 120분
-  const TARGET_QUICK_PCT = 60; // 30분 내 해결률 목표: 60%
-  const avgResFill = avgRes != null ? Math.min(Math.round((TARGET_AVG_MIN / Math.max(avgRes, 1)) * 100), 100) : 0;
-  const avgResClass = avgRes != null && avgRes <= TARGET_AVG_MIN ? '' : avgRes <= TARGET_AVG_MIN * 1.5 ? 'warn' : 'danger';
-  const quickFill = Math.min(quickPct, 100);
-  const quickClass = quickPct >= TARGET_QUICK_PCT ? '' : quickPct >= TARGET_QUICK_PCT * 0.7 ? 'warn' : 'danger';
 
   grid.innerHTML = `
     <div class="kpi-card">
       <div class="kpi-label">분석 채팅 수</div>
       <div class="kpi-value">${fmt(totalChats)}<span class="unit">건</span></div>
-      <div class="kpi-meta"><span class="delta neutral">closed 기준</span></div>
+      <div class="kpi-meta"><span class="data-badge badge-real">실데이터</span><span class="delta neutral">${rangeLabel}</span></div>
     </div>
     <div class="kpi-card a-${openChats > 5 ? 'rose' : openChats > 0 ? 'amber' : 'green'}">
       <div class="kpi-label">현재 오픈</div>
       <div class="kpi-value">${fmt(openChats)}<span class="unit">건</span></div>
-      <div class="kpi-meta"><span class="delta ${openChats === 0 ? 'good' : 'bad'}">${openChats === 0 ? '✓ 없음' : '진행 중'}</span><span class="delta-lbl">실시간</span></div>
+      <div class="kpi-meta"><span class="data-badge badge-real">실데이터</span><span class="delta ${openChats === 0 ? 'good' : 'bad'}">${openChats === 0 ? '없음' : '진행중'}</span><span class="delta-lbl">실시간</span></div>
     </div>
     <div class="kpi-card a-${avgResClass === 'danger' ? 'rose' : avgResClass === 'warn' ? 'amber' : 'green'}">
       <div class="kpi-label">평균 해결시간</div>
       <div class="kpi-value">${fmt(avgRes)}<span class="unit">분</span></div>
-      <div class="kpi-meta"><span class="delta neutral">목표 ${TARGET_AVG_MIN}분</span></div>
+      <div class="kpi-meta"><span class="data-badge badge-calc">계산값</span><span class="delta neutral">목표 ${TARGET_AVG_MIN}분</span></div>
       <div class="kpi-target-wrap">
         <div class="kpi-target-label"><span>달성률</span><span>${avgResFill}%</span></div>
         <div class="kpi-target"><div class="kpi-target-fill ${avgResClass}" style="width:${avgResFill}%"></div></div>
@@ -485,7 +506,7 @@ function renderKPIs(d) {
     <div class="kpi-card a-${quickPct >= TARGET_QUICK_PCT ? 'green' : quickPct >= 30 ? 'amber' : 'rose'}">
       <div class="kpi-label">30분 내 해결률</div>
       <div class="kpi-value">${quickPct}<span class="unit">%</span></div>
-      <div class="kpi-meta"><span class="delta ${quickPct >= TARGET_QUICK_PCT ? 'good' : 'bad'}">${quickPct >= TARGET_QUICK_PCT ? '목표 달성' : '개선 필요'}</span></div>
+      <div class="kpi-meta"><span class="data-badge badge-calc">계산값</span><span class="delta ${quickPct >= TARGET_QUICK_PCT ? 'good' : 'bad'}">${quickPct >= TARGET_QUICK_PCT ? '목표 달성' : '개선 필요'}</span></div>
       <div class="kpi-target-wrap">
         <div class="kpi-target-label"><span>목표 ${TARGET_QUICK_PCT}%</span><span>${quickFill}%</span></div>
         <div class="kpi-target"><div class="kpi-target-fill ${quickClass}" style="width:${quickFill}%"></div></div>
@@ -494,13 +515,14 @@ function renderKPIs(d) {
     <div class="kpi-card a-${topPct > 80 ? 'rose' : topPct > 60 ? 'amber' : 'green'}">
       <div class="kpi-label">주담당자 집중도</div>
       <div class="kpi-value">${topPct}<span class="unit">%</span></div>
-      <div class="kpi-meta"><span class="delta neutral">${topMgr?.name || '—'}</span></div>
+      <div class="kpi-meta"><span class="data-badge badge-calc">계산값</span><span class="delta neutral">${topMgr?.name || '—'}</span></div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">일 최고 피크</div>
       <div class="kpi-value">${fmt(peakCount)}<span class="unit">건</span></div>
-      <div class="kpi-meta"><span class="delta bad">${peakLabel}</span></div>
+      <div class="kpi-meta"><span class="data-badge badge-real">실데이터</span><span class="delta bad">${peakLabel}</span></div>
     </div>
+    <div class="kpi-basis-note" id="kpiBasisNote">${basisNote}</div>
   `;
 }
 
@@ -518,7 +540,7 @@ function renderTrend(d) {
   document.getElementById('trendOpen').textContent = fmt(summary.openChats);
 
   const badge = document.getElementById('trendBadge');
-  if (badge) badge.textContent = currentDays === 'all' ? '500건' : `${currentDays}일`;
+  if (badge) badge.textContent = currentDays === 'all' ? '최근 500건' : `${currentDays}일`;
 
   document.getElementById('trendLegend').innerHTML = `
     <span class="trend-legend-item"><span style="width:10px;height:10px;border-radius:2px;background:#0f766e;display:inline-block"></span>일반</span>
@@ -538,19 +560,13 @@ function renderTrend(d) {
           backgroundColor: dailyTrend.values.map(v =>
             v >= peak * 0.8 ? '#be123c' : v >= peak * 0.45 ? '#0f766e' : '#14b8a6'
           ),
-          borderRadius: 3,
-          borderSkipped: false,
+          borderRadius: 3, borderSkipped: false,
         },
         {
           label: '일 평균',
           data: Array(dailyTrend.labels.length).fill(avg),
-          type: 'line',
-          borderColor: '#f59e0b',
-          borderWidth: 1.5,
-          borderDash: [5, 4],
-          pointRadius: 0,
-          fill: false,
-          tension: 0,
+          type: 'line', borderColor: '#f59e0b', borderWidth: 1.5,
+          borderDash: [5, 4], pointRadius: 0, fill: false, tension: 0,
         }
       ]
     },
@@ -560,45 +576,71 @@ function renderTrend(d) {
         legend: { display: false },
         tooltip: {
           backgroundColor: '#1c1917', padding: 10, cornerRadius: 7,
-          callbacks: {
-            label: ctx => ctx.dataset.type === 'line'
-              ? `평균: ${ctx.parsed.y}건`
-              : `${ctx.parsed.y}건`
-          }
+          callbacks: { label: ctx => ctx.dataset.type === 'line' ? `평균: ${ctx.parsed.y}건` : `${ctx.parsed.y}건` }
         },
         annotation: {
           annotations: peak > avg * 2 ? {
             peakLine: {
-              type: 'line',
-              yMin: peak, yMax: peak,
+              type: 'line', yMin: peak, yMax: peak,
               borderColor: '#be123c', borderWidth: 1.5, borderDash: [4, 3],
               label: {
-                content: `피크 ${peak}건`,
-                display: true, position: 'end',
+                content: `피크 ${peak}건`, display: true, position: 'end',
                 backgroundColor: '#be123c', color: '#fff',
-                font: { size: 10, weight: 'bold' },
-                padding: { x: 6, y: 3 }, borderRadius: 4,
+                font: { size: 10, weight: 'bold' }, padding: { x: 6, y: 3 }, borderRadius: 4,
               }
             }
           } : {}
         }
       },
       scales: {
-        x: {
-          grid: { display: false },
-          ticks: { font: { size: 10 }, maxRotation: 0, maxTicksLimit: 12 }
-        },
-        y: {
-          grid: { color: '#f1efe8' },
-          ticks: { font: { size: 11 }, callback: v => v + '건' },
-          beginAtZero: true,
-        }
+        x: { grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 0, maxTicksLimit: 12 } },
+        y: { grid: { color: '#f1efe8' }, ticks: { font: { size: 11 }, callback: v => v + '건' }, beginAtZero: true }
       }
     }
   });
+
+  // 피크 분석 패널 렌더링 (항목 #9)
+  renderPeakAnalysis(d.peakAnalysis, d.managers || []);
 }
 
-/* ─── Render: Heatmap (0-23h KST) ──────────────────────────────────────── */
+/* ─── Render: Peak Analysis Panel (항목 #9) ─────────────────────────────── */
+function renderPeakAnalysis(peakAnalysis, managers) {
+  const el = document.getElementById('peakAnalysisPanel');
+  if (!el) return;
+  if (!peakAnalysis || peakAnalysis.count < 2) { el.style.display = 'none'; return; }
+
+  el.style.display = 'block';
+  const mgrMap = {};
+  (managers || []).forEach(m => { mgrMap[m.id] = m.name; });
+
+  const topTagsHtml = (peakAnalysis.topTags || []).map(t =>
+    `<span class="peak-tag">#${t.tag} <strong>${t.cnt}</strong>건</span>`
+  ).join('');
+
+  const topMgrHtml = (peakAnalysis.topAssignees || []).map(a =>
+    `<span class="peak-tag">${mgrMap[a.id] || a.id} <strong>${a.cnt}</strong>건</span>`
+  ).join('') || '<span style="color:var(--muted);font-size:11px">담당자 정보 없음</span>';
+
+  const hourStr = peakAnalysis.peakHour
+    ? `${peakAnalysis.peakHour.hour}시 (${peakAnalysis.peakHour.cnt}건 집중)`
+    : '—';
+
+  el.innerHTML = `
+    <div class="peak-panel-header">
+      <span class="peak-date-badge">${peakAnalysis.date}</span>
+      <span class="peak-count-badge">최고 ${peakAnalysis.count}건</span>
+      <span class="peak-title">피크 일자 원인 분석</span>
+      <span class="data-badge badge-analyze">분석값</span>
+    </div>
+    <div class="peak-facts">
+      <div class="peak-fact"><span class="peak-fact-lbl">집중 태그</span><div class="peak-fact-vals">${topTagsHtml || '<span style="color:var(--muted);font-size:11px">태그 없음</span>'}</div></div>
+      <div class="peak-fact"><span class="peak-fact-lbl">처리 담당자</span><div class="peak-fact-vals">${topMgrHtml}</div></div>
+      <div class="peak-fact"><span class="peak-fact-lbl">피크 시간대</span><div class="peak-fact-vals"><span class="peak-tag">${hourStr}</span></div></div>
+    </div>
+  `;
+}
+
+/* ─── Render: Heatmap ───────────────────────────────────────────────────── */
 function renderHeatmap(d) {
   const days = ['월', '화', '수', '목', '금', '토', '일'];
   const hours = Array.from({ length: 24 }, (_, i) => i);
@@ -608,21 +650,16 @@ function renderHeatmap(d) {
 
   const el = document.getElementById('heatmap');
   el.innerHTML = '';
-
   el.appendChild(Object.assign(document.createElement('div'), { className: 'hm-head' }));
   hours.forEach(h => {
     const div = document.createElement('div');
-    div.className = 'hm-head';
-    div.textContent = h;
+    div.className = 'hm-head'; div.textContent = h;
     el.appendChild(div);
   });
-
   days.forEach((day, di) => {
     const lbl = document.createElement('div');
-    lbl.className = 'hm-row-label';
-    lbl.textContent = day;
+    lbl.className = 'hm-row-label'; lbl.textContent = day;
     el.appendChild(lbl);
-
     hours.forEach(h => {
       const v = hm[`${di}-${h}`] || 0;
       const lvl = v === 0 ? 0 : Math.min(5, Math.ceil((v / maxVal) * 5));
@@ -655,48 +692,46 @@ function renderCategory(d) {
     type: 'doughnut',
     data: {
       labels: tags.labels,
-      datasets: [{
-        data: tags.values,
-        backgroundColor: COLORS,
-        borderColor: '#fff', borderWidth: 2, hoverOffset: 6
-      }]
+      datasets: [{ data: tags.values, backgroundColor: COLORS, borderColor: '#fff', borderWidth: 2, hoverOffset: 6 }]
     },
     options: {
       responsive: true, maintainAspectRatio: false, cutout: '56%',
       plugins: {
-        legend: {
-          position: 'right',
-          labels: { boxWidth: 7, boxHeight: 7, padding: 9, usePointStyle: true, pointStyle: 'rect', font: { size: 10 } }
-        },
+        legend: { position: 'right', labels: { boxWidth: 7, boxHeight: 7, padding: 9, usePointStyle: true, pointStyle: 'rect', font: { size: 10 } } },
         tooltip: {
           backgroundColor: '#1c1917', padding: 10, cornerRadius: 7,
-          callbacks: {
-            label: ctx => `${ctx.label}: ${ctx.parsed}건 (${((ctx.parsed / summary.totalChats) * 100).toFixed(1)}%)`
-          }
+          callbacks: { label: ctx => `${ctx.label}: ${ctx.parsed}건 (${((ctx.parsed / summary.totalChats) * 100).toFixed(1)}%)` }
         }
       }
     }
   });
 }
 
-/* ─── Render: Category Bars ──────────────────────────────────────────────── */
+/* ─── Render: Category Bars (항목 #5 — 컴플레인 분리) ──────────────────── */
 function renderCategoryBars(d) {
   const { tags, summary } = d;
   const total = summary.totalChats || 1;
+
+  // 컴플레인 분리: "컴플레인" 전체, "컴플레인/이용불가" 별도 표시
   const groups = {
-    '구독 관련': { count: 0, color: '#0f766e' },
-    '컴플레인':  { count: 0, color: '#be123c' },
-    '이용 문의': { count: 0, color: '#1d4ed8' },
-    '기타/운영': { count: 0, color: '#6d28d9' },
+    '구독 관련':         { count: 0, color: '#0f766e',  badge: '실데이터' },
+    '컴플레인 (전체)':   { count: 0, color: '#be123c',  badge: '실데이터' },
+    '컴플레인/이용불가': { count: 0, color: '#e11d48',  badge: '실데이터' },
+    '이용 문의':         { count: 0, color: '#1d4ed8',  badge: '실데이터' },
+    '기타/운영':         { count: 0, color: '#6d28d9',  badge: '실데이터' },
   };
 
   (tags?.labels || []).forEach((lbl, i) => {
     const val = tags.values[i] || 0;
-    if (lbl.includes('정기구독') || lbl.includes('구독'))  groups['구독 관련'].count += val;
-    else if (lbl.includes('컴플레인'))                      groups['컴플레인'].count += val;
+    if (lbl.includes('정기구독') || lbl === '구독')   groups['구독 관련'].count += val;
+    else if (lbl === '컴플레인/이용불가')              groups['컴플레인/이용불가'].count += val;
+    else if (lbl.includes('컴플레인'))                 groups['컴플레인 (전체)'].count += val;
     else if (lbl.includes('이용') || lbl.includes('단순')) groups['이용 문의'].count += val;
-    else                                                     groups['기타/운영'].count += val;
+    else                                               groups['기타/운영'].count += val;
   });
+
+  // 컴플레인 전체 = 일반 컴플레인 + 이용불가 (중복 카운트 없이 표시)
+  groups['컴플레인 (전체)'].count += groups['컴플레인/이용불가'].count;
 
   const items = Object.entries(groups)
     .map(([label, g]) => ({ label, count: g.count, color: g.color, pct: Math.round(g.count / total * 100) }))
@@ -732,10 +767,7 @@ function renderChannel(d) {
       indexAxis: 'y', responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        tooltip: {
-          backgroundColor: '#1c1917', padding: 9, cornerRadius: 7,
-          callbacks: { label: ctx => `${ctx.parsed.x.toLocaleString()}건 (${((ctx.parsed.x / total) * 100).toFixed(1)}%)` }
-        }
+        tooltip: { backgroundColor: '#1c1917', padding: 9, cornerRadius: 7, callbacks: { label: ctx => `${ctx.parsed.x.toLocaleString()}건 (${((ctx.parsed.x / total) * 100).toFixed(1)}%)` } }
       },
       scales: {
         x: { ticks: { callback: v => v + '건', font: { size: 11 } }, grid: { color: '#f1efe8' }, beginAtZero: true },
@@ -783,6 +815,7 @@ function renderResolution(d) {
       <div class="res-big ${slowPct <= 20 ? 'good' : slowPct <= 40 ? 'warn' : 'bad'}">
         <div class="res-big-val">${slowPct}%</div>
         <div class="res-big-lbl">8시간+ 장기</div>
+        ${(rb['8시간+'] || 0) > 0 ? `<a href="#" class="drill-link" onclick="openLongChatsPanel();return false;">▸ 상세보기</a>` : ''}
       </div>
       <div class="res-big">
         <div class="res-big-val">${d.summary.avgResolutionMin ?? '—'}</div>
@@ -822,12 +855,12 @@ function renderResolution(d) {
   if (note) {
     const avg = d.summary.avgResolutionMin;
     note.textContent = avg != null
-      ? `평균 ${avg}분 (≈${Math.round(avg / 60 * 10) / 10}시간) · 비동기 채팅 특성상 고객 미응답 시간 포함`
+      ? `전체 평균 ${avg}분 (≈${Math.round(avg / 60 * 10) / 10}시간) · 비동기 채팅 특성상 고객 미응답 시간 포함`
       : '평균 해결시간 데이터 없음';
   }
 }
 
-/* ─── Render: VOC ───────────────────────────────────────────────────────── */
+/* ─── Render: VOC (항목 #8 — 비율 기반임을 명확히) ─────────────────────── */
 function renderVOC(d) {
   const { tags, summary } = d;
   const el = document.getElementById('vocList');
@@ -836,19 +869,17 @@ function renderVOC(d) {
     return;
   }
   const totalForPct = summary.totalChats || 1;
-  // 비율 기반 트렌드 표시 (15% 이상 급증, 8% 이상 주의, 그 외 안정)
   el.innerHTML = tags.labels.slice(0, 8).map((lbl, i) => {
     const cnt = tags.values[i];
     const pct = Math.round(cnt / totalForPct * 100);
     const cls = pct >= 15 ? 'rising' : pct >= 8 ? 'warn-r' : '';
-    const pctClass = pct >= 15 ? 'pct-high' : pct >= 8 ? 'pct-mid' : 'pct-low';
     const ctx = VOC_CONTEXTS[lbl] || '관련 문의';
-    // 트렌드 방향: 15% 이상은 급증 ▲, 8% 이상은 주의 △, 그 외 안정 —
+    // 항목 #8: 전주 대비 비교 없이 "비율 기반" 표시임을 명확히
     const trendHtml = pct >= 15
-      ? '<span class="voc-trend up">▲ 급증</span>'
+      ? '<span class="voc-trend up">비율 상위</span>'
       : pct >= 8
-        ? '<span class="voc-trend up" style="background:var(--amber-bg);color:var(--amber)">△ 주의</span>'
-        : '<span class="voc-trend flat">— 안정</span>';
+        ? '<span class="voc-trend up" style="background:var(--amber-bg);color:var(--amber)">주목 필요</span>'
+        : '<span class="voc-trend flat">일반</span>';
     return `
       <div class="voc-item ${cls}">
         <div>
@@ -856,7 +887,7 @@ function renderVOC(d) {
           <div class="voc-context">${ctx}</div>
         </div>
         <div class="voc-count">총 <strong>${cnt}</strong>건</div>
-        <div class="voc-pct ${pctClass}">${pct}%</div>
+        <div class="voc-pct ${pct >= 15 ? 'pct-high' : pct >= 8 ? 'pct-mid' : 'pct-low'}">${pct}%</div>
       </div>
     `;
   }).join('');
@@ -866,42 +897,49 @@ function renderVOC(d) {
 let agentSortKey = 'count';
 let lastManagerData = null;
 
+// 항목 #12: 이모지 → 텍스트 라벨 기반 코멘트
 function agentComment(m, rank) {
   if (!m.count) return '<span class="agent-comment off">비활성</span>';
   if (rank === 0 && m.operatorScore > 30 && m.touchScore > 50)
-    return '<span class="agent-comment top">⭐ TOP 퍼포머</span>';
+    return '<span class="agent-comment top">TOP 퍼포머</span>';
   if (m.operatorScore < 10 && m.touchScore < 20)
-    return '<span class="agent-comment warn">⚠ 코칭 필요</span>';
+    return '<span class="agent-comment warn">코칭 필요</span>';
   if (m.touchScore < 20)
-    return '<span class="agent-comment warn">💬 응대 보완</span>';
+    return '<span class="agent-comment warn">응대 보완</span>';
   if (m.operatorScore < 10)
-    return '<span class="agent-comment warn">📊 효율 점검</span>';
-  return '<span class="agent-comment normal">✓ 정상</span>';
+    return '<span class="agent-comment warn">효율 점검</span>';
+  return '<span class="agent-comment normal">정상</span>';
 }
 
-function renderManagerRows(managers, total, avgRes) {
+/* ─── Render: Manager Rows (항목 #3 — 담당자별 개별 해결시간) ─────────── */
+function renderManagerRows(managers, total, _avgRes) {
   const tbody = document.getElementById('managerTbody');
   if (!managers.length) {
     tbody.innerHTML = '<tr><td colspan="9" class="tbl-loading">담당자 데이터 없음</td></tr>';
     return;
   }
-  // 정렬된 인덱스 (원본 rank는 count 순 기준)
   const sorted = [...managers].sort((a, b) => (b[agentSortKey] || 0) - (a[agentSortKey] || 0));
 
   tbody.innerHTML = sorted.map((m, i) => {
-    const origRank = managers.indexOf(m); // count 기준 원래 순위
-    const displayRank = origRank + 1;     // 1-based 순위
-    const rankClass = displayRank === 1 ? 'r1' : displayRank === 2 ? 'r2' : displayRank === 3 ? 'r3' : 'rn';
-    const topPct = total > 0 ? Math.round(m.count / total * 100) : 0;
-    const touchPct = Math.min(m.touchScore, 100);
-    const isActive = m.count > 0;
-    const badge = origRank === 0 && isActive ? '<span class="badge-top">★ 주담당</span>'
-                : !isActive ? '<span class="badge-off">비활성</span>'
-                : '—';
-    const opColor = m.operatorScore > 30 ? 'var(--teal)' : m.operatorScore > 10 ? '#b45309' : 'var(--muted)';
-    const tcColor = m.touchScore > 50 ? 'var(--teal)' : m.touchScore > 20 ? '#b45309' : 'var(--muted)';
-    const comment = agentComment(m, origRank);
+    const origRank    = managers.indexOf(m);
+    const displayRank = origRank + 1;
+    const rankClass   = displayRank === 1 ? 'r1' : displayRank === 2 ? 'r2' : displayRank === 3 ? 'r3' : 'rn';
+    const topPct      = total > 0 ? Math.round(m.count / total * 100) : 0;
+    const touchPct    = Math.min(m.touchScore, 100);
+    const isActive    = m.count > 0;
+    const badge       = origRank === 0 && isActive ? '<span class="badge-top">주담당</span>'
+                      : !isActive ? '<span class="badge-off">비활성</span>' : '—';
+    const opColor  = m.operatorScore > 30 ? 'var(--teal)' : m.operatorScore > 10 ? '#b45309' : 'var(--muted)';
+    const tcColor  = m.touchScore > 50 ? 'var(--teal)' : m.touchScore > 20 ? '#b45309' : 'var(--muted)';
+    const comment  = agentComment(m, origRank);
     const rowStyle = !isActive ? 'opacity:.55' : '';
+
+    // 담당자별 실제 avgResolutionMin 사용 (없으면 — 표시)
+    const resDisplay = isActive && m.avgResolutionMin != null
+      ? `${m.avgResolutionMin}분`
+      : isActive
+        ? '<span style="font-size:10px;color:var(--subtle)">해결 완료건 없음</span>'
+        : '—';
 
     return `
       <tr style="${rowStyle}">
@@ -934,7 +972,7 @@ function renderManagerRows(managers, total, avgRes) {
             <span class="score-num" style="color:${tcColor}">${m.touchScore}</span>
           </div>
         </td>
-        <td class="num-r" style="color:var(--muted);font-size:11px">${isActive && avgRes != null ? Math.round(avgRes) + '분' : '—'}</td>
+        <td class="num-r" style="font-size:11px">${resDisplay}</td>
         <td>${badge}</td>
         <td>${comment}</td>
       </tr>
@@ -946,22 +984,21 @@ function renderManagerRows(managers, total, avgRes) {
 function renderManagers(d) {
   const managers = (d.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
   const total = d.summary.totalChats || 1;
-  lastManagerData = { managers, total, avgRes: d.summary.avgResolutionMin };
+  lastManagerData = { managers, total };
 
   const concAlert = document.getElementById('concAlert');
   if (concAlert && managers.length > 0) {
     const topPct = Math.round((managers[0].count || 0) / total * 100);
     if (topPct > 70) {
       concAlert.style.display = 'flex';
-      concAlert.textContent = `⚠ ${managers[0].name} 집중도 ${topPct}%`;
+      concAlert.innerHTML = `<span class="data-badge badge-warn" style="font-size:11px">집중도 경고</span> ${managers[0].name} ${topPct}%`;
     } else {
       concAlert.style.display = 'none';
     }
   }
 
-  renderManagerRows(managers, total, d.summary.avgResolutionMin);
+  renderManagerRows(managers, total, null);
 
-  // 정렬 탭 이벤트 바인딩
   const tabs = document.querySelectorAll('#agentSortTabs .tbl-sort-tab');
   tabs.forEach(tab => {
     tab.onclick = () => {
@@ -969,24 +1006,98 @@ function renderManagers(d) {
       tab.classList.add('active');
       agentSortKey = tab.dataset.sort;
       if (lastManagerData) {
-        renderManagerRows(lastManagerData.managers, lastManagerData.total, lastManagerData.avgRes);
+        renderManagerRows(lastManagerData.managers, lastManagerData.total, null);
       }
     };
   });
+
+  // 담당자 노트 업데이트
+  const note = document.getElementById('agentTblNote');
+  if (note) note.textContent = '※ Operator Score · Touch Score: 채널톡 API 실데이터 / 평균 해결시간: 해당 담당자 처리 건 실측값';
+}
+
+/* ─── 8시간+ Drill-Down Panel (항목 #6) ────────────────────────────────── */
+function openLongChatsPanel() {
+  if (!lastData || !lastData.longChats) return;
+  const modal = document.getElementById('longChatsModal');
+  if (!modal) return;
+
+  const mgrMap = {};
+  (lastData.managers || []).forEach(m => { mgrMap[m.id] = m.name; });
+
+  const rows = lastData.longChats.map(c => {
+    const tagsHtml = c.tags.length ? c.tags.map(t => `<span class="long-tag">#${t}</span>`).join(' ') : '<span style="color:var(--muted)">태그 없음</span>';
+    const mgrName = c.assigneeId ? (mgrMap[c.assigneeId] || c.assigneeId) : '미배정';
+    const hrs = (c.resolutionMin / 60).toFixed(1);
+    return `
+      <tr>
+        <td>${c.date}</td>
+        <td>${c.resolutionMin}분 <span style="color:var(--muted);font-size:10px">(${hrs}h)</span></td>
+        <td>${tagsHtml}</td>
+        <td style="color:var(--muted)">${mgrName}</td>
+      </tr>
+    `;
+  }).join('');
+
+  document.getElementById('longChatsBody').innerHTML = rows ||
+    '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">8시간+ 채팅 없음</td></tr>';
+
+  modal.style.display = 'flex';
+}
+
+function closeLongChatsPanel() {
+  const modal = document.getElementById('longChatsModal');
+  if (modal) modal.style.display = 'none';
+}
+
+/* ─── CSV Download (항목 #14) ───────────────────────────────────────────── */
+function downloadCSV() {
+  if (!lastData) return;
+  const managers = (lastData.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
+  const total = lastData.summary.totalChats || 1;
+
+  // 담당자 성과 CSV
+  const mgrRows = managers.map(m => {
+    const topPct = Math.round(m.count / total * 100);
+    return [m.name, m.count, topPct + '%', m.operatorScore, m.touchScore, m.avgResolutionMin ?? '', agentComment(m, managers.indexOf(m)).replace(/<[^>]*>/g, '')].join(',');
+  });
+
+  const header = ['담당자명', '처리건수', '비중', 'OperatorScore', 'TouchScore', '평균해결시간(분)', '코멘트'];
+  const csvLines = [
+    `# 오토스테이 CS 대시보드 내보내기 — ${new Date().toLocaleString('ko-KR')}`,
+    `# 기간: ${currentDays === 'all' ? '전체 수집 최대 500건' : '최근 ' + currentDays + '일'} · 분석 채팅: ${total}건`,
+    '',
+    '=== 담당자 성과 ===',
+    header.join(','),
+    ...mgrRows,
+    '',
+    '=== 해결시간 분포 ===',
+    '구간,건수,비율',
+    ...Object.entries(lastData.resolutionBuckets || {}).map(([k, v]) => `${k},${v},${Math.round(v / Object.values(lastData.resolutionBuckets).reduce((a, b) => a + b, 1) * 100)}%`),
+    '',
+    '=== 태그 TOP 10 ===',
+    '태그,건수',
+    ...(lastData.tags?.labels || []).map((lbl, i) => `${lbl},${lastData.tags.values[i]}`),
+  ].join('\n');
+
+  const BOM = '﻿';
+  const blob = new Blob([BOM + csvLines], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = `autostay-cs-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
 /* ─── Render: Bots & Groups → 자동화 효과 ───────────────────────────────── */
 function renderBotsGroups(d) {
   const { bots, groups, summary, resolutionBuckets } = d;
-  const botCount = (bots || []).length;
+  const botCount   = (bots   || []).length;
   const groupCount = (groups || []).length;
-
-  // 자동화 지표 계산
-  const rb = resolutionBuckets || {};
-  const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
+  const rb         = resolutionBuckets || {};
+  const resTotal   = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
   const quick5Pct  = Math.round(((rb['0~5분'] || 0) / resTotal) * 100);
   const quick30Pct = Math.round(((rb['0~5분'] || 0) + (rb['5~30분'] || 0)) / resTotal * 100);
-  const totalChats = summary.totalChats || 0;
 
   const botPanel = document.getElementById('botPanel');
   botPanel.innerHTML = `
@@ -995,25 +1106,25 @@ function renderBotsGroups(d) {
         <div class="panel-title">자동화 효과</div>
         <div class="panel-sub">봇 운영 현황 · 빠른 해결 비율</div>
       </div>
-      <span class="real-badge">✓ 실데이터</span>
+      <span class="real-badge data-badge badge-real">실데이터</span>
     </div>
     <div class="auto-stat-grid" style="margin-top:14px">
       <div class="auto-stat-card">
-        <div class="auto-stat-icon">🤖</div>
+        <div class="auto-stat-icon auto-stat-label">Bot</div>
         <div class="auto-stat-title">활성 봇</div>
         <div class="auto-stat-value">${botCount}</div>
         <div class="auto-stat-sub">채널톡 연동 챗봇</div>
         <div class="auto-progress"><div class="auto-progress-fill" style="width:${Math.min(botCount * 25, 100)}%"></div></div>
       </div>
       <div class="auto-stat-card">
-        <div class="auto-stat-icon">⚡</div>
+        <div class="auto-stat-icon auto-stat-label" style="background:#0f766e;color:#fff">5분</div>
         <div class="auto-stat-title">5분 내 해결률</div>
         <div class="auto-stat-value">${quick5Pct}<span style="font-size:16px;font-weight:700">%</span></div>
         <div class="auto-stat-sub">즉시 응대 비율</div>
         <div class="auto-progress"><div class="auto-progress-fill ${quick5Pct >= 30 ? '' : quick5Pct >= 15 ? 'warn' : 'danger'}" style="width:${quick5Pct}%"></div></div>
       </div>
       <div class="auto-stat-card">
-        <div class="auto-stat-icon">✅</div>
+        <div class="auto-stat-icon auto-stat-label" style="background:#1d4ed8;color:#fff">30분</div>
         <div class="auto-stat-title">30분 내 해결률</div>
         <div class="auto-stat-value">${quick30Pct}<span style="font-size:16px;font-weight:700">%</span></div>
         <div class="auto-stat-sub">빠른 해결 채팅</div>
@@ -1032,7 +1143,7 @@ function renderBotsGroups(d) {
         <div class="panel-title">운영 그룹 현황</div>
         <div class="panel-sub">담당자 배정 그룹 · ${groupCount}개</div>
       </div>
-      <span class="real-badge">✓ 실데이터</span>
+      <span class="real-badge data-badge badge-real">실데이터</span>
     </div>
     <div class="group-list">
       ${(groups || []).map((g, i) => `
@@ -1046,9 +1157,10 @@ function renderBotsGroups(d) {
   `;
 }
 
-/* ─── Update Topbar & Hero Meta ─────────────────────────────────────────── */
+/* ─── Update Topbar & Hero Meta (항목 #10 — 마지막 성공 시각) ─────────── */
 function updateBanner(d) {
-  const timeStr = new Date(d.updatedAt).toLocaleString('ko-KR');
+  lastSuccessTime = new Date(d.updatedAt);
+  const timeStr = lastSuccessTime.toLocaleString('ko-KR');
   const el = document.getElementById('updatedAt');
   if (el) el.textContent = timeStr;
   const heroEl = document.getElementById('heroUpdatedAt');
@@ -1074,13 +1186,13 @@ function initCollapsibles() {
 /* ─── Fetch ─────────────────────────────────────────────────────────────── */
 async function fetchData() {
   const qs = currentDays === 'all' ? 'days=all' : `days=${currentDays}`;
-  const ts = Date.now(); // 캐시 무효화 — 기간 탭 전환마다 새 요청 보장
+  const ts = Date.now();
   const res = await fetch(`/api/data?${qs}&_t=${ts}`, { cache: 'no-store' });
   if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
   return res.json();
 }
 
-/* ─── Schedule Refresh (dedup) ──────────────────────────────────────────── */
+/* ─── Schedule Refresh ──────────────────────────────────────────────────── */
 function scheduleRefresh() {
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(silentRefresh, 5 * 60 * 1000);
@@ -1096,14 +1208,14 @@ async function render() {
     setStep('lstep-api', true); setStep('lstep-charts'); setProgress(45);
 
     updateBanner(data);
-    const score = computeHealthScore(data);
-    const insights = generateInsights(data, score);
+    const scoreObj = computeHealthScore(data);
+    const insights = generateInsights(data, scoreObj);
 
-    renderHealthScore(score, data);
+    renderHealthScore(scoreObj, data);
     renderKPIs(data);
-    renderAlertStrip(data, score);
+    renderAlertStrip(data, scoreObj);
     renderInsights(insights);
-    renderActionCenter(data, score, insights);
+    renderActionCenter(data, scoreObj, insights);
 
     setProgress(60);
 
@@ -1144,7 +1256,13 @@ async function render() {
     const ov = document.getElementById('loadingOverlay');
     if (ov) ov.style.display = 'none';
     const eb = document.getElementById('errBanner');
-    if (eb) { eb.textContent = `⚠ 데이터 로드 실패: ${err.message} — 5분 후 자동 재시도`; eb.style.display = 'block'; }
+    if (eb) {
+      const lastOk = lastSuccessTime
+        ? ` — 마지막 성공: ${lastSuccessTime.toLocaleString('ko-KR')}`
+        : '';
+      eb.innerHTML = `<strong>데이터 로드 실패</strong>: ${err.message}${lastOk} · 5분 후 자동 재시도`;
+      eb.style.display = 'block';
+    }
     scheduleRefresh();
   }
 }
@@ -1155,13 +1273,13 @@ async function silentRefresh() {
     const data = await fetchData();
     lastData = data;
     updateBanner(data);
-    const score = computeHealthScore(data);
-    const insights = generateInsights(data, score);
-    renderHealthScore(score, data);
+    const scoreObj = computeHealthScore(data);
+    const insights = generateInsights(data, scoreObj);
+    renderHealthScore(scoreObj, data);
     renderKPIs(data);
-    renderAlertStrip(data, score);
+    renderAlertStrip(data, scoreObj);
     renderInsights(insights);
-    renderActionCenter(data, score, insights);
+    renderActionCenter(data, scoreObj, insights);
     renderTrend(data);
     renderHeatmap(data);
     renderCategory(data);
@@ -1177,16 +1295,14 @@ async function silentRefresh() {
   } catch (e) {
     console.warn('Silent refresh failed:', e);
   }
-  scheduleRefresh(); // ← fixed: use scheduleRefresh instead of raw setTimeout
+  scheduleRefresh();
 }
 
 /* ─── Events ─────────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
-  // Manual refresh button
   const btn = document.getElementById('refreshBtn');
   if (btn) btn.addEventListener('click', () => triggerFullReload());
 
-  // Range filter tabs
   document.querySelectorAll('.range-tab').forEach(tabBtn => {
     tabBtn.addEventListener('click', () => {
       const range = tabBtn.dataset.range;
@@ -1197,7 +1313,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Collapsible sections
+  // CSV 다운로드 버튼
+  const csvBtn = document.getElementById('csvDownloadBtn');
+  if (csvBtn) csvBtn.addEventListener('click', downloadCSV);
+
+  // 롱챗 모달 배경 클릭 닫기
+  const modal = document.getElementById('longChatsModal');
+  if (modal) modal.addEventListener('click', e => { if (e.target === modal) closeLongChatsPanel(); });
+
   initCollapsibles();
 });
 

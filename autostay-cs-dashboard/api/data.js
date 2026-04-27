@@ -1,10 +1,9 @@
-// Vercel Serverless Function — Channel.io API Proxy  v2.1
-// Fixes: KST timezone, ?days param (7 | 30 | all), chat date-window filtering
+// Vercel Serverless Function — Channel.io API Proxy  v2.2
+// 추가: 담당자별 avgResolutionMin, 8시간+ longChats 리스트, peakAnalysis
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  // 기간 탭 전환 시 즉시 최신 데이터 반환 (캐시 비활성화)
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.setHeader('Pragma', 'no-cache');
 
@@ -26,22 +25,19 @@ module.exports = async function handler(req, res) {
 
   // ── Parse query params ──────────────────────────────────────────────────────
   const daysParam = req.query && req.query.days;
-  // 'all' = no date filter (most recent 500 chats regardless of date)
-  // 7 or 30 = filter to last N days
   const days = (!daysParam || daysParam === 'all') ? null : parseInt(daysParam) || 30;
 
-  // ── KST helper (+9h shift so .getHours()/.getDay()/.getDate() return KST) ──
+  // ── KST helper (+9h shift) ──────────────────────────────────────────────────
   const KST_MS = 9 * 3600 * 1000;
   const toKST  = (ts) => new Date(ts + KST_MS);
 
   try {
-    // Fetch channel metadata, managers, open chats, groups, bots in parallel
     const [channelRes, managersRes, openRes, groupsRes, botsRes] = await Promise.all([
-      fetch(`${BASE}/channel`,                                        { headers }),
-      fetch(`${BASE}/managers?limit=30&sortField=name`,              { headers }),
+      fetch(`${BASE}/channel`,                                          { headers }),
+      fetch(`${BASE}/managers?limit=30&sortField=name`,                { headers }),
       fetch(`${BASE}/user-chats?limit=50&state=opened&sortOrder=desc`, { headers }),
-      fetch(`${BASE}/groups`,                                         { headers }),
-      fetch(`${BASE}/bots`,                                           { headers }),
+      fetch(`${BASE}/groups`,                                           { headers }),
+      fetch(`${BASE}/bots`,                                             { headers }),
     ]);
 
     const [channelData, managersData, openData, groupsData, botsData] = await Promise.all([
@@ -68,58 +64,65 @@ module.exports = async function handler(req, res) {
       if (!nextCursor) break;
     }
 
-    // ── Date cutoff for windowed modes ──────────────────────────────────────
+    // ── Date cutoff ──────────────────────────────────────────────────────────
     const cutoffMs = days ? (Date.now() - days * 24 * 3600 * 1000) : null;
 
     // ── Pre-build dayCounts window ───────────────────────────────────────────
     const dayCounts = {};
-    const windowDays = days || 90; // 'all' mode shows up to 90-day grid
+    const windowDays = days || 90;
     const nowKST = toKST(Date.now());
     for (let i = windowDays - 1; i >= 0; i--) {
-      const d = new Date(nowKST.getTime() - i * 24 * 3600 * 1000);
-      const key = `${d.getMonth() + 1}/${d.getDate()}`;
+      const d2 = new Date(nowKST.getTime() - i * 24 * 3600 * 1000);
+      const key = `${d2.getMonth() + 1}/${d2.getDate()}`;
       dayCounts[key] = 0;
     }
 
     // ── Process chats ────────────────────────────────────────────────────────
-    const heatmapData = {};
-    const tagCounts   = {};
+    const heatmapData  = {};
+    const tagCounts    = {};
     const sourceCounts = { native: 0, phone: 0, other: 0 };
     const resBuckets   = { '0~5분': 0, '5~30분': 0, '30분~2시간': 0, '2~8시간': 0, '8시간+': 0 };
-    const mgrCounts   = {};
-    const resTimes    = [];
-    let   processed   = 0;
+    const mgrCounts    = {};
+    const mgrResTimes  = {}; // 담당자별 해결시간 배열 (항목 #3)
+    const resTimes     = [];
+    const longChats    = []; // 8시간+ 채팅 리스트 (항목 #6)
+    const peakDayData  = {}; // 피크 분석용 (항목 #9)
+    let   processed    = 0;
 
     for (const c of allChats) {
-      // Apply date filter
       if (cutoffMs && c.createdAt < cutoffMs) continue;
       processed++;
 
-      const dt = toKST(c.createdAt); // KST Date
-
-      // Daily trend (KST date)
+      const dt     = toKST(c.createdAt);
       const dayKey = `${dt.getMonth() + 1}/${dt.getDate()}`;
       if (dayKey in dayCounts) dayCounts[dayKey]++;
 
-      // Heatmap: weekday(Mon=0 … Sun=6) × hour in KST
-      const rawDay = dt.getDay(); // 0=Sun in KST
-      const wd     = rawDay === 0 ? 6 : rawDay - 1; // convert: Mon=0, Sun=6
-      const hr     = dt.getHours(); // KST 0-23
-      const hmKey  = `${wd}-${hr}`;
-      heatmapData[hmKey] = (heatmapData[hmKey] || 0) + 1;
+      // Heatmap
+      const rawDay = dt.getDay();
+      const wd     = rawDay === 0 ? 6 : rawDay - 1;
+      const hr     = dt.getHours();
+      heatmapData[`${wd}-${hr}`] = (heatmapData[`${wd}-${hr}`] || 0) + 1;
+
+      // 피크 분석용 per-day 집계
+      if (!peakDayData[dayKey]) peakDayData[dayKey] = { tags: {}, assignees: {}, hours: {} };
+      peakDayData[dayKey].hours[hr] = (peakDayData[dayKey].hours[hr] || 0) + 1;
+      if (c.assigneeId) {
+        peakDayData[dayKey].assignees[c.assigneeId] = (peakDayData[dayKey].assignees[c.assigneeId] || 0) + 1;
+      }
 
       // Tags
       for (const tag of (c.tags || [])) {
         tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+        peakDayData[dayKey].tags[tag] = (peakDayData[dayKey].tags[tag] || 0) + 1;
       }
 
-      // Source / medium
+      // Source
       const medium = c.source && c.source.medium ? c.source.medium.mediumType : 'other';
       if      (medium === 'native') sourceCounts.native++;
       else if (medium === 'phone')  sourceCounts.phone++;
       else                           sourceCounts.other++;
 
-      // Resolution time (ms → min)
+      // Resolution time
       const resTime = c.resolutionTime;
       if (resTime && resTime > 0) {
         const mins = resTime / 1000 / 60;
@@ -128,14 +131,30 @@ module.exports = async function handler(req, res) {
         else if (mins < 30)  resBuckets['5~30분']++;
         else if (mins < 120) resBuckets['30분~2시간']++;
         else if (mins < 480) resBuckets['2~8시간']++;
-        else                  resBuckets['8시간+']++;
+        else {
+          resBuckets['8시간+']++;
+          // 8시간+ 리스트 (최대 50건)
+          if (longChats.length < 50) {
+            longChats.push({
+              date:          dayKey,
+              tags:          c.tags || [],
+              assigneeId:    c.assigneeId || null,
+              resolutionMin: Math.round(mins),
+            });
+          }
+        }
+        // 담당자별 해결시간 집계
+        if (c.assigneeId) {
+          if (!mgrResTimes[c.assigneeId]) mgrResTimes[c.assigneeId] = [];
+          mgrResTimes[c.assigneeId].push(mins);
+        }
       }
 
       // Manager attribution
       if (c.assigneeId) mgrCounts[c.assigneeId] = (mgrCounts[c.assigneeId] || 0) + 1;
     }
 
-    // For 'all' mode, trim leading/trailing zero-days from the trend
+    // 'all' 모드: 앞뒤 0-day 트림
     let trendDayCounts = dayCounts;
     if (!days) {
       const entries = Object.entries(dayCounts);
@@ -145,16 +164,49 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    // ── Build manager stats ──────────────────────────────────────────────────
+    // ── Peak analysis (항목 #9) ──────────────────────────────────────────────
+    const peakEntry = Object.entries(trendDayCounts)
+      .sort(function(a, b) { return b[1] - a[1]; })[0];
+
+    let peakAnalysis = null;
+    if (peakEntry && peakEntry[1] > 0) {
+      const pk = peakDayData[peakEntry[0]];
+      if (pk) {
+        const topTags3 = Object.entries(pk.tags || {})
+          .sort(function(a, b) { return b[1] - a[1]; }).slice(0, 3)
+          .map(function(e) { return { tag: e[0], cnt: e[1] }; });
+        const topAssignees3 = Object.entries(pk.assignees || {})
+          .sort(function(a, b) { return b[1] - a[1]; }).slice(0, 3)
+          .map(function(e) { return { id: e[0], cnt: e[1] }; });
+        const peakHourEntry = Object.entries(pk.hours || {})
+          .sort(function(a, b) { return b[1] - a[1]; })[0];
+        peakAnalysis = {
+          date:          peakEntry[0],
+          count:         peakEntry[1],
+          topTags:       topTags3,
+          topAssignees:  topAssignees3,
+          peakHour:      peakHourEntry
+            ? { hour: parseInt(peakHourEntry[0]), cnt: peakHourEntry[1] }
+            : null,
+        };
+      }
+    }
+
+    // ── Build manager stats (담당자별 avgResolutionMin 포함 — 항목 #3) ────────
     const managers = (managersData.managers || [])
       .filter(function(m) { return !m.removed; })
       .map(function(m) {
+        const mTimes  = mgrResTimes[m.id] || [];
+        const mAvgRes = mTimes.length
+          ? Math.round(mTimes.reduce(function(a, b) { return a + b; }, 0) / mTimes.length)
+          : null;
         return {
-          id:            m.id,
-          name:          m.name,
-          operatorScore: Math.round((m.operatorScore || 0) * 10) / 10,
-          touchScore:    Math.round((m.touchScore    || 0) * 10) / 10,
-          count:         mgrCounts[m.id] || 0,
+          id:               m.id,
+          name:             m.name,
+          operatorScore:    Math.round((m.operatorScore || 0) * 10) / 10,
+          touchScore:       Math.round((m.touchScore    || 0) * 10) / 10,
+          count:            mgrCounts[m.id] || 0,
+          avgResolutionMin: mAvgRes, // 담당자별 실제 평균
         };
       })
       .sort(function(a, b) { return b.count - a.count; });
@@ -164,22 +216,22 @@ module.exports = async function handler(req, res) {
       .sort(function(a, b) { return b[1] - a[1]; })
       .slice(0, 10);
 
-    // ── Averages & peaks ─────────────────────────────────────────────────────
+    // ── Averages ─────────────────────────────────────────────────────────────
     const avgRes = resTimes.length
       ? Math.round(resTimes.reduce(function(a, b) { return a + b; }, 0) / resTimes.length)
       : 0;
 
-    const openChats  = openData.userChats || [];
-    const peakEntry  = Object.entries(trendDayCounts)
-      .sort(function(a, b) { return b[1] - a[1]; })[0];
+    const openChats = openData.userChats || [];
 
     return res.json({
       updatedAt: new Date().toISOString(),
       range:     days ? `${days}d` : 'all',
+      totalCollected: allChats.length,       // 수집 원본 건수
+      processedCount: processed,             // 기간 필터 후 처리 건수
       channel:   channelData.channel || {},
       summary: {
-        totalChats:      processed,
-        openChats:       openChats.length,
+        totalChats:       processed,
+        openChats:        openChats.length,
         avgResolutionMin: avgRes,
         peakDay: peakEntry ? { label: peakEntry[0], count: peakEntry[1] } : null,
       },
@@ -197,6 +249,8 @@ module.exports = async function handler(req, res) {
       managers:          managers,
       groups:            groupsData.groups  || [],
       bots:              botsData.bots      || [],
+      longChats:         longChats,         // 8시간+ drill-down (항목 #6)
+      peakAnalysis:      peakAnalysis,      // 피크 분석 (항목 #9)
     });
 
   } catch (err) {
