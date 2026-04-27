@@ -1,4 +1,4 @@
-// Autostay CS Dashboard — app.js  v3.1
+// Autostay CS Dashboard — app.js  v3.2
 // 14개 항목 반영: 담당자별 해결시간, CS점수 감점 요인, 컴플레인 분리,
 // 8시간+ drill-down, 피크 분석, 실패 상태, CSV 다운로드, VOC 표현 등
 
@@ -135,40 +135,45 @@ function generateInsights(d, scoreObj) {
 
   const complaintPct = scoreObj.complaintPct;
   if (complaintPct >= 15) {
-    insights.push({ type: 'danger', icon: '경고', text: `컴플레인 ${complaintPct}% — 즉각 대응 필요` });
+    insights.push({ type: 'danger', icon: '위험', text: `컴플레인 ${complaintPct}% — 즉각 대응 필요 (기준: 15% 초과)` });
   } else if (complaintPct >= 8) {
-    insights.push({ type: 'warn', icon: '주의', text: `컴플레인 ${complaintPct}% — 주의 모니터링` });
+    insights.push({ type: 'warn', icon: '주의', text: `컴플레인 ${complaintPct}% — 모니터링 필요 (기준: 8% 초과)` });
   }
 
   if (managers.length > 0) {
     const topPct = Math.round((managers[0].count || 0) / total * 100);
+    const topName = managers[0].name.replace('오토스테이_', '');
+    const unassigned = d.summary?.unassignedChats || 0;
     if (topPct > 80) {
-      insights.push({ type: 'danger', icon: '집중', text: `${managers[0].name} 집중도 ${topPct}% — 번아웃 위험` });
+      insights.push({ type: 'danger', icon: '위험', text: `${topName} 집중도 ${topPct}% — 업무 편중 심각 (기준: 80% 초과)${unassigned > 0 ? ` · 미배정 ${unassigned}건` : ''}` });
     } else if (topPct > 60) {
-      insights.push({ type: 'warn', icon: '분산', text: `${managers[0].name} 집중도 ${topPct}% — 분산 권장` });
+      insights.push({ type: 'warn', icon: '주의', text: `${topName} 집중도 ${topPct}% — 재배정 검토 권장 (기준: 60% 초과)${unassigned > 0 ? ` · 미배정 ${unassigned}건` : ''}` });
+    } else if (unassigned > 0) {
+      insights.push({ type: 'warn', icon: '주의', text: `미배정 ${unassigned}건 — 담당자 지정 필요` });
     }
   }
 
   const slowPct = Math.round((rb['8시간+'] || 0) / resTotal * 100);
-  if (slowPct > 40) {
-    insights.push({ type: 'warn', icon: '지연', text: `8시간+ 해결 ${slowPct}% — 비동기 정책 검토` });
+  if (slowPct > 30) {
+    insights.push({ type: 'warn', icon: '지연', text: `8시간+ 해결 ${slowPct}% — 비동기 대기 포함 · 정책 점검 필요 (기준: 30% 초과)` });
   }
 
   const quickPct = Math.round(((rb['0~5분'] || 0) + (rb['5~30분'] || 0)) / resTotal * 100);
   if (quickPct >= 40) {
-    insights.push({ type: 'good', icon: '양호', text: `30분 내 해결 ${quickPct}% — 신속 대응 양호` });
+    insights.push({ type: 'good', icon: '양호', text: `30분 내 해결 ${quickPct}% — 신속 대응 양호 (기준: 40% 이상)` });
   }
 
   const subIdx = (d.tags?.labels || []).findIndex(l => l.includes('정기구독'));
   if (subIdx >= 0) {
     const subPct = Math.round((d.tags.values[subIdx] || 0) / total * 100);
     if (subPct >= 25) {
-      insights.push({ type: 'info', icon: '자동화', text: `구독 관련 문의 ${subPct}% — 자동화 플로우 점검` });
+      insights.push({ type: 'info', icon: '점검', text: `구독 관련 문의 ${subPct}% — FAQ 자동화 플로우 점검 권장` });
     }
   }
 
-  if (d.summary.openChats > 0) {
-    insights.push({ type: 'warn', icon: '대기', text: `미해결 오픈 채팅 ${d.summary.openChats}건` });
+  const openCount = d.summary.openChats || 0;
+  if (openCount > 0) {
+    insights.push({ type: 'warn', icon: '대기', text: `미해결 오픈 채팅 ${openCount}건 — 현재 처리 중` });
   } else {
     insights.push({ type: 'good', icon: '완료', text: '현재 미해결 채팅 없음' });
   }
@@ -178,7 +183,7 @@ function generateInsights(d, scoreObj) {
     const peak = Math.max(...vals);
     const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
     if (peak > avg * 3) {
-      insights.push({ type: 'info', icon: '피크', text: `${d.summary.peakDay?.label} 피크 (${peak}건 · 평균 ${Math.round(avg)}건 대비)` });
+      insights.push({ type: 'info', icon: '피크', text: `${d.summary.peakDay?.label} 이상 급증 (${peak}건 · 평균 ${Math.round(avg)}건 대비 ${Math.round(peak/avg)}배)` });
     }
   }
 
@@ -986,12 +991,17 @@ function renderManagers(d) {
   const total = d.summary.totalChats || 1;
   lastManagerData = { managers, total };
 
+  const unassignedCount = d.summary?.unassignedChats || 0;
   const concAlert = document.getElementById('concAlert');
   if (concAlert && managers.length > 0) {
     const topPct = Math.round((managers[0].count || 0) / total * 100);
     if (topPct > 70) {
+      const topName = managers[0].name.replace('오토스테이_', '');
+      const unassignedHtml = unassignedCount > 0
+        ? ` <span style="color:var(--muted);font-size:10px">| 미배정 ${unassignedCount}건</span>`
+        : '';
       concAlert.style.display = 'flex';
-      concAlert.innerHTML = `<span class="data-badge badge-warn" style="font-size:11px">집중도 경고</span> ${managers[0].name} ${topPct}%`;
+      concAlert.innerHTML = `<span class="data-badge badge-warn" style="font-size:10.5px">집중도 주의</span> <span style="font-size:11.5px;font-weight:700">${topName}</span> <span style="color:var(--rose);font-size:12px;font-weight:800">${topPct}%</span> <span style="color:var(--muted);font-size:10px">(기준: 70% 초과 시 경고)</span>${unassignedHtml}`;
     } else {
       concAlert.style.display = 'none';
     }
@@ -1059,11 +1069,18 @@ function openLongChatsPanel() {
   const rows = lastData.longChats.map(c => {
     const tagsHtml = c.tags.length ? c.tags.map(t => `<span class="long-tag">#${t}</span>`).join(' ') : '<span style="color:var(--muted)">태그 없음</span>';
     const mgrName = c.assigneeId ? (mgrMap[c.assigneeId] || c.assigneeId) : '미배정';
-    const hrs = (c.resolutionMin / 60).toFixed(1);
+    const totalMins = c.resolutionMin;
+    const totalHrs = Math.floor(totalMins / 60);
+    const remMins  = totalMins % 60;
+    const daysCnt  = Math.floor(totalHrs / 24);
+    const remHrs   = totalHrs % 24;
+    const humanTime = daysCnt >= 1 ? `${daysCnt}일 ${remHrs}시간` : `${totalHrs}시간 ${remMins}분`;
+    const timeColor = totalMins > 2880 ? 'var(--rose)' : totalMins > 480 ? 'var(--amber)' : 'var(--text)';
     return `
       <tr>
         <td>${c.date}</td>
-        <td>${c.resolutionMin}분 <span style="color:var(--muted);font-size:10px">(${hrs}h)</span></td>
+        <td style="color:${timeColor};font-weight:700">${totalMins.toLocaleString()}분
+          <span style="color:var(--muted);font-size:10px;font-weight:400">(${humanTime})</span></td>
         <td>${tagsHtml}</td>
         <td style="color:var(--muted)">${mgrName}</td>
       </tr>
@@ -1153,21 +1170,21 @@ function renderBotsGroups(d) {
         <div class="panel-title">자동화 효과</div>
         <div class="panel-sub">챗봇 · FAQ · 셀프 해결 성과</div>
       </div>
-      <span class="real-badge">✓ 실데이터</span>
+      <span class="data-badge badge-calc" title="해결시간 구간 데이터 기반 추정값 · 채널톡 API는 챗봇 해결률을 직접 제공하지 않음">≈ 계산값</span>
     </div>
 
     <!-- 2-KPI 카드 행 -->
     <div class="auto-kpi-row">
       <div class="auto-kpi-card">
-        <div class="auto-kpi-label">챗봇 빠른 해결률</div>
+        <div class="auto-kpi-label">챗봇 빠른 해결률 <span style="font-size:9px;color:var(--subtle)">(추정)</span></div>
         <div class="auto-kpi-val">${botResPct}<span class="auto-kpi-unit">%</span></div>
-        <div class="auto-kpi-sub">${resTotal.toLocaleString()}건 중 ${botResCount.toLocaleString()}건 · 5분 내 종결</div>
+        <div class="auto-kpi-sub">${resTotal.toLocaleString()}건 중 ${botResCount.toLocaleString()}건 · 5분 내 종결 기준</div>
         <div class="auto-kpi-bar"><div class="auto-kpi-fill ${botResPct >= 20 ? '' : 'warn'}" style="width:${Math.min(botResPct, 100)}%"></div></div>
       </div>
       <div class="auto-kpi-card">
-        <div class="auto-kpi-label">셀프 해결률</div>
+        <div class="auto-kpi-label">셀프 해결률 <span style="font-size:9px;color:var(--subtle)">(추정)</span></div>
         <div class="auto-kpi-val">${selfResPct}<span class="auto-kpi-unit">%</span></div>
-        <div class="auto-kpi-sub">${selfResCount.toLocaleString()}건 · 5~30분 내 · 상담 개입 최소</div>
+        <div class="auto-kpi-sub">${selfResCount.toLocaleString()}건 · 5~30분 내 · 상담 개입 최소 기준</div>
         <div class="auto-kpi-bar"><div class="auto-kpi-fill ${selfResPct >= 25 ? '' : 'warn'}" style="width:${Math.min(selfResPct, 100)}%"></div></div>
       </div>
     </div>
@@ -1209,7 +1226,7 @@ function renderBotsGroups(d) {
         <div class="panel-title">CS 운영 현황</div>
         <div class="panel-sub">유입 채널 · 실시간 처리 지표</div>
       </div>
-      <span class="real-badge">✓ 실데이터</span>
+      <span class="data-badge badge-real">✓ 실데이터</span>
     </div>
 
     <!-- 실시간 수치 카드 -->
@@ -1280,6 +1297,18 @@ function updateBanner(d) {
   if (heroEl) heroEl.textContent = timeStr;
   const cn = document.getElementById('channelName');
   if (cn) cn.textContent = d.channel?.name || '오토스테이 CS';
+
+  // 500건 샘플링 도달 시 상단 안내 배너 표시
+  const sampleNote = document.getElementById('sampleNoteBanner');
+  if (sampleNote) {
+    const note = d.dataNote || {};
+    if (note.isSampled) {
+      sampleNote.style.display = 'block';
+      sampleNote.innerHTML = `<strong>수집 상한 도달</strong> — 최근 ${note.collected || 500}건 기준 분석 (API 수집 상한 ${note.limit || 500}건). 전체 기간 집계가 아닐 수 있습니다.`;
+    } else {
+      sampleNote.style.display = 'none';
+    }
+  }
 }
 
 /* ─── Collapsible Sections ──────────────────────────────────────────────── */
