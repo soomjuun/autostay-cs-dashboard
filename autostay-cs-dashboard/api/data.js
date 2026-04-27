@@ -1,9 +1,14 @@
 // Vercel Serverless Function — Channel.io API Proxy
 // Fetches real CS data and returns processed JSON for the dashboard
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate'); // 5min cache
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
 
   const ACCESS_KEY = process.env.CHANNEL_ACCESS_KEY || '69eece38928df5646de2';
   const ACCESS_SECRET = process.env.CHANNEL_ACCESS_SECRET || '830397bafe9ac97388edc8fa6af913c5';
@@ -85,15 +90,15 @@ export default async function handler(req, res) {
       }
 
       // Source
-      const medium = c.source?.medium?.mediumType || 'other';
+      const medium = c.source && c.source.medium ? c.source.medium.mediumType : 'other';
       if (medium === 'native') sourceCounts.native++;
       else if (medium === 'phone') sourceCounts.phone++;
       else sourceCounts.other++;
 
       // Resolution time (ms → min)
-      const res = c.resolutionTime;
-      if (res && res > 0) {
-        const mins = res / 1000 / 60;
+      const resTime = c.resolutionTime;
+      if (resTime && resTime > 0) {
+        const mins = resTime / 1000 / 60;
         resTimes.push(mins);
         if (mins < 5) resBuckets['0~5분']++;
         else if (mins < 30) resBuckets['5~30분']++;
@@ -108,28 +113,32 @@ export default async function handler(req, res) {
 
     // Build manager stats
     const managers = (managersData.managers || [])
-      .filter(m => !m.removed)
-      .map(m => ({
-        id: m.id,
-        name: m.name,
-        operatorScore: Math.round(m.operatorScore * 10) / 10,
-        touchScore: Math.round(m.touchScore * 10) / 10,
-        count: mgrCounts[m.id] || 0,
-      }))
-      .sort((a, b) => b.count - a.count);
+      .filter(function(m) { return !m.removed; })
+      .map(function(m) {
+        return {
+          id: m.id,
+          name: m.name,
+          operatorScore: Math.round((m.operatorScore || 0) * 10) / 10,
+          touchScore: Math.round((m.touchScore || 0) * 10) / 10,
+          count: mgrCounts[m.id] || 0,
+        };
+      })
+      .sort(function(a, b) { return b.count - a.count; });
 
     // Top tags
     const topTags = Object.entries(tagCounts)
-      .sort((a, b) => b[1] - a[1])
+      .sort(function(a, b) { return b[1] - a[1]; })
       .slice(0, 10);
 
-    const avgRes = resTimes.length ? Math.round(resTimes.reduce((a,b)=>a+b,0)/resTimes.length) : 0;
+    const avgRes = resTimes.length
+      ? Math.round(resTimes.reduce(function(a, b) { return a + b; }, 0) / resTimes.length)
+      : 0;
     const openChats = openData.userChats || [];
 
     // Peak day
-    const peakEntry = Object.entries(dayCounts).sort((a,b) => b[1]-a[1])[0];
+    const peakEntry = Object.entries(dayCounts).sort(function(a, b) { return b[1] - a[1]; })[0];
 
-    res.json({
+    return res.json({
       updatedAt: new Date().toISOString(),
       channel: channelData.channel || {},
       summary: {
@@ -143,18 +152,18 @@ export default async function handler(req, res) {
         values: Object.values(dayCounts),
       },
       tags: {
-        labels: topTags.map(t => t[0]),
-        values: topTags.map(t => t[1]),
+        labels: topTags.map(function(t) { return t[0]; }),
+        values: topTags.map(function(t) { return t[1]; }),
       },
       sources: sourceCounts,
       resolutionBuckets: resBuckets,
       heatmap: heatmapData,
-      managers,
+      managers: managers,
       groups: groupsData.groups || [],
       bots: botsData.bots || [],
     });
 
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message, stack: err.stack });
   }
-}
+};
