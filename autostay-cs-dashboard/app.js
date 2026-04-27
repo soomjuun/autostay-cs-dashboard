@@ -1450,6 +1450,20 @@ async function fetchData() {
   const qs = currentDays === 'all' ? 'days=all' : `days=${currentDays}`;
   const ts = Date.now();
   const res = await fetch(`/api/data?${qs}&_t=${ts}`, { cache: 'no-store' });
+
+  // 인증 만료 시 로그인 페이지로 리다이렉트
+  if (res.status === 401) {
+    try {
+      const body = await res.json();
+      if (body && body.redirect) {
+        window.location.href = body.redirect;
+        return;
+      }
+    } catch (_) {}
+    window.location.href = '/api/auth';
+    return;
+  }
+
   if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
   return res.json();
 }

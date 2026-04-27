@@ -1,8 +1,29 @@
-// Vercel Serverless Function — Channel.io API Proxy  v2.3
+// Vercel Serverless Function — Channel.io API Proxy  v2.4
 // 추가: 담당자별 avgResolutionMin, 8시간+ longChats 리스트, peakAnalysis
 // v2.3: pagination 중복 dedup, percentile 통계 (중앙값·p90·8h+제외평균)
+// v2.4: 쿠키 기반 인증 게이트 (DASHBOARD_TOKEN)
+
+// ── 쿠키 파싱 헬퍼 ─────────────────────────────────────────────────────────────
+function parseCookie(str) {
+  const out = {};
+  (str || '').split(';').forEach((part) => {
+    const [k, ...v] = part.trim().split('=');
+    if (k) out[k.trim()] = decodeURIComponent(v.join('='));
+  });
+  return out;
+}
 
 module.exports = async function handler(req, res) {
+  // ── 인증 게이트 ─────────────────────────────────────────────────────────────
+  const DASHBOARD_TOKEN = process.env.DASHBOARD_TOKEN;
+  if (DASHBOARD_TOKEN) {
+    const cookie = parseCookie(req.headers.cookie);
+    if (cookie.ds_auth !== DASHBOARD_TOKEN) {
+      res.setHeader('Content-Type', 'application/json');
+      return res.status(401).json({ error: 'Unauthorized', redirect: '/api/auth' });
+    }
+  }
+
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');

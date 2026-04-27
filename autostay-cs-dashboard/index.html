@@ -9,6 +9,16 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
   <link rel="stylesheet" href="./style.css">
+  <!-- 인증 가드: 쿠키 없이 직접 접근 시 로그인 페이지로 이동 -->
+  <script>
+    (function() {
+      fetch('/api/data?days=7&_t=' + Date.now(), { cache: 'no-store' })
+        .then(function(r) {
+          if (r.status === 401) { window.location.href = '/api/auth'; }
+        })
+        .catch(function() {});
+    })();
+  </script>
 </head>
 <body>
 
