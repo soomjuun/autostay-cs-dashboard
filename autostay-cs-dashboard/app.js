@@ -33,6 +33,8 @@ Chart.defaults.borderColor = '#f1efe8';
 
 let charts = {};
 let lastData = null;
+let currentDays = 30;   // 7 | 30 | 'all'
+let refreshTimer = null;
 
 /* ─── Loading Helpers ───────────────────────────────────────────────────── */
 function setStep(id, done = false) {
@@ -364,6 +366,10 @@ function renderTrend(d) {
   document.getElementById('trendPeakDay').textContent = summary.peakDay?.label || '';
   document.getElementById('trendAvg').textContent = fmt(avg);
   document.getElementById('trendOpen').textContent = fmt(summary.openChats);
+
+  // Update badge to reflect current range
+  const badge = document.getElementById('trendBadge');
+  if (badge) badge.textContent = currentDays === 'all' ? '500건' : `${currentDays}일`;
 
   // Custom legend HTML
   document.getElementById('trendLegend').innerHTML = `
@@ -835,9 +841,16 @@ function updateBanner(d) {
 
 /* ─── Fetch ─────────────────────────────────────────────────────────────── */
 async function fetchData() {
-  const res = await fetch('/api/data');
+  const qs = currentDays === 'all' ? 'days=all' : `days=${currentDays}`;
+  const res = await fetch(`/api/data?${qs}`);
   if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
   return res.json();
+}
+
+/* ─── Schedule Refresh (dedup) ──────────────────────────────────────────── */
+function scheduleRefresh() {
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(silentRefresh, 5 * 60 * 1000);
 }
 
 /* ─── Full Render ───────────────────────────────────────────────────────── */
@@ -897,7 +910,7 @@ async function render() {
     if (eb) eb.style.display = 'none';
 
     // Auto-refresh every 5 min
-    setTimeout(silentRefresh, 5 * 60 * 1000);
+    scheduleRefresh();
 
   } catch (err) {
     console.error('Render error:', err);
@@ -905,7 +918,7 @@ async function render() {
     if (ov) ov.style.display = 'none';
     const eb = document.getElementById('errBanner');
     if (eb) { eb.textContent = `⚠ 데이터 로드 실패: ${err.message} — 5분 후 자동 재시도`; eb.style.display = 'block'; }
-    setTimeout(silentRefresh, 5 * 60 * 1000);
+    scheduleRefresh();
   }
 }
 
@@ -939,24 +952,44 @@ async function silentRefresh() {
   setTimeout(silentRefresh, 5 * 60 * 1000);
 }
 
-/* ─── Event: Manual Refresh ─────────────────────────────────────────────── */
+/* ─── Event: Manual Refresh & Range Tabs ────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
+  // Manual refresh button
   const btn = document.getElementById('refreshBtn');
   if (btn) {
     btn.addEventListener('click', () => {
-      const ov = document.getElementById('loadingOverlay');
-      if (ov) { ov.style.opacity = '1'; ov.style.display = 'flex'; }
-      document.getElementById('loadText').textContent = '채널톡 데이터 수집 중…';
-      ['lstep-conn','lstep-api','lstep-charts','lstep-done'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.classList.remove('active','done');
-      });
-      document.getElementById('lstep-conn').classList.add('done');
-      setProgress(5);
-      render();
+      triggerFullReload();
     });
   }
+
+  // Range filter tabs
+  document.querySelectorAll('.range-tab').forEach(tabBtn => {
+    tabBtn.addEventListener('click', () => {
+      const range = tabBtn.dataset.range;
+      // Update active state
+      document.querySelectorAll('.range-tab').forEach(t => t.classList.remove('active'));
+      tabBtn.classList.add('active');
+      // Store new range
+      currentDays = range === 'all' ? 'all' : parseInt(range);
+      triggerFullReload();
+    });
+  });
 });
+
+function triggerFullReload() {
+  const ov = document.getElementById('loadingOverlay');
+  if (ov) { ov.style.opacity = '1'; ov.style.display = 'flex'; }
+  const loadText = document.getElementById('loadText');
+  if (loadText) loadText.textContent = '채널톡 데이터 수집 중…';
+  ['lstep-conn','lstep-api','lstep-charts','lstep-done'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('active','done');
+  });
+  const connStep = document.getElementById('lstep-conn');
+  if (connStep) connStep.classList.add('done');
+  setProgress(5);
+  render();
+}
 
 /* ─── Boot ───────────────────────────────────────────────────────────────── */
 render();
