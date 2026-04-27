@@ -1,6 +1,6 @@
-// Autostay CS Dashboard — app.js  v3.2
-// 14개 항목 반영: 담당자별 해결시간, CS점수 감점 요인, 컴플레인 분리,
-// 8시간+ drill-down, 피크 분석, 실패 상태, CSV 다운로드, VOC 표현 등
+// Autostay CS Dashboard — app.js  v3.3
+// 9개 추가 항목: 보조 통계(중앙값·p90·8h+제외), 피크 채널·장기전환율, 히트맵 피크TOP3,
+// 담당자 조치 권고 카드, 컴플레인 헤더 강조, 500건 기준 명확화, dedup, basisNote 개선
 
 'use strict';
 
@@ -480,10 +480,16 @@ function renderKPIs(d) {
   const quickClass  = quickPct >= TARGET_QUICK_PCT ? '' : quickPct >= TARGET_QUICK_PCT * 0.7 ? 'warn' : 'danger';
 
   // 수집 기준 문구 (항목 #1 — 탭 명칭, #2 — 기준 명시)
-  const rangeLabel = currentDays === 'all' ? `최근 ${d.totalCollected || '500'}건` : `${currentDays}일`;
+  const dataNote   = d.dataNote || {};
+  const collected  = dataNote.collected  || 0;
+  const isSampled  = dataNote.isSampled  || false;
+  const limitVal   = dataNote.limit      || 500;
+  const rangeLabel = currentDays === 'all'
+    ? (isSampled ? `최근 ${limitVal}건 한도` : `수집 ${collected}건`)
+    : `${currentDays}일`;
   const basisNote  = currentDays === 'all'
-    ? `수집 ${d.totalCollected || 0}건 중 ${totalChats}건 집계 · closed 채팅 · KST · Vercel API`
-    : `최근 ${currentDays}일 · closed 채팅 기준 · ${totalChats}건 집계 · KST 기준`;
+    ? `${isSampled ? `⚠ 수집 상한(${limitVal}건) 도달 · 전체 기간 아님` : `수집 ${collected}건`} · closed 채팅 기준 · KST`
+    : `최근 ${currentDays}일 · closed 채팅 최대 ${limitVal}건 기준 · ${totalChats}건 집계 · KST`;
 
   const grid = document.getElementById('kpiGrid');
   if (!grid) return;
@@ -630,6 +636,21 @@ function renderPeakAnalysis(peakAnalysis, managers) {
     ? `${peakAnalysis.peakHour.hour}시 (${peakAnalysis.peakHour.cnt}건 집중)`
     : '—';
 
+  // 유입 채널 분포
+  const pkSrc = peakAnalysis.sources || {};
+  const pkSrcTotal = (pkSrc.native || 0) + (pkSrc.phone || 0) + (pkSrc.other || 0) || 1;
+  const srcParts = [];
+  if (pkSrc.native > 0) srcParts.push(`앱/웹 ${Math.round(pkSrc.native / pkSrcTotal * 100)}%`);
+  if (pkSrc.phone  > 0) srcParts.push(`전화 ${Math.round(pkSrc.phone  / pkSrcTotal * 100)}%`);
+  if (pkSrc.other  > 0) srcParts.push(`기타 ${Math.round(pkSrc.other  / pkSrcTotal * 100)}%`);
+  const srcHtml = srcParts.length
+    ? srcParts.map(s => `<span class="peak-tag">${s}</span>`).join('')
+    : '<span style="color:var(--muted);font-size:11px">데이터 없음</span>';
+
+  // 장기채팅 전환율
+  const longRate = peakAnalysis.longChatRate ?? null;
+  const longRateColor = longRate > 30 ? 'var(--rose)' : longRate > 15 ? 'var(--amber)' : 'var(--teal)';
+
   el.innerHTML = `
     <div class="peak-panel-header">
       <span class="peak-date-badge">${peakAnalysis.date}</span>
@@ -641,6 +662,8 @@ function renderPeakAnalysis(peakAnalysis, managers) {
       <div class="peak-fact"><span class="peak-fact-lbl">집중 태그</span><div class="peak-fact-vals">${topTagsHtml || '<span style="color:var(--muted);font-size:11px">태그 없음</span>'}</div></div>
       <div class="peak-fact"><span class="peak-fact-lbl">처리 담당자</span><div class="peak-fact-vals">${topMgrHtml}</div></div>
       <div class="peak-fact"><span class="peak-fact-lbl">피크 시간대</span><div class="peak-fact-vals"><span class="peak-tag">${hourStr}</span></div></div>
+      <div class="peak-fact"><span class="peak-fact-lbl">유입 채널</span><div class="peak-fact-vals">${srcHtml}</div></div>
+      ${longRate != null ? `<div class="peak-fact"><span class="peak-fact-lbl">장기전환율</span><div class="peak-fact-vals"><span class="peak-tag" style="color:${longRateColor};font-weight:700">${longRate}% <span style="font-size:10px;font-weight:400;color:var(--muted)">(8h+ 비율)</span></span></div></div>` : ''}
     </div>
   `;
 }
@@ -685,6 +708,47 @@ function renderHeatmap(d) {
       s.style.cssText = 'width:12px;height:12px;border-radius:2px;display:block';
       leg.appendChild(s);
     });
+  }
+
+  // ── 피크 시간대 TOP 3 요약 (히트맵 여백 활용) ─────────────────────────────
+  const hmPeakEl = document.getElementById('hmPeakSummary');
+  if (hmPeakEl) {
+    // 시간대별 전체 합산 (요일 무관)
+    const hourTotals = {};
+    for (let di = 0; di < 7; di++) {
+      for (let h = 0; h < 24; h++) {
+        const v = hm[`${di}-${h}`] || 0;
+        hourTotals[h] = (hourTotals[h] || 0) + v;
+      }
+    }
+    const top3Hours = Object.entries(hourTotals)
+      .filter(([, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3);
+
+    // 요일별 전체 합산
+    const dayLabels = ['월', '화', '수', '목', '금', '토', '일'];
+    const dayTotals = {};
+    for (let di = 0; di < 7; di++) {
+      dayTotals[di] = 0;
+      for (let h = 0; h < 24; h++) dayTotals[di] += hm[`${di}-${h}`] || 0;
+    }
+    const peakDayIdx = Object.entries(dayTotals).sort((a, b) => b[1] - a[1])[0];
+
+    hmPeakEl.innerHTML = `
+      <div class="hm-peak-title">피크 집중 시간대</div>
+      <div class="hm-peak-list">
+        ${top3Hours.map(([h, v], rank) => `
+          <div class="hm-peak-row rank-${rank + 1}">
+            <span class="hm-peak-rank">${rank + 1}위</span>
+            <span class="hm-peak-hour">${h}시</span>
+            <div class="hm-peak-bar-wrap"><div class="hm-peak-bar" style="width:${Math.round(v / (top3Hours[0][1] || 1) * 100)}%"></div></div>
+            <span class="hm-peak-val">${v}건</span>
+          </div>
+        `).join('')}
+      </div>
+      ${peakDayIdx ? `<div class="hm-peak-day-note">📅 주간 최다: <strong>${dayLabels[parseInt(peakDayIdx[0])]}요일</strong> (${peakDayIdx[1]}건)</div>` : ''}
+    `;
   }
 }
 
@@ -744,8 +808,21 @@ function renderCategoryBars(d) {
 
   const maxCount = Math.max(...items.map(i => i.count), 1);
   const el = document.getElementById('categoryBars');
-  el.innerHTML = items.map(item => `
-    <div class="cat-bar-row">
+
+  // 컴플레인 전체 합계 (전체 + 이용불가 중복 없이 이미 계산됨)
+  const complaintItem = items.find(i => i.label === '컴플레인 (전체)');
+  const complaintSummaryHtml = complaintItem && complaintItem.count > 0 ? `
+    <div class="cat-complaint-header">
+      <span class="cat-complaint-icon">⚠</span>
+      <span class="cat-complaint-label">컴플레인 전체</span>
+      <span class="cat-complaint-count">${complaintItem.count}건</span>
+      <span class="cat-complaint-pct">${complaintItem.pct}%</span>
+      ${complaintItem.pct >= 15 ? '<span class="cat-complaint-badge danger">즉시 대응</span>' : complaintItem.pct >= 8 ? '<span class="cat-complaint-badge warn">모니터링</span>' : ''}
+    </div>
+  ` : '';
+
+  el.innerHTML = complaintSummaryHtml + items.map(item => `
+    <div class="cat-bar-row${item.label === '컴플레인 (전체)' ? ' cat-bar-row-complaint' : ''}">
       <div class="cat-bar-label">${item.label}</div>
       <div class="cat-bar-track">
         <div class="cat-bar-fill" style="width:${Math.max(item.count / maxCount * 100, item.count > 0 ? 3 : 0)}%;background:${item.color}"></div>
@@ -810,6 +887,11 @@ function renderResolution(d) {
   const quickPct = Math.round(quick / resTotal * 100);
   const slowPct  = Math.round((rb['8시간+'] || 0) / resTotal * 100);
 
+  const rs = d.resolutionStats || {};
+  const medianMin  = rs.median  ?? null;
+  const p90Min     = rs.p90     ?? null;
+  const avgEx8hMin = rs.avgEx8h ?? null;
+
   const resSummary = document.getElementById('resSummary');
   if (resSummary) {
     resSummary.innerHTML = `
@@ -825,6 +907,30 @@ function renderResolution(d) {
       <div class="res-big">
         <div class="res-big-val">${d.summary.avgResolutionMin ?? '—'}</div>
         <div class="res-big-lbl">평균(분)</div>
+      </div>
+    `;
+  }
+
+  // 보조 통계 블록 (중앙값 · p90 · 8h+제외 평균)
+  const resAuxEl = document.getElementById('resAuxStats');
+  if (resAuxEl) {
+    resAuxEl.innerHTML = `
+      <div class="res-aux-row">
+        <span class="res-aux-item" title="전체 해결시간의 중간값 — 극단값에 덜 민감한 대표값">
+          <span class="res-aux-lbl">중앙값</span>
+          <span class="res-aux-val">${medianMin != null ? medianMin + '분' : '—'}</span>
+          <span class="data-badge badge-calc" style="font-size:9px">계산값</span>
+        </span>
+        <span class="res-aux-item" title="상위 10% 기준선 — 이 값을 초과하면 장기 케이스">
+          <span class="res-aux-lbl">90퍼센타일</span>
+          <span class="res-aux-val">${p90Min != null ? p90Min + '분' : '—'}</span>
+          <span class="data-badge badge-calc" style="font-size:9px">계산값</span>
+        </span>
+        <span class="res-aux-item" title="8시간+ 비동기 채팅 제외 평균 — 실제 응대 시간에 더 근접">
+          <span class="res-aux-lbl">8h+제외 평균</span>
+          <span class="res-aux-val ${avgEx8hMin != null && avgEx8hMin > 120 ? 'warn-text' : ''}">${avgEx8hMin != null ? avgEx8hMin + '분' : '—'}</span>
+          <span class="data-badge badge-analyze" style="font-size:9px">분석값</span>
+        </span>
       </div>
     `;
   }
@@ -1019,6 +1125,13 @@ function renderManagers(d) {
     const topMgr = activeMgrs[0];
     const topPct = total > 0 ? Math.round((topMgr?.count || 0) / total * 100) : 0;
     const fastMgr = activeMgrs.filter(m => m.avgResolutionMin != null).sort((a, b) => a.avgResolutionMin - b.avgResolutionMin)[0];
+    // 조치 권고 계산
+    const unassigned2 = d.summary?.unassignedChats || 0;
+    const topPct2 = topMgr ? Math.round((topMgr.count || 0) / total * 100) : 0;
+    const needsRedist = topPct2 > 70;
+    const backup = activeMgrs[1] || null; // 재배정 후보
+    const needsAssist = activeMgrs.length === 1 || (activeMgrs.length > 0 && topPct2 > 80);
+
     sidebar.innerHTML = `
       <div class="agent-stat-card">
         <div class="agent-stat-card-title">👥 인원 현황</div>
@@ -1037,6 +1150,13 @@ function renderManagers(d) {
         <div class="agent-stat-row"><span class="agent-stat-label">집중도</span><span class="agent-stat-value" style="color:${topPct > 70 ? 'var(--rose)' : 'var(--text)'}">${topPct}%</span></div>
         ${fastMgr ? `<div class="agent-stat-row"><span class="agent-stat-label">최단 해결</span><span class="agent-stat-value" style="font-size:10.5px;color:var(--teal)">${fastMgr.name.replace('오토스테이_','')} ${fastMgr.avgResolutionMin}분</span></div>` : ''}
       </div>` : ''}
+      <div class="agent-stat-card ${needsRedist || unassigned2 > 0 ? 'agent-action-card-warn' : 'agent-action-card-ok'}">
+        <div class="agent-stat-card-title">🔧 조치 권고사항</div>
+        ${unassigned2 > 0 ? `<div class="agent-action-row danger"><span class="agent-action-dot"></span><span>미배정 <strong>${unassigned2}건</strong> — 즉시 담당자 지정 필요</span></div>` : `<div class="agent-action-row ok"><span class="agent-action-dot ok"></span><span>미배정 없음</span></div>`}
+        ${needsRedist ? `<div class="agent-action-row danger"><span class="agent-action-dot"></span><span>${topMgr.name.replace('오토스테이_','')} 편중 ${topPct2}% — 재배정 필요</span></div>` : `<div class="agent-action-row ok"><span class="agent-action-dot ok"></span><span>담당자 분산 양호</span></div>`}
+        ${backup && needsRedist ? `<div class="agent-action-row info"><span class="agent-action-dot info"></span><span>재배정 후보: <strong>${backup.name.replace('오토스테이_','')}</strong></span></div>` : ''}
+        ${needsAssist ? `<div class="agent-action-row warn"><span class="agent-action-dot warn"></span><span>보조 담당자 추가 검토 권장</span></div>` : ''}
+      </div>
     `;
   }
 

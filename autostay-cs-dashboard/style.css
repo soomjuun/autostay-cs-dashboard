@@ -1205,6 +1205,144 @@ body {
 #errorBanner .last-success-note { margin-left: 8px; }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
+/* v3.3 신규: 해결시간 보조 통계 (중앙값 · p90 · 8h+제외 평균)                   */
+/* ══════════════════════════════════════════════════════════════════════════ */
+.res-aux-stats {
+  margin: 6px 0 10px;
+  padding: 8px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+}
+.res-aux-row {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+}
+.res-aux-item {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px;
+}
+.res-aux-lbl {
+  font-size: 9.5px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.res-aux-val {
+  font-size: 12px; font-weight: 800; color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.res-aux-val.warn-text { color: var(--rose); }
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* v3.3 신규: 히트맵 피크 시간대 요약 블록                                       */
+/* ══════════════════════════════════════════════════════════════════════════ */
+.hm-peak-summary {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #f0fdf9, #ecfeff);
+  border: 1px solid #a7f3d0;
+  border-radius: 10px;
+}
+.hm-peak-title {
+  font-size: 9.5px; font-weight: 800; color: var(--teal-d);
+  text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px;
+}
+.hm-peak-list {
+  display: flex; flex-direction: column; gap: 5px;
+}
+.hm-peak-row {
+  display: grid;
+  grid-template-columns: 22px 32px 1fr 36px;
+  gap: 6px; align-items: center;
+}
+.hm-peak-rank {
+  font-size: 9px; font-weight: 800; color: var(--muted);
+  text-align: right;
+}
+.hm-peak-row.rank-1 .hm-peak-rank { color: #b45309; }
+.hm-peak-row.rank-2 .hm-peak-rank { color: #6b7280; }
+.hm-peak-row.rank-3 .hm-peak-rank { color: #0f766e; }
+.hm-peak-hour {
+  font-size: 11px; font-weight: 800; color: var(--text);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.hm-peak-bar-wrap {
+  height: 6px; background: var(--border-soft); border-radius: 3px; overflow: hidden;
+}
+.hm-peak-bar {
+  height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, var(--teal-d), var(--teal));
+  transition: width .4s ease;
+}
+.hm-peak-val {
+  font-size: 10px; font-weight: 700; color: var(--teal-d);
+  text-align: right; font-variant-numeric: tabular-nums;
+}
+.hm-peak-day-note {
+  margin-top: 8px; font-size: 10px; color: var(--muted);
+  border-top: 1px solid #d1fae5; padding-top: 6px;
+}
+.hm-peak-day-note strong { color: var(--text); }
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* v3.3 신규: 담당자 사이드바 4번째 카드 — 조치 권고사항                          */
+/* ══════════════════════════════════════════════════════════════════════════ */
+.agent-action-card-warn {
+  border: 1.5px solid #fecaca;
+  background: linear-gradient(135deg, #fff5f5, #fff);
+}
+.agent-action-card-ok {
+  border: 1.5px solid #bbf7d0;
+  background: linear-gradient(135deg, #f0fdf4, #fff);
+}
+.agent-action-row {
+  display: flex; align-items: flex-start; gap: 6px;
+  font-size: 10.5px; color: var(--text);
+  padding: 3px 0; line-height: 1.5;
+}
+.agent-action-row.danger { color: #dc2626; }
+.agent-action-row.warn   { color: #b45309; }
+.agent-action-row.info   { color: #1d4ed8; }
+.agent-action-row.ok     { color: #15803d; }
+.agent-action-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #fca5a5; flex-shrink: 0; margin-top: 4px;
+}
+.agent-action-dot.ok   { background: #86efac; }
+.agent-action-dot.warn { background: #fde68a; }
+.agent-action-dot.info { background: #93c5fd; }
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* v3.3 신규: 카테고리 컴플레인 헤더 강조 표시                                    */
+/* ══════════════════════════════════════════════════════════════════════════ */
+.cat-complaint-header {
+  display: flex; align-items: center; gap: 7px;
+  background: linear-gradient(135deg, #fff1f2, #fef2f2);
+  border: 1.5px solid #fecaca; border-radius: 9px;
+  padding: 7px 12px; margin-bottom: 8px;
+}
+.cat-complaint-icon { font-size: 12px; color: var(--rose); }
+.cat-complaint-label {
+  font-size: 11px; font-weight: 800; color: #dc2626; flex: 1;
+}
+.cat-complaint-count {
+  font-size: 12px; font-weight: 800; color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.cat-complaint-pct {
+  font-size: 13px; font-weight: 800; color: #dc2626;
+  font-variant-numeric: tabular-nums;
+}
+.cat-complaint-badge {
+  font-size: 9px; font-weight: 700; padding: 2px 8px; border-radius: 5px;
+  white-space: nowrap;
+}
+.cat-complaint-badge.danger { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
+.cat-complaint-badge.warn   { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+.cat-bar-row-complaint {
+  background: #fff5f5; border-radius: 7px; padding: 5px 8px;
+  border: 1px solid #fecaca;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
 /* 담당자 테이블 기준 노트                                                       */
 /* ══════════════════════════════════════════════════════════════════════════ */
 #agentTblNote {

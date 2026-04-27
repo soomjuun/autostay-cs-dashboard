@@ -1,5 +1,6 @@
-// Vercel Serverless Function — Channel.io API Proxy  v2.2
+// Vercel Serverless Function — Channel.io API Proxy  v2.3
 // 추가: 담당자별 avgResolutionMin, 8시간+ longChats 리스트, peakAnalysis
+// v2.3: pagination 중복 dedup, percentile 통계 (중앙값·p90·8h+제외평균)
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -64,6 +65,17 @@ module.exports = async function handler(req, res) {
       if (!nextCursor) break;
     }
 
+    // ── Pagination dedup (동일 채팅이 페이지 경계에서 중복 수집되는 경우 방지) ──
+    {
+      const seenIds = new Set();
+      allChats = allChats.filter(function(c) {
+        const key = c.id || (c.createdAt + '-' + (c.assigneeId || 'X'));
+        if (seenIds.has(key)) return false;
+        seenIds.add(key);
+        return true;
+      });
+    }
+
     // ── Date cutoff ──────────────────────────────────────────────────────────
     const cutoffMs = days ? (Date.now() - days * 24 * 3600 * 1000) : null;
 
@@ -83,15 +95,20 @@ module.exports = async function handler(req, res) {
     const sourceCounts = { native: 0, phone: 0, other: 0 };
     const resBuckets   = { '0~5분': 0, '5~30분': 0, '30분~2시간': 0, '2~8시간': 0, '8시간+': 0 };
     const mgrCounts    = {};
-    const mgrResTimes  = {}; // 담당자별 해결시간 배열 (항목 #3)
+    const mgrResTimes  = {}; // 담당자별 해결시간 배열
     const resTimes     = [];
-    const longChats    = []; // 8시간+ 채팅 리스트 (항목 #6)
-    const peakDayData  = {}; // 피크 분석용 (항목 #9)
+    const longChats    = []; // 8시간+ 채팅 리스트
+    const longChatSeenIds = new Set(); // 중복 제거용
+    const peakDayData  = {}; // 피크 분석용
     let   processed    = 0;
+    let   unassigned   = 0; // 미배정 건수
 
     for (const c of allChats) {
       if (cutoffMs && c.createdAt < cutoffMs) continue;
       processed++;
+
+      // 미배정 집계
+      if (!c.assigneeId) unassigned++;
 
       const dt     = toKST(c.createdAt);
       const dayKey = `${dt.getMonth() + 1}/${dt.getDate()}`;
@@ -104,23 +121,36 @@ module.exports = async function handler(req, res) {
       heatmapData[`${wd}-${hr}`] = (heatmapData[`${wd}-${hr}`] || 0) + 1;
 
       // 피크 분석용 per-day 집계
-      if (!peakDayData[dayKey]) peakDayData[dayKey] = { tags: {}, assignees: {}, hours: {} };
+      if (!peakDayData[dayKey]) peakDayData[dayKey] = {
+        tags: {}, assignees: {}, hours: {}, sources: { native: 0, phone: 0, other: 0 }, longCount: 0
+      };
       peakDayData[dayKey].hours[hr] = (peakDayData[dayKey].hours[hr] || 0) + 1;
       if (c.assigneeId) {
         peakDayData[dayKey].assignees[c.assigneeId] = (peakDayData[dayKey].assignees[c.assigneeId] || 0) + 1;
       }
 
-      // Tags
-      for (const tag of (c.tags || [])) {
+      // Tags (컴플레인 계열 통합: "컴플레인" 상위 태그로도 집계)
+      const rawTags = c.tags || [];
+      let hasComplaint = false;
+      for (const tag of rawTags) {
         tagCounts[tag] = (tagCounts[tag] || 0) + 1;
         peakDayData[dayKey].tags[tag] = (peakDayData[dayKey].tags[tag] || 0) + 1;
+        if (tag.includes('컴플레인') && !hasComplaint) hasComplaint = true;
+      }
+      // 컴플레인 계열이 하나라도 있으면 상위 집계
+      if (hasComplaint && rawTags.filter(t => t.includes('컴플레인')).length > 0) {
+        // 이미 "컴플레인" 정확 태그가 없는 경우에만 상위 태그 가산 (중복 방지)
+        const exactExists = rawTags.some(t => t === '컴플레인');
+        if (!exactExists) {
+          tagCounts['컴플레인(전체)'] = (tagCounts['컴플레인(전체)'] || 0) + 1;
+        }
       }
 
-      // Source
+      // Source (피크 분석에도 포함)
       const medium = c.source && c.source.medium ? c.source.medium.mediumType : 'other';
-      if      (medium === 'native') sourceCounts.native++;
-      else if (medium === 'phone')  sourceCounts.phone++;
-      else                           sourceCounts.other++;
+      if      (medium === 'native') { sourceCounts.native++; peakDayData[dayKey].sources.native++; }
+      else if (medium === 'phone')  { sourceCounts.phone++;  peakDayData[dayKey].sources.phone++;  }
+      else                          { sourceCounts.other++;  peakDayData[dayKey].sources.other++;  }
 
       // Resolution time
       const resTime = c.resolutionTime;
@@ -133,11 +163,14 @@ module.exports = async function handler(req, res) {
         else if (mins < 480) resBuckets['2~8시간']++;
         else {
           resBuckets['8시간+']++;
-          // 8시간+ 리스트 (최대 50건)
-          if (longChats.length < 50) {
+          peakDayData[dayKey].longCount = (peakDayData[dayKey].longCount || 0) + 1;
+          // 8시간+ 리스트 — ID 기반 중복 제거
+          const chatKey = c.id || `${dayKey}-${c.assigneeId || 'X'}-${Math.round(mins)}`;
+          if (!longChatSeenIds.has(chatKey) && longChats.length < 50) {
+            longChatSeenIds.add(chatKey);
             longChats.push({
               date:          dayKey,
-              tags:          c.tags || [],
+              tags:          rawTags,
               assigneeId:    c.assigneeId || null,
               resolutionMin: Math.round(mins),
             });
@@ -180,6 +213,8 @@ module.exports = async function handler(req, res) {
           .map(function(e) { return { id: e[0], cnt: e[1] }; });
         const peakHourEntry = Object.entries(pk.hours || {})
           .sort(function(a, b) { return b[1] - a[1]; })[0];
+        const pkTotal = peakEntry[1] || 1;
+        const pkSrc = pk.sources || {};
         peakAnalysis = {
           date:          peakEntry[0],
           count:         peakEntry[1],
@@ -188,6 +223,13 @@ module.exports = async function handler(req, res) {
           peakHour:      peakHourEntry
             ? { hour: parseInt(peakHourEntry[0]), cnt: peakHourEntry[1] }
             : null,
+          // 확장: 유입 채널 + 장기채팅 전환율
+          sources: {
+            native: pkSrc.native || 0,
+            phone:  pkSrc.phone  || 0,
+            other:  pkSrc.other  || 0,
+          },
+          longChatRate: pkTotal > 0 ? Math.round(((pk.longCount || 0) / pkTotal) * 100) : 0,
         };
       }
     }
@@ -216,24 +258,60 @@ module.exports = async function handler(req, res) {
       .sort(function(a, b) { return b[1] - a[1]; })
       .slice(0, 10);
 
-    // ── Averages ─────────────────────────────────────────────────────────────
+    // ── Averages & Percentile Stats ──────────────────────────────────────────
     const avgRes = resTimes.length
       ? Math.round(resTimes.reduce(function(a, b) { return a + b; }, 0) / resTimes.length)
       : 0;
 
+    // 중앙값 (median)
+    const sortedTimes = resTimes.slice().sort(function(a, b) { return a - b; });
+    const medianRes = sortedTimes.length
+      ? Math.round(sortedTimes[Math.floor((sortedTimes.length - 1) / 2)])
+      : 0;
+
+    // 90퍼센타일 (p90)
+    const p90Res = sortedTimes.length
+      ? Math.round(sortedTimes[Math.min(Math.floor(sortedTimes.length * 0.9), sortedTimes.length - 1)])
+      : 0;
+
+    // 8시간+ 제외 평균
+    const timesEx8h = resTimes.filter(function(t) { return t < 480; });
+    const avgEx8h = timesEx8h.length
+      ? Math.round(timesEx8h.reduce(function(a, b) { return a + b; }, 0) / timesEx8h.length)
+      : null;
+
     const openChats = openData.userChats || [];
+
+    // ── 채널 정보 슬림화 (내부 메타 제거, 집계 결과만 노출) ─────────────────
+    const channelInfo = channelData.channel || {};
 
     return res.json({
       updatedAt: new Date().toISOString(),
       range:     days ? `${days}d` : 'all',
-      totalCollected: allChats.length,       // 수집 원본 건수
-      processedCount: processed,             // 기간 필터 후 처리 건수
-      channel:   channelData.channel || {},
+      // 수집 현황 — 데이터 기준 명확화용
+      dataNote: {
+        collected:  allChats.length,         // API에서 가져온 원본 건수
+        processed:  processed,               // 기간 필터 적용 후 처리 건수
+        limit:      500,                     // 수집 상한
+        isSampled:  allChats.length >= 500,  // 상한 도달 여부
+      },
+      // 채널 식별용 최소 정보만
+      channel: {
+        name: channelInfo.name || '오토스테이 CS',
+        id:   channelInfo.id   || null,
+      },
       summary: {
         totalChats:       processed,
         openChats:        openChats.length,
+        unassignedChats:  unassigned,        // 미배정 건수
         avgResolutionMin: avgRes,
         peakDay: peakEntry ? { label: peakEntry[0], count: peakEntry[1] } : null,
+      },
+      resolutionStats: {
+        avg:      avgRes,
+        median:   medianRes,
+        p90:      p90Res,
+        avgEx8h:  avgEx8h,   // 8시간+ 제외 평균 (비동기 대기 제거)
       },
       dailyTrend: {
         labels: Object.keys(trendDayCounts),
@@ -247,10 +325,12 @@ module.exports = async function handler(req, res) {
       resolutionBuckets: resBuckets,
       heatmap:           heatmapData,
       managers:          managers,
-      groups:            groupsData.groups  || [],
-      bots:              botsData.bots      || [],
-      longChats:         longChats,         // 8시간+ drill-down (항목 #6)
-      peakAnalysis:      peakAnalysis,      // 피크 분석 (항목 #9)
+      // groups 원본 제거 — 집계 결과만 유지
+      groupCount:        (groupsData.groups || []).length,
+      // bots: 이름만 노출 (ID 등 내부 메타 제거)
+      bots:              (botsData.bots || []).map(function(b) { return { name: b.name }; }),
+      longChats:         longChats,         // 8시간+ drill-down
+      peakAnalysis:      peakAnalysis,      // 피크 분석 (채널·장기전환율 포함)
     });
 
   } catch (err) {
