@@ -201,10 +201,10 @@ function renderHealthScore(score, d) {
   }
 
   const sv = document.getElementById('healthScore');
-  if (sv) { sv.textContent = score; sv.style.color = color; }
+  if (sv) { sv.textContent = score; sv.setAttribute('fill', color); }
 
   const sg = document.getElementById('healthGrade');
-  if (sg) { sg.textContent = `${grade} · ${label}`; sg.style.color = color; }
+  if (sg) { sg.textContent = `${grade} · ${label}`; sg.setAttribute('fill', color); }
 
   const ss = document.getElementById('healthSub');
   if (ss) {
@@ -468,7 +468,7 @@ function renderKPIs(d) {
     <div class="kpi-card a-amber">
       <div class="kpi-label">평균 해결시간</div>
       <div class="kpi-value">${fmt(avgRes)}<span class="unit">분</span></div>
-      <div class="kpi-meta"><span class="delta neutral">≈${Math.round(avgRes / 60 * 10) / 10}시간</span></div>
+      <div class="kpi-meta"><span class="delta neutral">≈${avgRes != null ? Math.round(avgRes / 60 * 10) / 10 : '—'}시간</span></div>
     </div>
     <div class="kpi-card a-${quickPct >= 50 ? 'green' : quickPct >= 30 ? 'amber' : 'rose'}">
       <div class="kpi-label">30분 내 해결률</div>
@@ -769,7 +769,7 @@ function renderResolution(d) {
         <div class="res-big-lbl">8시간+ 장기</div>
       </div>
       <div class="res-big">
-        <div class="res-big-val">${d.summary.avgResolutionMin}</div>
+        <div class="res-big-val">${d.summary.avgResolutionMin ?? '—'}</div>
         <div class="res-big-lbl">평균(분)</div>
       </div>
     `;
@@ -804,7 +804,10 @@ function renderResolution(d) {
 
   const note = document.getElementById('avgResNote');
   if (note) {
-    note.textContent = `평균 ${d.summary.avgResolutionMin}분 (≈${Math.round(d.summary.avgResolutionMin / 60 * 10) / 10}시간) · 비동기 채팅 특성상 고객 미응답 시간 포함`;
+    const avg = d.summary.avgResolutionMin;
+    note.textContent = avg != null
+      ? `평균 ${avg}분 (≈${Math.round(avg / 60 * 10) / 10}시간) · 비동기 채팅 특성상 고객 미응답 시간 포함`
+      : '평균 해결시간 데이터 없음';
   }
 }
 
@@ -886,11 +889,11 @@ function renderManagers(d) {
         <td class="num-r"><span style="font-weight:700;color:${opColor}">${m.operatorScore}</span></td>
         <td class="num-r">
           <div class="score-cell" style="justify-content:flex-end">
-            <span style="font-weight:700;color:${tcColor}">${m.touchScore}</span>
             <div class="score-bar"><div class="score-fill" style="width:${touchPct}%;background:${tcColor}"></div></div>
+            <span style="font-weight:700;color:${tcColor}">${m.touchScore}</span>
           </div>
         </td>
-        <td class="num-r" style="color:var(--muted);font-size:11px">${isActive ? Math.round(d.summary.avgResolutionMin) + '분' : '—'}</td>
+        <td class="num-r" style="color:var(--muted);font-size:11px">${isActive && d.summary.avgResolutionMin != null ? Math.round(d.summary.avgResolutionMin) + '분' : '—'}</td>
         <td>${badge}</td>
       </tr>
     `;

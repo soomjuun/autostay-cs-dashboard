@@ -61,14 +61,12 @@
       <div class="hero-focus">
         <div class="focus-label">CS 건강 점수</div>
         <div class="hero-gauge">
-          <svg class="health-svg" viewBox="0 0 120 80">
+          <svg class="health-svg" viewBox="0 0 120 102">
             <path class="gauge-bg" d="M10,70 A60,60 0 0,1 110,70" fill="none" stroke="#f1efe8" stroke-width="10" stroke-linecap="round"/>
             <path class="gauge-fill" id="gaugeFill" d="M10,70 A60,60 0 0,1 110,70" fill="none" stroke="#0f766e" stroke-width="10" stroke-linecap="round" stroke-dasharray="188.5" stroke-dashoffset="188.5"/>
+            <text id="healthScore" x="60" y="92" text-anchor="middle" font-family="'Pretendard Variable',Pretendard,sans-serif" font-size="26" font-weight="900" fill="#1c1917" letter-spacing="-1">—</text>
+            <text id="healthGrade" x="60" y="100" text-anchor="middle" font-family="'Pretendard Variable',Pretendard,sans-serif" font-size="10" font-weight="700" fill="#78716c">—</text>
           </svg>
-          <div class="health-val-wrap">
-            <div class="health-val" id="healthScore">—</div>
-            <div class="health-grade" id="healthGrade">—</div>
-          </div>
         </div>
         <div class="focus-sub" id="healthSub">분석 중…</div>
       </div>
@@ -315,8 +313,8 @@
               <th>담당자</th>
               <th>처리 건수</th>
               <th>비중</th>
-              <th class="num-r">Operator Score</th>
-              <th class="num-r">Touch Score</th>
+              <th class="num-r">Operator Score <span class="th-tip-icon">ⓘ<span class="th-tip-text">채널톡 API에서 제공하는 담당자 운영 효율 점수입니다. 처리 건수·응대 품질·처리 속도를 종합 산정합니다.</span></span></th>
+              <th class="num-r">Touch Score <span class="th-tip-icon">ⓘ<span class="th-tip-text">담당자가 고객 채팅에 직접 응답(터치)한 비율 점수입니다. 높을수록 적극적인 고객 응대를 의미합니다.</span></span></th>
               <th class="num-r">평균 해결 시간</th>
               <th>상태</th>
             </tr>
