@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>오토스테이 채널톡 CS 분석 대시보드</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/variable/pretendardvariable.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+<!-- ── Loading Overlay ── -->
+<div id="loadingOverlay">
+  <div class="load-inner">
+    <div class="spin-ring"></div>
+    <div class="load-label" id="loadText">채널톡 API에서 데이터를 불러오는 중…</div>
+    <div class="load-steps">
+      <span class="load-step done">연결</span>
+      <span class="load-step" id="lstep-api">API 호출</span>
+      <span class="load-step" id="lstep-charts">차트 렌더링</span>
+      <span class="load-step" id="lstep-done">완료</span>
+    </div>
+    <div class="load-progress"><div class="load-progress-bar" id="loadProgressBar" style="width:10%"></div></div>
+  </div>
+</div>
+
+<!-- ── Live Banner ── -->
+<div class="live-banner">
+  <span class="tag-live"><span class="live-dot"></span>LIVE</span>
+  <span>채널톡 Open API v5 실시간</span>
+  <span class="chip" id="channelName">오토스테이 CS</span>
+  <span style="opacity:.6">Channel ID:</span>
+  <span class="chip" id="channelId">177015</span>
+  <div class="right">마지막 동기화: <span id="updatedAt">로딩 중…</span> · 자동 갱신 5분</div>
+</div>
+
+<!-- ── Error Banner ── -->
+<div id="errBanner"></div>
+
+<div class="app">
+
+  <!-- ── Header ── -->
+  <header class="page-header">
+    <div class="brand-line"><span class="brand-logo">AUTOSTAY</span>CS Analytics · ChannelTalk Open API v5</div>
+    <div class="header-row">
+      <div>
+        <h1>채널톡 CS 분석 대시보드</h1>
+        <div class="page-sub">채널톡 실 인입 데이터 기반 · 상담 태그·담당자 성과·해결 시간 통합 분석</div>
+      </div>
+      <div class="header-controls">
+        <div class="date-range">
+          <button class="active">최근 500건</button>
+          <button>7일</button>
+          <button>30일</button>
+        </div>
+        <button class="refresh-btn" id="refreshBtn">↻ 새로고침</button>
+        <div class="sync-indicator"><span class="sync-dot"></span>API 연결됨</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Action Center ── -->
+  <div class="section-label">실시간 운영 현황</div>
+  <div class="action-center mb-16">
+
+    <div class="ac-card urgent">
+      <div class="ac-head">
+        <span class="ac-icon">🔴</span>
+        <span class="ac-title">현재 오픈 채팅</span>
+        <span class="ac-count" id="acOpenClass">—</span>
+      </div>
+      <div id="acOpenBody">
+        <div class="ac-item"><span class="ac-dot red"></span><div class="ac-item-text"><div>현재 오픈 상태 채팅</div><div class="ac-item-sub">실시간 API 기준 · 미처리 건 확인</div></div><span class="ac-meta" id="acOpen">—</span></div>
+      </div>
+    </div>
+
+    <div class="ac-card warn">
+      <div class="ac-head">
+        <span class="ac-icon">🏷</span>
+        <span class="ac-title">주요 태그 TOP 3</span>
+        <span class="ac-count amber">실데이터</span>
+      </div>
+      <div id="acTagList"></div>
+    </div>
+
+    <div class="ac-card">
+      <div class="ac-head">
+        <span class="ac-icon">📡</span>
+        <span class="ac-title">채널 & 봇 현황</span>
+        <span class="ac-count blue">Live</span>
+      </div>
+      <div class="ac-item"><span class="ac-dot teal"></span><div class="ac-item-text"><div>자사 웹/앱 (native): <strong id="acNative">—</strong></div><div class="ac-item-sub">인입 채널 1위</div></div></div>
+      <div class="ac-item"><span class="ac-dot teal"></span><div class="ac-item-text"><div>전화 (phone): <strong id="acPhone">—</strong></div><div class="ac-item-sub">인입 채널 2위</div></div></div>
+      <div class="ac-item"><span class="ac-dot green"></span><div class="ac-item-text"><div>운영 그룹: <strong id="acGroupCount">—</strong></div><div class="ac-item-sub">고객피드백·단체방·차량번호변경·탈퇴</div></div></div>
+    </div>
+  </div>
+
+  <!-- ── KPI Grid ── -->
+  <div class="section-label">핵심 성과 지표</div>
+  <div class="kpi-grid mb-14" id="kpiGrid">
+    <!-- Filled by JS -->
+  </div>
+
+  <!-- ── Alert Strip ── -->
+  <div class="alert-strip mb-14" id="alertStrip" style="display:none"></div>
+
+  <!-- ── 인입 추이 ── -->
+  <div class="section-label">인입 추이</div>
+  <div class="panel mb-14">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">일별 CS 인입 추이</div>
+        <div class="panel-sub">채널톡 API 실데이터 · closed 채팅 일별 분포</div>
+      </div>
+      <span class="real-badge">✓ 실데이터</span>
+    </div>
+    <div class="trend-stats">
+      <div class="trend-stat"><div class="trend-stat-val" style="color:var(--teal)" id="trendTotal">—</div><div class="trend-stat-lbl">분석 채팅 수</div><div class="trend-stat-delta neutral-d">closed 기준</div></div>
+      <div class="trend-stat"><div class="trend-stat-val" style="color:var(--rose)" id="trendPeak">—</div><div class="trend-stat-lbl">일 최고 인입</div><div class="trend-stat-delta up-bad" id="trendPeakDay">—</div></div>
+      <div class="trend-stat"><div class="trend-stat-val" style="color:var(--blue)" id="trendAvg">—</div><div class="trend-stat-lbl">활성일 평균</div><div class="trend-stat-delta neutral-d">건/일</div></div>
+      <div class="trend-stat"><div class="trend-stat-val" style="color:var(--green)" id="trendOpen">—</div><div class="trend-stat-lbl">현재 오픈</div><div class="trend-stat-delta up-good">실시간</div></div>
+    </div>
+    <div class="ch-260"><canvas id="trendChart"></canvas></div>
+  </div>
+
+  <!-- ── 인입 패턴 ── -->
+  <div class="section-label">인입 패턴 분석</div>
+  <div class="grid-2-1">
+    <div class="panel">
+      <div class="panel-header">
+        <div><div class="panel-title">시간대 × 요일 인입 분포</div><div class="panel-sub">createdAt 기준 실데이터</div></div>
+        <span class="real-badge">✓ 실데이터</span>
+      </div>
+      <div class="heatmap" id="heatmap"></div>
+      <div class="hm-legend"><span>적음</span><div class="hm-legend-scale" id="hmLegend"></div><span>많음</span></div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <div><div class="panel-title">문의 태그 분포</div><div class="panel-sub">채널톡 tags 필드 실데이터</div></div>
+        <span class="real-badge">✓ 실데이터</span>
+      </div>
+      <div class="ch-200"><canvas id="categoryChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ── 채널 + 해결시간 ── -->
+  <div class="grid-1-1">
+    <div class="panel">
+      <div class="panel-header">
+        <div><div class="panel-title">인입 채널 분포</div><div class="panel-sub">source.medium.mediumType 실데이터</div></div>
+        <span class="real-badge">✓ 실데이터</span>
+      </div>
+      <div class="ch-200"><canvas id="channelChart"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <div><div class="panel-title">해결 시간 분포</div><div class="panel-sub">resolutionTime 필드 · 비동기 채팅 포함</div></div>
+        <span class="real-badge">✓ 실데이터</span>
+      </div>
+      <div class="rt-list" id="resList"></div>
+      <div style="margin-top:10px;font-size:10.5px;color:var(--subtle)" id="avgResNote"></div>
+    </div>
+  </div>
+
+  <!-- ── 담당자 테이블 ── -->
+  <div class="section-label">담당자 성과</div>
+  <div class="panel mb-14">
+    <div class="panel-header">
+      <div><div class="panel-title">담당자별 실 성과 현황</div><div class="panel-sub">managers API + assigneeId 집계 · 실데이터</div></div>
+      <span class="real-badge">✓ 실데이터</span>
+    </div>
+    <table class="agent-table">
+      <thead>
+        <tr>
+          <th>담당자</th>
+          <th>처리 건수</th>
+          <th class="num-r">operatorScore</th>
+          <th class="num-r">touchScore</th>
+          <th class="num-r">평균 해결 시간</th>
+          <th>비고</th>
+        </tr>
+      </thead>
+      <tbody id="managerTbody">
+        <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">로딩 중…</td></tr>
+      </tbody>
+    </table>
+    <div style="margin-top:10px;font-size:10.5px;color:var(--subtle)">※ operatorScore·touchScore는 채널톡 managers API 실데이터</div>
+  </div>
+
+  <!-- ── VOC + 봇 ── -->
+  <div class="section-label">태그 VOC 분석 & 봇·그룹 현황</div>
+  <div class="grid-1-1">
+    <div class="panel">
+      <div class="panel-header">
+        <div><div class="panel-title">채널톡 태그 기반 VOC</div><div class="panel-sub">tags 필드 실데이터 · 비율 순 정렬</div></div>
+        <span class="real-badge">✓ 실데이터</span>
+      </div>
+      <div class="voc-list" id="vocList"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <div><div class="panel-title">봇 & 그룹 운영 현황</div><div class="panel-sub">bots·groups API 실데이터</div></div>
+        <span class="real-badge">✓ 실데이터</span>
+      </div>
+      <div class="auto-grid">
+        <div class="auto-card">
+          <div class="auto-label">활성 봇</div>
+          <div class="auto-value" id="botCount">—<span class="unit">개</span></div>
+          <div class="auto-sub" id="botNames">—</div>
+        </div>
+        <div class="auto-card">
+          <div class="auto-label">운영 그룹</div>
+          <div class="auto-value" id="groupCount">—<span class="unit">개</span></div>
+          <div class="auto-sub">목적별 그룹 분류</div>
+        </div>
+      </div>
+      <div class="group-list" id="groupList"></div>
+    </div>
+  </div>
+
+  <!-- ── Footer ── -->
+  <div class="footer-note">
+    <span>✅ 채널톡 Open API v5 실데이터 · 오토스테이 CS · autostay-cs-dashboard</span>
+    <span>api.channel.io/open/v5 · x-access-key + x-access-secret 인증 · Vercel 배포</span>
+  </div>
+
+</div><!-- .app -->
+
+<script src="./app.js"></script>
+</body>
+</html>
