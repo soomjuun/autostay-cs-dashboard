@@ -1,6 +1,6 @@
-// Autostay CS Dashboard — app.js  (Enhanced v2)
-// Fetches from /api/data (Vercel serverless) → renders health score, insights,
-// risk alerts, charts, heatmap (0-23h), manager table, bots/groups
+// Autostay CS Dashboard — app.js  (v3.0 — Enhanced)
+// Fetches from /api/data (Vercel serverless) → renders hero, action center,
+// health score, insights, alert strip, charts, heatmap, manager table, bots/groups
 
 'use strict';
 
@@ -122,7 +122,6 @@ function generateInsights(d, score) {
   const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
   const managers = (d.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
 
-  // Complaint rate
   const complaints = (d.tags?.labels || []).reduce((acc, lbl, i) => {
     if (lbl.includes('컴플레인')) acc += (d.tags.values[i] || 0);
     return acc;
@@ -134,7 +133,6 @@ function generateInsights(d, score) {
     insights.push({ type: 'warn', icon: '!', text: `컴플레인 ${complaintPct}% — 주의 모니터링` });
   }
 
-  // Manager concentration
   if (managers.length > 0) {
     const topPct = Math.round((managers[0].count || 0) / total * 100);
     if (topPct > 80) {
@@ -144,19 +142,16 @@ function generateInsights(d, score) {
     }
   }
 
-  // Slow resolution
   const slowPct = Math.round((rb['8시간+'] || 0) / resTotal * 100);
   if (slowPct > 40) {
     insights.push({ type: 'warn', icon: '⏱', text: `8시간+ 해결 ${slowPct}% — 비동기 정책 검토` });
   }
 
-  // Quick resolution (positive)
   const quickPct = Math.round(((rb['0~5분'] || 0) + (rb['5~30분'] || 0)) / resTotal * 100);
   if (quickPct >= 40) {
     insights.push({ type: 'good', icon: '✓', text: `30분 내 해결 ${quickPct}% — 신속 대응 양호` });
   }
 
-  // Subscription volume
   const subIdx = (d.tags?.labels || []).findIndex(l => l.includes('정기구독'));
   if (subIdx >= 0) {
     const subPct = Math.round((d.tags.values[subIdx] || 0) / total * 100);
@@ -165,14 +160,12 @@ function generateInsights(d, score) {
     }
   }
 
-  // Open chats
   if (d.summary.openChats > 0) {
     insights.push({ type: 'warn', icon: '💬', text: `미해결 오픈 채팅 ${d.summary.openChats}건` });
   } else {
     insights.push({ type: 'good', icon: '✓', text: '현재 미해결 채팅 없음' });
   }
 
-  // Spike detection
   const vals = (d.dailyTrend?.values || []).filter(v => v > 0);
   if (vals.length > 3) {
     const peak = Math.max(...vals);
@@ -195,12 +188,11 @@ function renderHealthScore(score, d) {
     return acc;
   }, 0);
 
-  // Animate SVG gauge arc
   const arcLen = 188.5;
   const fill = document.getElementById('gaugeFill');
   if (fill) {
     fill.style.stroke = color;
-    fill.style.strokeDashoffset = arcLen; // start hidden
+    fill.style.strokeDashoffset = arcLen;
     requestAnimationFrame(() => {
       setTimeout(() => {
         fill.style.strokeDashoffset = arcLen - (arcLen * score / 100);
@@ -224,6 +216,7 @@ function renderHealthScore(score, d) {
 /* ─── Render: Insights Strip ────────────────────────────────────────────── */
 function renderInsights(insights) {
   const strip = document.getElementById('insightsStrip');
+  if (!strip) return;
   if (!insights.length) { strip.style.display = 'none'; return; }
   strip.style.display = 'flex';
   strip.innerHTML = `
@@ -237,71 +230,211 @@ function renderInsights(insights) {
   `;
 }
 
-/* ─── Render: Risk Alerts ───────────────────────────────────────────────── */
-function renderRiskAlerts(d, score) {
-  const riskRow = document.getElementById('riskRow');
-  const risks = [];
+/* ─── Render: Alert Strip ───────────────────────────────────────────────── */
+function renderAlertStrip(d, score) {
+  const strip = document.getElementById('alertStrip');
+  if (!strip) return;
+  const alerts = [];
   const total = d.summary.totalChats || 1;
   const rb = d.resolutionBuckets || {};
   const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
   const managers = (d.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
 
-  // Manager concentration
   if (managers.length > 0) {
     const topPct = Math.round((managers[0].count || 0) / total * 100);
     if (topPct > 70) {
-      risks.push({
+      alerts.push({
         level: 'danger', icon: '🔴',
         title: '담당자 과부하',
-        body: `${managers[0].name}이(가) 전체 ${topPct}% (${managers[0].count}건) 단독 처리 중. 담당자 추가 배정 및 업무 분산 필요.`
+        body: `${managers[0].name}이(가) 전체 ${topPct}% (${managers[0].count}건) 단독 처리 중. 업무 분산 필요.`
       });
     }
   }
 
-  // Complaint rate
   const complaints = (d.tags?.labels || []).reduce((acc, lbl, i) => {
     if (lbl.includes('컴플레인')) acc += (d.tags.values[i] || 0);
     return acc;
   }, 0);
   const complaintPct = Math.round(complaints / total * 100);
   if (complaintPct >= 15) {
-    risks.push({
+    alerts.push({
       level: 'danger', icon: '🚨',
       title: '컴플레인 급증',
-      body: `컴플레인 태그 ${complaintPct}% (총 ${complaints}건) — 서비스 품질 즉시 점검 및 이슈 파악 권장.`
+      body: `컴플레인 태그 ${complaintPct}% (${complaints}건) — 서비스 품질 즉시 점검 권장.`
     });
   }
 
-  // Slow resolution
   const slowPct = Math.round((rb['8시간+'] || 0) / resTotal * 100);
   if (slowPct > 40) {
-    risks.push({
+    alerts.push({
       level: 'warn', icon: '⏱',
       title: '장시간 미해결 다수',
-      body: `전체의 ${slowPct}%가 8시간 이상 소요. 비동기 응답 정책 검토 및 SLA 기준 수립 권장.`
+      body: `전체의 ${slowPct}%가 8시간 이상 소요. 비동기 응답 정책 검토 권장.`
     });
   }
 
-  // Low health score
   if (score < 50) {
-    risks.push({
+    alerts.push({
       level: 'danger', icon: '⚡',
       title: 'CS 건강 위험 단계 (D등급)',
-      body: `CS 건강 점수 ${score}점 — 컴플레인·집중도·해결시간 복합 위험 상태. 긴급 CS 운영 개선 필요.`
+      body: `CS 건강 점수 ${score}점 — 복합 위험 상태. 긴급 CS 운영 개선 필요.`
     });
   }
 
-  if (!risks.length) { riskRow.style.display = 'none'; return; }
-  riskRow.style.display = 'flex';
-  riskRow.innerHTML = risks.map(r => `
-    <div class="risk-card ${r.level}">
-      <div class="risk-icon">${r.icon}</div>
-      <div>
-        <div class="risk-title">${r.title}</div>
-        <div class="risk-body">${r.body}</div>
+  if (!alerts.length) { strip.style.display = 'none'; return; }
+  strip.style.display = 'flex';
+  strip.innerHTML = alerts.map(a => `
+    <div class="alert-item ${a.level}">
+      <div class="al-icon">${a.icon}</div>
+      <div class="al-text">
+        <div class="al-title">${a.title}</div>
+        <div class="al-body">${a.body}</div>
       </div>
     </div>
   `).join('');
+}
+
+/* ─── Render: Action Command Center ────────────────────────────────────── */
+function renderActionCenter(d, score, insights) {
+  const total = d.summary.totalChats || 1;
+  const rb = d.resolutionBuckets || {};
+  const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
+  const managers = (d.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
+
+  const complaints = (d.tags?.labels || []).reduce((acc, lbl, i) => {
+    if (lbl.includes('컴플레인')) acc += (d.tags.values[i] || 0);
+    return acc;
+  }, 0);
+  const complaintPct = Math.round(complaints / total * 100);
+  const slowPct = Math.round((rb['8시간+'] || 0) / resTotal * 100);
+  const quickPct = Math.round(((rb['0~5분'] || 0) + (rb['5~30분'] || 0)) / resTotal * 100);
+
+  // ── 카드 1: 오늘 조치할 항목 ──
+  const todayItems = [];
+
+  if (d.summary.openChats > 0) {
+    todayItems.push({
+      type: 'danger', icon: '💬',
+      title: `미해결 오픈 채팅 ${d.summary.openChats}건`,
+      desc: '즉시 확인 및 응답 필요 — 고객 대기 중'
+    });
+  }
+  if (complaintPct >= 15) {
+    todayItems.push({
+      type: 'danger', icon: '🚨',
+      title: `컴플레인 ${complaintPct}% (${complaints}건)`,
+      desc: '서비스 불만 급증 — 원인 파악 및 즉시 대응'
+    });
+  } else if (complaintPct >= 8) {
+    todayItems.push({
+      type: 'warn', icon: '⚠',
+      title: `컴플레인 ${complaintPct}% (${complaints}건)`,
+      desc: '지속 모니터링 — 추이 관찰 권장'
+    });
+  }
+  if (managers.length > 0) {
+    const topPct2 = Math.round((managers[0].count || 0) / total * 100);
+    if (topPct2 > 70) {
+      todayItems.push({
+        type: 'danger', icon: '👤',
+        title: `${managers[0].name} 집중도 ${topPct2}%`,
+        desc: '단독 처리 과부하 — 담당자 추가 배정 검토'
+      });
+    }
+  }
+  if (todayItems.length === 0) {
+    todayItems.push({ type: 'good', icon: '✅', title: '조치 필요 항목 없음', desc: 'CS 상태 양호 — 정기 모니터링 유지' });
+  }
+
+  const countEl = document.getElementById('acTodayCount');
+  const urgentCount = todayItems.filter(i => i.type === 'danger').length;
+  if (countEl) {
+    if (urgentCount > 0) {
+      countEl.textContent = urgentCount;
+      countEl.style.display = 'inline-flex';
+    } else {
+      countEl.style.display = 'none';
+    }
+  }
+
+  const todayBody = document.getElementById('acTodayBody');
+  if (todayBody) {
+    todayBody.innerHTML = todayItems.map(item => `
+      <div class="ac-item ${item.type}">
+        <div class="ac-item-icon">${item.icon}</div>
+        <div class="ac-item-text">
+          <div class="ac-item-title">${item.title}</div>
+          <div class="ac-item-desc">${item.desc}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // ── 카드 2: 주요 리스크 TOP 3 ──
+  const riskItems = [];
+  if (score < 50) riskItems.push({ type: 'danger', icon: '⚡', title: `CS 건강 D등급 (${score}점)`, desc: '복합 위험 상태 — 긴급 CS 운영 점검 필요' });
+  if (complaintPct >= 10) riskItems.push({ type: 'danger', icon: '😡', title: `컴플레인율 ${complaintPct}%`, desc: '서비스 품질 하락 신호 — 즉시 대응' });
+  if (slowPct > 30) riskItems.push({ type: 'warn', icon: '⏳', title: `8시간+ 해결 ${slowPct}%`, desc: '비동기 채팅 관리 정책 점검 필요' });
+  if (managers.length > 0) {
+    const topRisk = Math.round((managers[0].count || 0) / total * 100);
+    if (topRisk > 60) riskItems.push({ type: 'warn', icon: '🔁', title: `${managers[0].name} 집중 ${topRisk}%`, desc: '업무 분산 및 백업 담당자 지정 권장' });
+  }
+  if (d.summary.openChats > 5) riskItems.push({ type: 'warn', icon: '📭', title: `미응답 오픈 ${d.summary.openChats}건`, desc: '고객 대기 장기화 — 우선 처리 필요' });
+  if (quickPct < 20) riskItems.push({ type: 'warn', icon: '🐢', title: `30분 내 해결 ${quickPct}%`, desc: '응답 속도 개선 필요 — SLA 기준 수립 권장' });
+
+  const topRisks = riskItems.slice(0, 3);
+  if (topRisks.length === 0) topRisks.push({ type: 'good', icon: '✅', title: '주요 리스크 없음', desc: 'CS 지표 정상 범위 유지 중' });
+
+  const riskBody = document.getElementById('acRiskBody');
+  if (riskBody) {
+    riskBody.innerHTML = topRisks.map(item => `
+      <div class="ac-item ${item.type}">
+        <div class="ac-item-icon">${item.icon}</div>
+        <div class="ac-item-text">
+          <div class="ac-item-title">${item.title}</div>
+          <div class="ac-item-desc">${item.desc}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // ── 카드 3: VOC 알림 ──
+  const { tags } = d;
+  const vocBadge = document.getElementById('acVocBadge');
+  const vocBody = document.getElementById('acVocBody');
+
+  const risingTags = (tags?.labels || [])
+    .map((lbl, i) => ({ lbl, cnt: tags.values[i] || 0, pct: Math.round((tags.values[i] || 0) / total * 100) }))
+    .filter(t => t.pct >= 10)
+    .sort((a, b) => b.cnt - a.cnt)
+    .slice(0, 4);
+
+  if (vocBadge) {
+    const urgentVoc = risingTags.filter(t => t.pct >= 15).length;
+    vocBadge.textContent = urgentVoc > 0 ? `${urgentVoc}건 긴급` : `${risingTags.length}건 주목`;
+    vocBadge.className = urgentVoc > 0 ? 'ac-count' : 'ac-badge';
+  }
+
+  if (vocBody) {
+    if (!risingTags.length) {
+      vocBody.innerHTML = '<div class="ac-empty">10% 이상 VOC 없음 — 분산 분포 양호</div>';
+    } else {
+      vocBody.innerHTML = risingTags.map(t => {
+        const ctx = VOC_CONTEXTS[t.lbl] || '관련 문의';
+        const type = t.pct >= 15 ? 'danger' : 'warn';
+        const icon = t.lbl.includes('컴플레인') ? '😡' : t.lbl.includes('구독') ? '🔄' : t.lbl.includes('탈퇴') ? '🚪' : '💬';
+        return `
+          <div class="ac-item ${type}">
+            <div class="ac-item-icon">${icon}</div>
+            <div class="ac-item-text">
+              <div class="ac-item-title">#${t.lbl} · ${t.pct}% (${t.cnt}건)</div>
+              <div class="ac-item-desc">${ctx}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
 }
 
 /* ─── Render: KPI Grid ──────────────────────────────────────────────────── */
@@ -320,6 +453,7 @@ function renderKPIs(d) {
   const quickPct = Math.round(((rb['0~5분'] || 0) + (rb['5~30분'] || 0)) / resTotal * 100);
 
   const grid = document.getElementById('kpiGrid');
+  if (!grid) return;
   grid.innerHTML = `
     <div class="kpi-card">
       <div class="kpi-label">분석 채팅 수</div>
@@ -367,15 +501,13 @@ function renderTrend(d) {
   document.getElementById('trendAvg').textContent = fmt(avg);
   document.getElementById('trendOpen').textContent = fmt(summary.openChats);
 
-  // Update badge to reflect current range
   const badge = document.getElementById('trendBadge');
   if (badge) badge.textContent = currentDays === 'all' ? '500건' : `${currentDays}일`;
 
-  // Custom legend HTML
   document.getElementById('trendLegend').innerHTML = `
     <span class="trend-legend-item"><span style="width:10px;height:10px;border-radius:2px;background:#0f766e;display:inline-block"></span>일반</span>
     <span class="trend-legend-item"><span style="width:10px;height:10px;border-radius:2px;background:#be123c;display:inline-block"></span>피크</span>
-    <span class="trend-legend-item"><span style="width:22px;height:3px;background:#f59e0b;display:inline-block;border-radius:1px;border-top:1.5px dashed #f59e0b;background:none"></span>평균선</span>
+    <span class="trend-legend-item"><span style="width:22px;height:3px;background:none;border-top:1.5px dashed #f59e0b;display:inline-block"></span>평균선</span>
   `;
 
   if (charts.trend) charts.trend.destroy();
@@ -407,8 +539,7 @@ function renderTrend(d) {
       ]
     },
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
+      responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -451,10 +582,10 @@ function renderTrend(d) {
   });
 }
 
-/* ─── Render: Heatmap (0-23h) ───────────────────────────────────────────── */
+/* ─── Render: Heatmap (0-23h KST) ──────────────────────────────────────── */
 function renderHeatmap(d) {
   const days = ['월', '화', '수', '목', '금', '토', '일'];
-  const hours = Array.from({ length: 24 }, (_, i) => i); // 0~23
+  const hours = Array.from({ length: 24 }, (_, i) => i);
   const hm = d.heatmap || {};
   const allVals = Object.values(hm);
   const maxVal = allVals.length ? Math.max(...allVals) : 1;
@@ -462,8 +593,7 @@ function renderHeatmap(d) {
   const el = document.getElementById('heatmap');
   el.innerHTML = '';
 
-  // Column headers
-  el.appendChild(Object.assign(document.createElement('div'), { className: 'hm-head' })); // empty corner
+  el.appendChild(Object.assign(document.createElement('div'), { className: 'hm-head' }));
   hours.forEach(h => {
     const div = document.createElement('div');
     div.className = 'hm-head';
@@ -471,7 +601,6 @@ function renderHeatmap(d) {
     el.appendChild(div);
   });
 
-  // Rows
   days.forEach((day, di) => {
     const lbl = document.createElement('div');
     lbl.className = 'hm-row-label';
@@ -489,7 +618,6 @@ function renderHeatmap(d) {
     });
   });
 
-  // Legend
   const leg = document.getElementById('hmLegend');
   if (leg) {
     leg.innerHTML = '';
@@ -535,7 +663,7 @@ function renderCategory(d) {
   });
 }
 
-/* ─── Render: Category Bars (grouped) ───────────────────────────────────── */
+/* ─── Render: Category Bars ──────────────────────────────────────────────── */
 function renderCategoryBars(d) {
   const { tags, summary } = d;
   const total = summary.totalChats || 1;
@@ -548,10 +676,10 @@ function renderCategoryBars(d) {
 
   (tags?.labels || []).forEach((lbl, i) => {
     const val = tags.values[i] || 0;
-    if (lbl.includes('정기구독') || lbl.includes('구독'))       groups['구독 관련'].count += val;
-    else if (lbl.includes('컴플레인'))                          groups['컴플레인'].count += val;
-    else if (lbl.includes('이용') || lbl.includes('단순'))      groups['이용 문의'].count += val;
-    else                                                         groups['기타/운영'].count += val;
+    if (lbl.includes('정기구독') || lbl.includes('구독'))  groups['구독 관련'].count += val;
+    else if (lbl.includes('컴플레인'))                      groups['컴플레인'].count += val;
+    else if (lbl.includes('이용') || lbl.includes('단순')) groups['이용 문의'].count += val;
+    else                                                     groups['기타/운영'].count += val;
   });
 
   const items = Object.entries(groups)
@@ -583,10 +711,7 @@ function renderChannel(d) {
   if (charts.ch) charts.ch.destroy();
   charts.ch = new Chart(document.getElementById('channelChart').getContext('2d'), {
     type: 'bar',
-    data: {
-      labels,
-      datasets: [{ data: values, backgroundColor: bgColors, borderRadius: 4, barThickness: 22 }]
-    },
+    data: { labels, datasets: [{ data: values, backgroundColor: bgColors, borderRadius: 4, barThickness: 22 }] },
     options: {
       indexAxis: 'y', responsive: true, maintainAspectRatio: false,
       plugins: {
@@ -632,7 +757,6 @@ function renderResolution(d) {
   const quickPct = Math.round(quick / resTotal * 100);
   const slowPct  = Math.round((rb['8시간+'] || 0) / resTotal * 100);
 
-  // Summary stats
   const resSummary = document.getElementById('resSummary');
   if (resSummary) {
     resSummary.innerHTML = `
@@ -651,7 +775,6 @@ function renderResolution(d) {
     `;
   }
 
-  // Bucket bars
   const buckets = [
     { label: '0~5분',      val: rb['0~5분'] || 0,      cls: 'ok',   note: '즉시 해결' },
     { label: '5~30분',     val: rb['5~30분'] || 0,     cls: 'ok',   note: '신속 처리' },
@@ -718,7 +841,6 @@ function renderManagers(d) {
   const total = d.summary.totalChats || 1;
   const tbody = document.getElementById('managerTbody');
 
-  // Concentration alert badge
   const concAlert = document.getElementById('concAlert');
   if (concAlert && managers.length > 0) {
     const topPct = Math.round((managers[0].count || 0) / total * 100);
@@ -737,7 +859,6 @@ function renderManagers(d) {
 
   tbody.innerHTML = managers.map((m, i) => {
     const topPct = total > 0 ? Math.round(m.count / total * 100) : 0;
-    const opPct = Math.min(m.operatorScore, 100);
     const touchPct = Math.min(m.touchScore, 100);
     const isActive = m.count > 0;
     const badge = i === 0 && isActive ? '<span class="badge-top">★ 주담당</span>'
@@ -754,32 +875,22 @@ function renderManagers(d) {
             <span class="agent-name">${m.name}</span>
           </div>
         </td>
-        <td>
-          <span style="font-weight:800;font-variant-numeric:tabular-nums">
-            ${isActive ? m.count + '건' : '—'}
-          </span>
-        </td>
+        <td><span style="font-weight:800;font-variant-numeric:tabular-nums">${isActive ? m.count + '건' : '—'}</span></td>
         <td>
           ${isActive ? `
             <div class="score-cell">
-              <div class="score-bar" style="width:70px">
-                <div class="score-fill" style="width:${topPct}%"></div>
-              </div>
+              <div class="score-bar" style="width:70px"><div class="score-fill" style="width:${topPct}%"></div></div>
               <span style="font-size:10.5px;color:var(--muted)">${topPct}%</span>
             </div>` : '—'}
         </td>
-        <td class="num-r">
-          <span style="font-weight:700;color:${opColor}">${m.operatorScore}</span>
-        </td>
+        <td class="num-r"><span style="font-weight:700;color:${opColor}">${m.operatorScore}</span></td>
         <td class="num-r">
           <div class="score-cell" style="justify-content:flex-end">
             <span style="font-weight:700;color:${tcColor}">${m.touchScore}</span>
             <div class="score-bar"><div class="score-fill" style="width:${touchPct}%;background:${tcColor}"></div></div>
           </div>
         </td>
-        <td class="num-r" style="color:var(--muted);font-size:11px">
-          ${isActive ? Math.round(d.summary.avgResolutionMin) + '분' : '—'}
-        </td>
+        <td class="num-r" style="color:var(--muted);font-size:11px">${isActive ? Math.round(d.summary.avgResolutionMin) + '분' : '—'}</td>
         <td>${badge}</td>
       </tr>
     `;
@@ -790,7 +901,6 @@ function renderManagers(d) {
 function renderBotsGroups(d) {
   const { bots, groups } = d;
 
-  // Bot panel
   const botPanel = document.getElementById('botPanel');
   botPanel.innerHTML = `
     <div class="panel-header">
@@ -809,7 +919,6 @@ function renderBotsGroups(d) {
     </div>
   `;
 
-  // Group panel
   const groupPanel = document.getElementById('groupPanel');
   groupPanel.innerHTML = `
     <div class="panel-header">
@@ -831,12 +940,29 @@ function renderBotsGroups(d) {
   `;
 }
 
-/* ─── Update Topbar ─────────────────────────────────────────────────────── */
+/* ─── Update Topbar & Hero Meta ─────────────────────────────────────────── */
 function updateBanner(d) {
+  const timeStr = new Date(d.updatedAt).toLocaleString('ko-KR');
   const el = document.getElementById('updatedAt');
-  if (el) el.textContent = new Date(d.updatedAt).toLocaleString('ko-KR');
+  if (el) el.textContent = timeStr;
+  const heroEl = document.getElementById('heroUpdatedAt');
+  if (heroEl) heroEl.textContent = timeStr;
   const cn = document.getElementById('channelName');
   if (cn) cn.textContent = d.channel?.name || '오토스테이 CS';
+}
+
+/* ─── Collapsible Sections ──────────────────────────────────────────────── */
+function initCollapsibles() {
+  document.querySelectorAll('.collapse-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.dataset.target;
+      const content = document.getElementById(targetId);
+      if (!content) return;
+      const isHidden = content.classList.toggle('hidden');
+      btn.classList.toggle('collapsed', isHidden);
+      btn.textContent = isHidden ? '▸' : '▾';
+    });
+  });
 }
 
 /* ─── Fetch ─────────────────────────────────────────────────────────────── */
@@ -862,40 +988,35 @@ async function render() {
 
     setStep('lstep-api', true); setStep('lstep-charts'); setProgress(45);
 
-    // Banner + Health
     updateBanner(data);
     const score = computeHealthScore(data);
     const insights = generateInsights(data, score);
+
     renderHealthScore(score, data);
-    renderInsights(insights);
-    renderRiskAlerts(data, score);
     renderKPIs(data);
+    renderAlertStrip(data, score);
+    renderInsights(insights);
+    renderActionCenter(data, score, insights);
 
     setProgress(60);
 
-    // Trend + Heatmap
     renderTrend(data);
     renderHeatmap(data);
 
     setProgress(72);
 
-    // Category
     renderCategory(data);
     renderCategoryBars(data);
 
     setProgress(82);
 
-    // Channel
     renderChannel(data);
     renderChannelStats(data);
-
-    // Resolution + VOC
     renderResolution(data);
     renderVOC(data);
 
     setProgress(92);
 
-    // Managers + Bots
     renderManagers(data);
     renderBotsGroups(data);
 
@@ -909,7 +1030,6 @@ async function render() {
     const eb = document.getElementById('errBanner');
     if (eb) eb.style.display = 'none';
 
-    // Auto-refresh every 5 min
     scheduleRefresh();
 
   } catch (err) {
@@ -922,7 +1042,7 @@ async function render() {
   }
 }
 
-/* ─── Silent Refresh (every 5 min) ─────────────────────────────────────── */
+/* ─── Silent Refresh ────────────────────────────────────────────────────── */
 async function silentRefresh() {
   try {
     const data = await fetchData();
@@ -931,9 +1051,10 @@ async function silentRefresh() {
     const score = computeHealthScore(data);
     const insights = generateInsights(data, score);
     renderHealthScore(score, data);
-    renderInsights(insights);
-    renderRiskAlerts(data, score);
     renderKPIs(data);
+    renderAlertStrip(data, score);
+    renderInsights(insights);
+    renderActionCenter(data, score, insights);
     renderTrend(data);
     renderHeatmap(data);
     renderCategory(data);
@@ -949,31 +1070,28 @@ async function silentRefresh() {
   } catch (e) {
     console.warn('Silent refresh failed:', e);
   }
-  setTimeout(silentRefresh, 5 * 60 * 1000);
+  scheduleRefresh(); // ← fixed: use scheduleRefresh instead of raw setTimeout
 }
 
-/* ─── Event: Manual Refresh & Range Tabs ────────────────────────────────── */
+/* ─── Events ─────────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
   // Manual refresh button
   const btn = document.getElementById('refreshBtn');
-  if (btn) {
-    btn.addEventListener('click', () => {
-      triggerFullReload();
-    });
-  }
+  if (btn) btn.addEventListener('click', () => triggerFullReload());
 
   // Range filter tabs
   document.querySelectorAll('.range-tab').forEach(tabBtn => {
     tabBtn.addEventListener('click', () => {
       const range = tabBtn.dataset.range;
-      // Update active state
       document.querySelectorAll('.range-tab').forEach(t => t.classList.remove('active'));
       tabBtn.classList.add('active');
-      // Store new range
       currentDays = range === 'all' ? 'all' : parseInt(range);
       triggerFullReload();
     });
   });
+
+  // Collapsible sections
+  initCollapsibles();
 });
 
 function triggerFullReload() {
