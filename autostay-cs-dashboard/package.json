@@ -3,6 +3,6 @@
   "version": "1.0.0",
   "description": "오토스테이 채널톡 CS 분석 대시보드",
   "engines": {
-    "node": "18.x"
+    "node": "20.x"
   }
 }

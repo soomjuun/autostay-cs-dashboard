@@ -1,7 +1,7 @@
 {
   "functions": {
     "api/data.js": {
-      "runtime": "nodejs18.x",
+      "runtime": "nodejs20.x",
       "maxDuration": 30
     }
   },
