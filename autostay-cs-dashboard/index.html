@@ -61,12 +61,12 @@
       <div class="hero-focus">
         <div class="focus-label">CS 건강 점수</div>
         <div class="hero-gauge">
-          <svg class="health-svg" viewBox="0 0 120 102">
+          <svg class="health-svg" viewBox="0 0 120 86">
             <path class="gauge-bg" d="M10,70 A60,60 0 0,1 110,70" fill="none" stroke="#f1efe8" stroke-width="10" stroke-linecap="round"/>
             <path class="gauge-fill" id="gaugeFill" d="M10,70 A60,60 0 0,1 110,70" fill="none" stroke="#0f766e" stroke-width="10" stroke-linecap="round" stroke-dasharray="188.5" stroke-dashoffset="188.5"/>
-            <text id="healthScore" x="60" y="92" text-anchor="middle" font-family="'Pretendard Variable',Pretendard,sans-serif" font-size="26" font-weight="900" fill="#1c1917" letter-spacing="-1">—</text>
-            <text id="healthGrade" x="60" y="100" text-anchor="middle" font-family="'Pretendard Variable',Pretendard,sans-serif" font-size="10" font-weight="700" fill="#78716c">—</text>
+            <text id="healthScore" x="60" y="83" text-anchor="middle" font-family="'Pretendard Variable',Pretendard,sans-serif" font-size="25" font-weight="900" fill="#1c1917">—</text>
           </svg>
+          <div class="gauge-grade" id="healthGrade">—</div>
         </div>
         <div class="focus-sub" id="healthSub">분석 중…</div>
       </div>
@@ -93,9 +93,9 @@
     <div class="toolbar-left">
       <span class="toolbar-label">분석 기간</span>
       <div class="range-tabs" id="rangeTabs">
-        <button class="range-tab active" data-range="30">30일</button>
         <button class="range-tab" data-range="7">7일</button>
-        <button class="range-tab" data-range="all">최근 500건</button>
+        <button class="range-tab active" data-range="30">30일</button>
+        <button class="range-tab" data-range="all">전체</button>
       </div>
     </div>
     <div class="toolbar-right">
@@ -308,6 +308,15 @@
           </div>
         </div>
         <table class="agent-table">
+          <colgroup>
+            <col><!-- 담당자 -->
+            <col><!-- 처리 건수 -->
+            <col><!-- 비중 -->
+            <col><!-- Operator Score -->
+            <col><!-- Touch Score -->
+            <col><!-- 평균 해결 시간 -->
+            <col><!-- 상태 -->
+          </colgroup>
           <thead>
             <tr>
               <th>담당자</th>

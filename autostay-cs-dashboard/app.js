@@ -204,7 +204,7 @@ function renderHealthScore(score, d) {
   if (sv) { sv.textContent = score; sv.setAttribute('fill', color); }
 
   const sg = document.getElementById('healthGrade');
-  if (sg) { sg.textContent = `${grade} · ${label}`; sg.setAttribute('fill', color); }
+  if (sg) { sg.textContent = `${grade} · ${label}`; sg.style.color = color; }
 
   const ss = document.getElementById('healthSub');
   if (ss) {
@@ -886,7 +886,12 @@ function renderManagers(d) {
               <span style="font-size:10.5px;color:var(--muted)">${topPct}%</span>
             </div>` : '—'}
         </td>
-        <td class="num-r"><span style="font-weight:700;color:${opColor}">${m.operatorScore}</span></td>
+        <td class="num-r">
+          <div class="score-cell" style="justify-content:flex-end">
+            <div class="score-bar"><div class="score-fill" style="width:${Math.min(m.operatorScore, 100)}%;background:${opColor}"></div></div>
+            <span style="font-weight:700;color:${opColor}">${m.operatorScore}</span>
+          </div>
+        </td>
         <td class="num-r">
           <div class="score-cell" style="justify-content:flex-end">
             <div class="score-bar"><div class="score-fill" style="width:${touchPct}%;background:${tcColor}"></div></div>
