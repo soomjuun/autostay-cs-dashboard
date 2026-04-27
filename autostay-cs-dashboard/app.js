@@ -999,6 +999,37 @@ function renderManagers(d) {
 
   renderManagerRows(managers, total, null);
 
+  // 사이드바: 담당자 성과 요약
+  const sidebar = document.getElementById('agentSidebar');
+  if (sidebar) {
+    const activeMgrs = managers.filter(m => m.count > 0);
+    const inactiveMgrs = managers.filter(m => !m.count);
+    const avgOp = activeMgrs.length ? Math.round(activeMgrs.reduce((s, m) => s + (m.operatorScore || 0), 0) / activeMgrs.length) : 0;
+    const avgTc = activeMgrs.length ? Math.round(activeMgrs.reduce((s, m) => s + (m.touchScore || 0), 0) / activeMgrs.length) : 0;
+    const topMgr = activeMgrs[0];
+    const topPct = total > 0 ? Math.round((topMgr?.count || 0) / total * 100) : 0;
+    const fastMgr = activeMgrs.filter(m => m.avgResolutionMin != null).sort((a, b) => a.avgResolutionMin - b.avgResolutionMin)[0];
+    sidebar.innerHTML = `
+      <div class="agent-stat-card">
+        <div class="agent-stat-card-title">👥 인원 현황</div>
+        <div class="agent-stat-row"><span class="agent-stat-label">활성 담당자</span><span class="agent-stat-value" style="color:var(--teal)">${activeMgrs.length}명</span></div>
+        <div class="agent-stat-row"><span class="agent-stat-label">비활성</span><span class="agent-stat-value" style="color:var(--subtle)">${inactiveMgrs.length}명</span></div>
+        <div class="agent-stat-row"><span class="agent-stat-label">총 처리건수</span><span class="agent-stat-value">${total.toLocaleString()}건</span></div>
+      </div>
+      <div class="agent-stat-card">
+        <div class="agent-stat-card-title">📊 평균 지표</div>
+        <div class="agent-stat-row"><span class="agent-stat-label">Operator Score</span><span class="agent-stat-value" style="color:${avgOp > 20 ? 'var(--teal)' : 'var(--amber)'}">${avgOp}</span></div>
+        <div class="agent-stat-row"><span class="agent-stat-label">Touch Score</span><span class="agent-stat-value" style="color:${avgTc > 30 ? 'var(--teal)' : 'var(--amber)'}">${avgTc}</span></div>
+      </div>
+      ${topMgr ? `<div class="agent-stat-card">
+        <div class="agent-stat-card-title">🏆 주요 인사이트</div>
+        <div class="agent-stat-row"><span class="agent-stat-label">TOP 담당자</span><span class="agent-stat-value" style="font-size:10.5px;color:var(--teal)">${topMgr.name.replace('오토스테이_','')}</span></div>
+        <div class="agent-stat-row"><span class="agent-stat-label">집중도</span><span class="agent-stat-value" style="color:${topPct > 70 ? 'var(--rose)' : 'var(--text)'}">${topPct}%</span></div>
+        ${fastMgr ? `<div class="agent-stat-row"><span class="agent-stat-label">최단 해결</span><span class="agent-stat-value" style="font-size:10.5px;color:var(--teal)">${fastMgr.name.replace('오토스테이_','')} ${fastMgr.avgResolutionMin}분</span></div>` : ''}
+      </div>` : ''}
+    `;
+  }
+
   const tabs = document.querySelectorAll('#agentSortTabs .tbl-sort-tab');
   tabs.forEach(tab => {
     tab.onclick = () => {
@@ -1089,70 +1120,152 @@ function downloadCSV() {
   document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
-/* ─── Render: Bots & Groups → 자동화 효과 ───────────────────────────────── */
+/* ─── Render: 자동화 효과 & 운영 현황 ──────────────────────────────────── */
 function renderBotsGroups(d) {
-  const { bots, groups, summary, resolutionBuckets } = d;
-  const botCount   = (bots   || []).length;
-  const groupCount = (groups || []).length;
-  const rb         = resolutionBuckets || {};
-  const resTotal   = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
-  const quick5Pct  = Math.round(((rb['0~5분'] || 0) / resTotal) * 100);
-  const quick30Pct = Math.round(((rb['0~5분'] || 0) + (rb['5~30분'] || 0)) / resTotal * 100);
+  const { bots, groups, summary, resolutionBuckets, tags, sources } = d;
+  const rb       = resolutionBuckets || {};
+  const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
 
+  // 챗봇 빠른 해결 = 5분 내 종결 (봇 자동 처리 추정)
+  const botResCount  = rb['0~5분'] || 0;
+  const botResPct    = Math.round((botResCount / resTotal) * 100);
+  // 셀프/FAQ 해결 = 5~30분 내 (상담 개입 최소화 추정)
+  const selfResCount = rb['5~30분'] || 0;
+  const selfResPct   = Math.round((selfResCount / resTotal) * 100);
+
+  const totalChats = summary.totalChats || 1;
+
+  // TOP 5 문의 유형 (tags 데이터)
+  const top5Tags = (tags?.labels || []).slice(0, 5).map((lbl, i) => ({
+    label: lbl,
+    count: tags.values[i] || 0,
+    pct:   Math.round(((tags.values[i] || 0) / totalChats) * 100),
+  }));
+
+  // 봇 이름 목록
+  const botNames = (bots || []).map(b => b.name);
+
+  /* ── 자동화 효과 패널 (botPanel) ─────────────────────────────── */
   const botPanel = document.getElementById('botPanel');
   botPanel.innerHTML = `
     <div class="panel-header">
       <div>
         <div class="panel-title">자동화 효과</div>
-        <div class="panel-sub">봇 운영 현황 · 빠른 해결 비율</div>
+        <div class="panel-sub">챗봇 · FAQ · 셀프 해결 성과</div>
       </div>
-      <span class="real-badge data-badge badge-real">실데이터</span>
+      <span class="real-badge">✓ 실데이터</span>
     </div>
-    <div class="auto-stat-grid" style="margin-top:14px">
-      <div class="auto-stat-card">
-        <div class="auto-stat-icon auto-stat-label">Bot</div>
-        <div class="auto-stat-title">활성 봇</div>
-        <div class="auto-stat-value">${botCount}</div>
-        <div class="auto-stat-sub">채널톡 연동 챗봇</div>
-        <div class="auto-progress"><div class="auto-progress-fill" style="width:${Math.min(botCount * 25, 100)}%"></div></div>
+
+    <!-- 2-KPI 카드 행 -->
+    <div class="auto-kpi-row">
+      <div class="auto-kpi-card">
+        <div class="auto-kpi-label">챗봇 빠른 해결률</div>
+        <div class="auto-kpi-val">${botResPct}<span class="auto-kpi-unit">%</span></div>
+        <div class="auto-kpi-sub">${resTotal.toLocaleString()}건 중 ${botResCount.toLocaleString()}건 · 5분 내 종결</div>
+        <div class="auto-kpi-bar"><div class="auto-kpi-fill ${botResPct >= 20 ? '' : 'warn'}" style="width:${Math.min(botResPct, 100)}%"></div></div>
       </div>
-      <div class="auto-stat-card">
-        <div class="auto-stat-icon auto-stat-label" style="background:#0f766e;color:#fff">5분</div>
-        <div class="auto-stat-title">5분 내 해결률</div>
-        <div class="auto-stat-value">${quick5Pct}<span style="font-size:16px;font-weight:700">%</span></div>
-        <div class="auto-stat-sub">즉시 응대 비율</div>
-        <div class="auto-progress"><div class="auto-progress-fill ${quick5Pct >= 30 ? '' : quick5Pct >= 15 ? 'warn' : 'danger'}" style="width:${quick5Pct}%"></div></div>
-      </div>
-      <div class="auto-stat-card">
-        <div class="auto-stat-icon auto-stat-label" style="background:#1d4ed8;color:#fff">30분</div>
-        <div class="auto-stat-title">30분 내 해결률</div>
-        <div class="auto-stat-value">${quick30Pct}<span style="font-size:16px;font-weight:700">%</span></div>
-        <div class="auto-stat-sub">빠른 해결 채팅</div>
-        <div class="auto-progress"><div class="auto-progress-fill ${quick30Pct >= 50 ? '' : quick30Pct >= 30 ? 'warn' : 'danger'}" style="width:${quick30Pct}%"></div></div>
+      <div class="auto-kpi-card">
+        <div class="auto-kpi-label">셀프 해결률</div>
+        <div class="auto-kpi-val">${selfResPct}<span class="auto-kpi-unit">%</span></div>
+        <div class="auto-kpi-sub">${selfResCount.toLocaleString()}건 · 5~30분 내 · 상담 개입 최소</div>
+        <div class="auto-kpi-bar"><div class="auto-kpi-fill ${selfResPct >= 25 ? '' : 'warn'}" style="width:${Math.min(selfResPct, 100)}%"></div></div>
       </div>
     </div>
-    <div class="bot-names" style="margin-top:4px">
-      ${(bots || []).map(b => `<span class="bot-name-tag">${b.name}</span>`).join('') || '<span style="color:var(--muted);font-size:12px">연동 봇 없음</span>'}
+
+    <!-- TOP 5 문의 유형 -->
+    <div class="auto-faq-title">TOP 5 문의 유형</div>
+    <div class="auto-faq-list">
+      ${top5Tags.length ? top5Tags.map((t, i) => `
+        <div class="auto-faq-row">
+          <span class="auto-faq-rank rank-${i + 1}">${i + 1}</span>
+          <span class="auto-faq-label">${t.label}</span>
+          <span class="auto-faq-count">${t.count.toLocaleString()}회</span>
+          <span class="auto-faq-pct">전체 ${t.pct}%</span>
+        </div>
+      `).join('') : '<div style="color:var(--muted);font-size:12px;padding:8px 0">태그 데이터 없음</div>'}
     </div>
+
+    ${botNames.length ? `<div class="bot-names" style="margin-top:10px">
+      ${botNames.map(n => `<span class="bot-name-tag">🤖 ${n}</span>`).join('')}
+    </div>` : ''}
   `;
+
+  /* ── 운영 현황 패널 (groupPanel) ─────────────────────────────── */
+  const openChats     = summary.openChats || 0;
+  const closedChats   = totalChats;
+  const avgRes        = summary.avgResolutionMin || 0;
+  const srcNative     = sources?.native || 0;
+  const srcPhone      = sources?.phone  || 0;
+  const srcOther      = sources?.other  || 0;
+  const srcTotal      = (srcNative + srcPhone + srcOther) || 1;
+  const nativePct     = Math.round(srcNative / srcTotal * 100);
+  const phonePct      = Math.round(srcPhone  / srcTotal * 100);
+  const otherPct      = 100 - nativePct - phonePct;
 
   const groupPanel = document.getElementById('groupPanel');
   groupPanel.innerHTML = `
     <div class="panel-header">
       <div>
-        <div class="panel-title">운영 그룹 현황</div>
-        <div class="panel-sub">담당자 배정 그룹 · ${groupCount}개</div>
+        <div class="panel-title">CS 운영 현황</div>
+        <div class="panel-sub">유입 채널 · 실시간 처리 지표</div>
       </div>
-      <span class="real-badge data-badge badge-real">실데이터</span>
+      <span class="real-badge">✓ 실데이터</span>
     </div>
-    <div class="group-list">
-      ${(groups || []).map((g, i) => `
-        <div class="group-row">
-          <span class="group-rank">${i + 1}</span>
-          <span class="group-name">${g.name}</span>
-          <span class="group-id">ID: ${g.id}</span>
-        </div>
-      `).join('') || '<div style="color:var(--muted);font-size:12px;padding:8px 0">그룹 없음</div>'}
+
+    <!-- 실시간 수치 카드 -->
+    <div class="ops-stat-row">
+      <div class="ops-stat-cell">
+        <div class="ops-stat-val" style="color:var(--rose)">${openChats}</div>
+        <div class="ops-stat-lbl">현재 대기 중</div>
+      </div>
+      <div class="ops-stat-cell">
+        <div class="ops-stat-val" style="color:var(--teal)">${closedChats.toLocaleString()}</div>
+        <div class="ops-stat-lbl">처리 완료 (기간)</div>
+      </div>
+      <div class="ops-stat-cell">
+        <div class="ops-stat-val" style="color:var(--amber)">${avgRes}<span style="font-size:12px;font-weight:600">분</span></div>
+        <div class="ops-stat-lbl">평균 해결시간</div>
+      </div>
+    </div>
+
+    <!-- 유입 채널 분석 -->
+    <div class="ops-section-title">유입 채널 분석</div>
+    <div class="ops-channel-list">
+      <div class="ops-channel-row">
+        <span class="ops-ch-icon">💬</span>
+        <span class="ops-ch-name">채널톡 인앱</span>
+        <div class="ops-ch-bar-wrap"><div class="ops-ch-bar" style="width:${nativePct}%;background:var(--teal)"></div></div>
+        <span class="ops-ch-val">${srcNative.toLocaleString()}건</span>
+        <span class="ops-ch-pct">${nativePct}%</span>
+      </div>
+      <div class="ops-channel-row">
+        <span class="ops-ch-icon">📞</span>
+        <span class="ops-ch-name">전화 연동</span>
+        <div class="ops-ch-bar-wrap"><div class="ops-ch-bar" style="width:${phonePct}%;background:var(--blue)"></div></div>
+        <span class="ops-ch-val">${srcPhone.toLocaleString()}건</span>
+        <span class="ops-ch-pct">${phonePct}%</span>
+      </div>
+      <div class="ops-channel-row">
+        <span class="ops-ch-icon">🌐</span>
+        <span class="ops-ch-name">기타 채널</span>
+        <div class="ops-ch-bar-wrap"><div class="ops-ch-bar" style="width:${otherPct}%;background:var(--subtle)"></div></div>
+        <span class="ops-ch-val">${srcOther.toLocaleString()}건</span>
+        <span class="ops-ch-pct">${otherPct}%</span>
+      </div>
+    </div>
+
+    <!-- 해결 시간 분포 미니 -->
+    <div class="ops-section-title" style="margin-top:12px">해결시간 분포</div>
+    <div class="ops-bucket-list">
+      ${Object.entries(rb).map(([k, v]) => {
+        const pct = Math.round(v / resTotal * 100);
+        const color = k === '0~5분' ? 'var(--teal)' : k === '5~30분' ? 'var(--green)' : k === '30분~2시간' ? 'var(--amber)' : k === '2~8시간' ? 'var(--orange,#f97316)' : 'var(--rose)';
+        return `<div class="ops-bucket-row">
+          <span class="ops-bucket-lbl">${k}</span>
+          <div class="ops-ch-bar-wrap"><div class="ops-ch-bar" style="width:${pct}%;background:${color}"></div></div>
+          <span class="ops-bucket-val">${v}건 (${pct}%)</span>
+        </div>`;
+      }).join('')}
     </div>
   `;
 }

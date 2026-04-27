@@ -170,7 +170,7 @@
     <div class="collapsible-content" id="trendSection">
       <div class="chart-master-grid">
 
-        <article class="panel col-8">
+        <article class="panel col-7">
           <div class="panel-header">
             <div>
               <div class="panel-title">일별 CS 인입 추이 <span class="panel-badge" id="trendBadge">30일</span></div>
@@ -189,7 +189,7 @@
           <div class="peak-analysis-panel" id="peakAnalysisPanel" style="display:none"></div>
         </article>
 
-        <article class="panel col-4">
+        <article class="panel col-5">
           <div class="panel-header">
             <div>
               <div class="panel-title">시간대 × 요일 히트맵 <span class="panel-badge">KST 0~23시</span></div>
@@ -305,7 +305,7 @@
             <div class="panel-title">담당자별 실 성과 현황</div>
             <div class="panel-sub">managers API + assigneeId 집계 · 실데이터 기반</div>
           </div>
-          <div style="display:flex;gap:8px;align-items:center">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <div class="conc-alert" id="concAlert" style="display:none"></div>
             <span class="real-badge">✓ 실데이터</span>
           </div>
@@ -316,54 +316,66 @@
           <button class="tbl-sort-tab" data-sort="operatorScore">Operator Score 순</button>
           <button class="tbl-sort-tab" data-sort="touchScore">Touch Score 순</button>
         </div>
-        <table class="agent-table">
-          <colgroup>
-            <col><!-- # 순위 -->
-            <col><!-- 담당자 -->
-            <col><!-- 처리 건수 -->
-            <col><!-- 비중 -->
-            <col><!-- Operator Score -->
-            <col><!-- Touch Score -->
-            <col><!-- 평균 해결 시간 -->
-            <col><!-- 상태 -->
-            <col><!-- 코멘트 -->
-          </colgroup>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>담당자</th>
-              <th>처리 건수</th>
-              <th>비중</th>
-              <th class="num-r">Operator Score <span class="th-tip-icon">ⓘ<span class="th-tip-text">채널톡 API에서 제공하는 담당자 운영 효율 점수입니다. 처리 건수·응대 품질·처리 속도를 종합 산정합니다.</span></span></th>
-              <th class="num-r">Touch Score <span class="th-tip-icon">ⓘ<span class="th-tip-text">담당자가 고객 채팅에 직접 응답(터치)한 비율 점수입니다. 높을수록 적극적인 고객 응대를 의미합니다.</span></span></th>
-              <th class="num-r">평균 해결 시간</th>
-              <th>상태</th>
-              <th>코멘트</th>
-            </tr>
-          </thead>
-          <tbody id="managerTbody">
-            <tr><td colspan="9" class="tbl-loading">로딩 중…</td></tr>
-          </tbody>
-        </table>
+
+        <!-- 테이블 + 사이드 성과 패널 그리드 -->
+        <div class="agent-content-grid">
+          <div class="agent-table-area">
+            <table class="agent-table">
+              <colgroup>
+                <col><!-- # 순위 -->
+                <col><!-- 담당자 -->
+                <col><!-- 처리 건수 -->
+                <col><!-- 비중 -->
+                <col><!-- Operator Score -->
+                <col><!-- Touch Score -->
+                <col><!-- 평균 해결 시간 -->
+                <col><!-- 상태 -->
+                <col><!-- 코멘트 -->
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>담당자</th>
+                  <th>처리 건수</th>
+                  <th>비중</th>
+                  <th class="num-r">Operator Score <span class="th-tip-icon">ⓘ<span class="th-tip-text">채널톡 API에서 제공하는 담당자 운영 효율 점수입니다. 처리 건수·응대 품질·처리 속도를 종합 산정합니다.</span></span></th>
+                  <th class="num-r">Touch Score <span class="th-tip-icon">ⓘ<span class="th-tip-text">담당자가 고객 채팅에 직접 응답(터치)한 비율 점수입니다. 높을수록 적극적인 고객 응대를 의미합니다.</span></span></th>
+                  <th class="num-r">평균 해결시간</th>
+                  <th>상태</th>
+                  <th>코멘트</th>
+                </tr>
+              </thead>
+              <tbody id="managerTbody">
+                <tr><td colspan="9" class="tbl-loading">로딩 중…</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- 성과 요약 사이드 패널 (Area 2 대체 콘텐츠) -->
+          <div class="agent-stats-sidebar" id="agentSidebar">
+            <!-- JS 렌더링 -->
+          </div>
+        </div><!-- /agent-content-grid -->
+
         <div class="tbl-note" id="agentTblNote">※ Operator Score · Touch Score: 채널톡 API 실데이터 / 평균 해결시간: 해당 담당자 처리 건 실측값</div>
       </article>
     </div>
   </section>
 
   <!-- ══════════════════════════════════════════════════════════════════════
-       SECTION: 봇 & 운영 그룹
+       SECTION: 자동화 효과 & 운영 현황
   ═══════════════════════════════════════════════════════════════════════ -->
   <section class="dashboard-section">
     <div class="section-header">
       <span class="section-icon">🤖</span>
-      <span class="section-title">봇 &amp; 운영 그룹</span>
-      <span class="section-tag">설정</span>
+      <span class="section-title">자동화 효과 &amp; 운영 현황</span>
+      <span class="section-tag">봇 · FAQ · 채널</span>
       <button class="collapse-toggle" data-target="botSection" aria-label="펼치기/접기">▾</button>
     </div>
     <div class="collapsible-content" id="botSection">
       <div class="chart-master-grid">
-        <div class="panel col-4 bot-panel" id="botPanel"></div>
-        <div class="panel col-8 group-panel" id="groupPanel"></div>
+        <div class="panel col-7" id="botPanel"></div>
+        <div class="panel col-5" id="groupPanel"></div>
       </div>
     </div>
   </section>
@@ -398,7 +410,7 @@
 
   <!-- Footer -->
   <div class="footer-note">
-    <span>✅ 채널톡 Open API v5 실데이터 · 오토스테이 CS Dashboard v3.0</span>
+    <span>✅ 채널톡 Open API v5 실데이터 · 오토스테이 CS Dashboard v3.1</span>
     <span>api.channel.io/open/v5 · x-access-key 인증 · KST 기준 · Vercel Serverless</span>
   </div>
 
