@@ -532,14 +532,44 @@ body {
 .tbl-loading { text-align: center; color: var(--muted); padding: 28px; font-size: 12px; }
 .tbl-note { font-size: 10px; color: var(--subtle); margin-top: 10px; padding: 7px 12px; background: var(--gray-bg); border-radius: 6px; }
 
-/* Agent table column widths */
-.agent-table colgroup col:nth-child(1) { width: 150px; }
-.agent-table colgroup col:nth-child(2) { width: 90px; }
-.agent-table colgroup col:nth-child(3) { width: 130px; }
-.agent-table colgroup col:nth-child(4) { width: 160px; }
-.agent-table colgroup col:nth-child(5) { width: 160px; }
-.agent-table colgroup col:nth-child(6) { width: 110px; }
-.agent-table colgroup col:nth-child(7) { width: 80px; }
+/* Agent table column widths (8컬럼) */
+.agent-table colgroup col:nth-child(1) { width: 140px; }
+.agent-table colgroup col:nth-child(2) { width: 80px; }
+.agent-table colgroup col:nth-child(3) { width: 110px; }
+.agent-table colgroup col:nth-child(4) { width: 150px; }
+.agent-table colgroup col:nth-child(5) { width: 150px; }
+.agent-table colgroup col:nth-child(6) { width: 100px; }
+.agent-table colgroup col:nth-child(7) { width: 75px; }
+.agent-table colgroup col:nth-child(8) { width: auto; }
+
+/* ─── Agent Table Sort Tabs ─────────────────────────────────────────────── */
+.tbl-sort-tabs {
+  display: flex; gap: 4px; margin-bottom: 12px;
+}
+.tbl-sort-tab {
+  font-size: 11px; font-weight: 600; padding: 5px 13px;
+  border: 1px solid var(--border); border-radius: 16px;
+  background: var(--bg); color: var(--muted); cursor: pointer;
+  transition: all .15s;
+  letter-spacing: -.01em;
+}
+.tbl-sort-tab:hover { border-color: var(--teal); color: var(--teal); }
+.tbl-sort-tab.active {
+  background: var(--teal); border-color: var(--teal);
+  color: #fff; font-weight: 700;
+}
+
+/* ─── Agent Comment Badge ────────────────────────────────────────────────── */
+.agent-comment {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 700; padding: 3px 9px;
+  border-radius: 10px; white-space: nowrap;
+  letter-spacing: -.01em;
+}
+.agent-comment.top    { background: var(--teal-s); color: var(--teal-d); }
+.agent-comment.warn   { background: var(--amber-bg); color: var(--amber); }
+.agent-comment.normal { background: var(--gray-bg); color: var(--gray); }
+.agent-comment.off    { background: var(--gray-bg); color: var(--subtle); }
 
 /* ─── Table Header Info Tooltip ─────────────────────────────────────────── */
 .th-tip-icon {
@@ -568,12 +598,9 @@ body {
 .th-tip-icon:hover .th-tip-text { display: block; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   BOT & GROUP PANELS
+   BOT & GROUP PANELS (레거시 — 자동화 효과 섹션과 공존)
 ═══════════════════════════════════════════════════════════════════════════ */
 .bot-panel, .group-panel { padding: 17px 19px; }
-.bot-stats { display: flex; align-items: baseline; gap: 6px; margin: 10px 0 14px; }
-.bot-stat-val { font-size: 36px; font-weight: 900; color: var(--teal); letter-spacing: -.05em; line-height: 1; }
-.bot-stat-lbl { font-size: 12px; color: var(--muted); }
 .bot-names { display: flex; flex-wrap: wrap; gap: 6px; }
 .bot-name-tag { background: var(--teal-s); color: var(--teal-d); border: 1px solid #b2dfdb; padding: 4px 11px; border-radius: 14px; font-size: 11.5px; font-weight: 600; }
 .group-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
@@ -585,6 +612,42 @@ body {
 .group-rank { background: var(--teal); color: #fff; border-radius: 5px; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; flex-shrink: 0; }
 .group-name { flex: 1; font-weight: 600; }
 .group-id { font-size: 10.5px; color: var(--subtle); }
+
+/* ─── 자동화 효과 카드 ───────────────────────────────────────────────────── */
+.auto-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px; margin-bottom: 18px;
+}
+.auto-stat-card {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 8px;
+  transition: box-shadow .15s;
+}
+.auto-stat-card:hover { box-shadow: var(--shadow-md); }
+.auto-stat-icon { font-size: 20px; line-height: 1; }
+.auto-stat-title { font-size: 10.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.auto-stat-value { font-size: 28px; font-weight: 900; color: var(--teal); letter-spacing: -.04em; line-height: 1; }
+.auto-stat-sub { font-size: 11px; color: var(--muted); }
+.auto-progress { width: 100%; height: 4px; background: var(--border-soft); border-radius: 2px; overflow: hidden; margin-top: 2px; }
+.auto-progress-fill { height: 100%; border-radius: 2px; background: var(--teal); transition: width .8s cubic-bezier(.4,0,.2,1); }
+.auto-progress-fill.warn { background: #f59e0b; }
+.auto-progress-fill.danger { background: var(--rose); }
+
+/* ─── KPI 목표 progress bar ─────────────────────────────────────────────── */
+.kpi-target-wrap { margin-top: 7px; width: 100%; }
+.kpi-target-label { display: flex; justify-content: space-between; font-size: 9.5px; color: var(--muted); margin-bottom: 3px; }
+.kpi-target { width: 100%; height: 3px; background: var(--border-soft); border-radius: 2px; overflow: hidden; }
+.kpi-target-fill { height: 100%; border-radius: 2px; background: var(--teal); transition: width .9s cubic-bezier(.4,0,.2,1); }
+.kpi-target-fill.warn { background: #f59e0b; }
+.kpi-target-fill.danger { background: var(--rose); }
+
+/* ─── VOC 방향 표시 ─────────────────────────────────────────────────────── */
+.voc-trend { font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 4px; }
+.voc-trend.up   { color: var(--rose); background: var(--rose-bg); }
+.voc-trend.down { color: var(--green); background: var(--green-bg); }
+.voc-trend.flat { color: var(--muted); background: var(--gray-bg); }
 
 /* ─── Chart Containers ───────────────────────────────────────────────────── */
 .ch-280 { height: 280px; position: relative; }

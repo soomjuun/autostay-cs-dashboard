@@ -307,6 +307,12 @@
             <span class="real-badge">✓ 실데이터</span>
           </div>
         </div>
+        <!-- 정렬 탭 -->
+        <div class="tbl-sort-tabs" id="agentSortTabs">
+          <button class="tbl-sort-tab active" data-sort="count">처리건수 순</button>
+          <button class="tbl-sort-tab" data-sort="operatorScore">Operator Score 순</button>
+          <button class="tbl-sort-tab" data-sort="touchScore">Touch Score 순</button>
+        </div>
         <table class="agent-table">
           <colgroup>
             <col><!-- 담당자 -->
@@ -316,6 +322,7 @@
             <col><!-- Touch Score -->
             <col><!-- 평균 해결 시간 -->
             <col><!-- 상태 -->
+            <col><!-- 코멘트 -->
           </colgroup>
           <thead>
             <tr>
@@ -326,10 +333,11 @@
               <th class="num-r">Touch Score <span class="th-tip-icon">ⓘ<span class="th-tip-text">담당자가 고객 채팅에 직접 응답(터치)한 비율 점수입니다. 높을수록 적극적인 고객 응대를 의미합니다.</span></span></th>
               <th class="num-r">평균 해결 시간</th>
               <th>상태</th>
+              <th>코멘트</th>
             </tr>
           </thead>
           <tbody id="managerTbody">
-            <tr><td colspan="7" class="tbl-loading">로딩 중…</td></tr>
+            <tr><td colspan="8" class="tbl-loading">로딩 중…</td></tr>
           </tbody>
         </table>
         <div class="tbl-note">※ operatorScore·touchScore는 채널톡 managers API 실데이터 / 평균 해결시간은 전체 기준</div>
