@@ -191,14 +191,24 @@ function generateInsights(d, scoreObj) {
 }
 
 /* ─── Render: Health Score + 감점 요인 (항목 #4) ───────────────────────── */
+const GRADE_STYLES = {
+  A: { bg: '#f0fdf4', border: '#86efac', color: '#15803d', barColor: '#22c55e' },
+  B: { bg: '#fef9ec', border: '#fcd34d', color: '#b45309', barColor: '#f59e0b' },
+  C: { bg: '#fff7ed', border: '#fdba74', color: '#ea580c', barColor: '#f97316' },
+  D: { bg: '#fff1f2', border: '#fda4af', color: '#be123c', barColor: '#f43f5e' },
+};
+const GRADE_CARD_BORDER = { A: '#a7f3d0', B: '#fde68a', C: '#fed7aa', D: '#fecdd3' };
+
 function renderHealthScore(scoreObj, d) {
   const { score, deductComplaint, deductSlow, deductConc, complaintPct, slowPct, topPct } = scoreObj;
   const { grade, label, color } = getGrade(score);
+  const gs = GRADE_STYLES[grade] || GRADE_STYLES.D;
 
+  // 아크 게이지 애니메이션
   const arcLen = 188.5;
   const fill = document.getElementById('gaugeFill');
   if (fill) {
-    fill.style.stroke = color;
+    fill.style.stroke = gs.barColor;
     fill.style.strokeDashoffset = arcLen;
     requestAnimationFrame(() => {
       setTimeout(() => {
@@ -207,22 +217,41 @@ function renderHealthScore(scoreObj, d) {
     });
   }
 
+  // 게이지 안 점수 숫자
   const sv = document.getElementById('healthScore');
-  if (sv) { sv.textContent = score; sv.setAttribute('fill', color); }
+  if (sv) { sv.textContent = score; sv.setAttribute('fill', gs.color); }
 
+  // 등급 뱃지 (우상단 pill)
   const sg = document.getElementById('healthGrade');
-  if (sg) { sg.textContent = `${grade} · ${label}`; sg.style.color = color; }
+  if (sg) {
+    sg.textContent = `${grade} · ${label}`;
+    sg.style.cssText = `background:${gs.bg};border-color:${gs.border};color:${gs.color}`;
+  }
 
-  // 감점 요인 표시
+  // 카드 테두리 색상 (등급에 따라)
+  const card = document.getElementById('healthCard');
+  if (card) card.style.borderColor = GRADE_CARD_BORDER[grade] || GRADE_CARD_BORDER.D;
+
+  // 감점 요인 — 바 + 수치 행으로 표시
   const ss = document.getElementById('healthSub');
-  if (ss) {
-    const factors = [];
-    if (deductComplaint > 0) factors.push(`컴플레인율 ${complaintPct}% (-${deductComplaint}점)`);
-    if (deductSlow > 0)      factors.push(`8시간+ ${slowPct}% (-${deductSlow}점)`);
-    if (deductConc > 0)      factors.push(`집중도 ${topPct}% (-${deductConc}점)`);
-    ss.innerHTML = factors.length
-      ? `<span class="health-factor-list">${factors.map(f => `<span class="hf">${f}</span>`).join('')}</span>`
-      : '<span style="color:var(--green)">감점 요인 없음</span>';
+  if (!ss) return;
+
+  const factors = [];
+  if (deductComplaint > 0) factors.push({ label: '컴플레인율', val: `${complaintPct}%`, pct: Math.min(complaintPct, 100), deduct: deductComplaint });
+  if (deductSlow > 0)      factors.push({ label: '8시간+ 응답', val: `${slowPct}%`,      pct: Math.min(slowPct, 100),      deduct: deductSlow });
+  if (deductConc > 0)      factors.push({ label: '집중도',     val: `${topPct}%`,       pct: Math.min(topPct, 100),       deduct: deductConc });
+
+  if (factors.length === 0) {
+    ss.innerHTML = '<div class="hf-row-ok">✓ 감점 요인 없음</div>';
+  } else {
+    ss.innerHTML = factors.map(f => `
+      <div class="hf-row">
+        <span class="hf-row-label">${f.label}</span>
+        <div class="hf-row-bar-wrap"><div class="hf-row-bar" style="width:${f.pct}%;background:${gs.barColor}"></div></div>
+        <span class="hf-row-val">${f.val}</span>
+        <span class="hf-row-deduct" style="color:${gs.color}">-${f.deduct}점</span>
+      </div>
+    `).join('');
   }
 }
 

@@ -69,17 +69,21 @@
         <p>채널톡 실 인입 데이터 기반 · 태그·담당자·해결시간·VOC 통합 분석</p>
       </div>
 
-      <div class="hero-focus">
-        <div class="focus-label">CS 건강 점수</div>
+      <div class="hero-focus" id="healthCard">
+        <div class="focus-header">
+          <div class="focus-label">CS 건강 점수</div>
+          <span class="health-grade-badge" id="healthGrade">—</span>
+        </div>
         <div class="hero-gauge">
           <svg class="health-svg" viewBox="0 0 120 86">
-            <path class="gauge-bg" d="M10,70 A60,60 0 0,1 110,70" fill="none" stroke="#f1efe8" stroke-width="10" stroke-linecap="round"/>
-            <path class="gauge-fill" id="gaugeFill" d="M10,70 A60,60 0 0,1 110,70" fill="none" stroke="#0f766e" stroke-width="10" stroke-linecap="round" stroke-dasharray="188.5" stroke-dashoffset="188.5"/>
-            <text id="healthScore" x="60" y="83" text-anchor="middle" font-family="'Pretendard Variable',Pretendard,sans-serif" font-size="25" font-weight="900" fill="#1c1917">—</text>
+            <path class="gauge-bg" d="M10,70 A60,60 0 0,1 110,70" fill="none" stroke="#e8e5dd" stroke-width="11" stroke-linecap="round"/>
+            <path class="gauge-fill" id="gaugeFill" d="M10,70 A60,60 0 0,1 110,70" fill="none" stroke="#0f766e" stroke-width="11" stroke-linecap="round" stroke-dasharray="188.5" stroke-dashoffset="188.5"/>
+            <text id="healthScore" x="60" y="80" text-anchor="middle" font-family="'Pretendard Variable',Pretendard,sans-serif" font-size="26" font-weight="900" fill="#1c1917">—</text>
           </svg>
-          <div class="gauge-grade" id="healthGrade">—</div>
         </div>
-        <div class="focus-sub" id="healthSub">분석 중…</div>
+        <div id="healthSub" class="health-factors">
+          <div class="hf-loading">분석 중…</div>
+        </div>
       </div>
     </div>
 
