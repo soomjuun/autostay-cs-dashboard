@@ -1,203 +1,231 @@
-// Autostay CS Dashboard â app.js  v3.3
-// 9ê° ì¶ê° í­ëª©: ë³´ì¡° íµê³(ì¤ìê°Â·p90Â·8h+ì ì¸), í¼í¬ ì±ëÂ·ì¥ê¸°ì íì¨, íí¸ë§µ í¼í¬TOP3,
-// ë´ë¹ì ì¡°ì¹ ê¶ê³  ì¹´ë, ì»´íë ì¸ í¤ë ê°ì¡°, 500ê±´ ê¸°ì¤ ëªíí, dedup, basisNote ê°ì 
+ARD_BORDER = { A: '#a7f3d0', B: '#fde68a', C: '#fed7aa', D: '#fecdd3' };
 
-'use strict';
+function renderHealthScore(scoreObj, d) {
+  const { score, deductComplaint, deductSlow, deductConc, complaintPct, slowPct, topPct } = scoreObj;
+  const { grade, label, color } = getGrade(score);
+  const gs = GRADE_STYLES[grade] || GRADE_STYLES.D;
 
-/* âââ Constants âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */
-const COLORS = [
-  '#0f766e','#be123c','#14b8a6','#3b82f6','#8b5cf6',
-  '#f59e0b','#0369a1','#e11d48','#6d28d9','#0d9488'
-];
-const AVATAR_COLORS = [
-  '#0f766e,#14b8a6','#1d4ed8,#3b82f6','#b45309,#f59e0b',
-  '#be123c,#f43f5e','#6d28d9,#8b5cf6','#0369a1,#0ea5e9','#059669,#34d399'
-];
-const EXCLUDED_MANAGERS = ['ì ìë¯¼'];
+  // ìí¬ ê²ì´ì§ ì ëë©ì´ì
+  const arcLen = 188.5;
+  const fill = document.getElementById('gaugeFill');
+  if (fill) {
+    fill.style.stroke = gs.barColor;
+    fill.style.strokeDashoffset = arcLen;
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        fill.style.strokeDashoffset = arcLen - (arcLen * score / 100);
+      }, 200);
+    });
+  }
 
-const VOC_CONTEXTS = {
-  'ì ê¸°êµ¬ë/ì ê¸°êµ¬ëì°¨ëë³ê²½': 'êµ¬ë ì°¨ë ë³ê²½ ìì²­ Â· ìëí íë¡ì° ì ê² ê¶ì¥',
-  'ì»´íë ì¸': 'ìë¹ì¤ ë¶ë§ ì§ì  íì Â· ì¦ì ëì íì',
-  'ì ê¸°êµ¬ë': 'êµ¬ë ì ì²­Â·í´ì§Â·ë³ê²½ ì¼ë° ë¬¸ì',
-  'ë¨ìì´ì©ë¬¸ì': 'ì¬ì© ë°©ë²Â·ì´ì© ìë´ ì¼ë° ë¬¸ì',
-  'ê¸°í': 'ë¶ë¥ ì¸ ê¸°í ë¬¸ì',
-  'ê°ë§¹ìë´ë¬¸ì': 'íí¸ë ë§¤ì¥ ê°ë§¹ ìë´ Â· ììí ì°ê²° ê¶ì¥',
-  'ì»´íë ì¸/ì´ì©ë¶ê°': 'ìë¹ì¤ ì´ì© ë¶ê° ìí Â· ì¦ì ëì íì',
-  'íì/íí´': 'íì íí´ ìì²­ Â· íí´ ê·¸ë£¹ ì°ê³',
-};
+  // ê²ì´ì§ ì ì ì ì«ì
+  const sv = document.getElementById('healthScore');
+  if (sv) { sv.textContent = score; sv.setAttribute('fill', gs.color); }
 
-/* âââ Chart.js Defaults âââââââââââââââââââââââââââââââââââââââââââââââââââ */
-Chart.defaults.font.family = "'Pretendard Variable', Pretendard, sans-serif";
-Chart.defaults.color = '#78716c';
-Chart.defaults.borderColor = '#f1efe8';
+  // ë±ê¸ ë±ì§ (ì°ìë¨ pill)
+  const sg = document.getElementById('healthGrade');
+  if (sg) {
+    sg.textContent = `${grade} Â· ${label}`;
+    sg.style.cssText = `background:${gs.bg};border-color:${gs.border};color:${gs.color}`;
+  }
 
-let charts = {};
-let lastData = null;
-let currentDays = 30;
-let refreshTimer = null;
-let lastSuccessTime = null; // í­ëª© #10: ë§ì§ë§ ì±ê³µ ëê¸°í ìê°
+  // ì¹´ë íëë¦¬ ìì (ë±ê¸ì ë°ë¼)
+  const card = document.getElementById('healthCard');
+  if (card) card.style.borderColor = GRADE_CARD_BORDER[grade] || GRADE_CARD_BORDER.D;
 
-/* âââ Loading Helpers âââââââââââââââââââââââââââââââââââââââââââââââââââââ */
-function setStep(id, done = false) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.classList.remove('active', 'done');
-  el.classList.add(done ? 'done' : 'active');
+  // ê°ì  ìì¸ â ë° + ìì¹ íì¼ë¡ íì
+  const ss = document.getElementById('healthSub');
+  if (!ss) return;
+
+  const factors = [];
+  if (deductComplaint > 0) factors.push({ label: 'ì»´íë ì¸ì¨', val: `${complaintPct}%`, pct: Math.min(complaintPct, 100), deduct: deductComplaint });
+  if (deductSlow > 0)      factors.push({ label: '8ìê°+ ìëµ', val: `${slowPct}%`,      pct: Math.min(slowPct, 100),      deduct: deductSlow });
+  if (deductConc > 0)      factors.push({ label: 'ì§ì¤ë',     val: `${topPct}%`,       pct: Math.min(topPct, 100),       deduct: deductConc });
+
+  // ë¶ì ê¸°ì¤ ë¸í¸ (ê²ì´ì§ íë¨)
+  const basisNoteEl = document.getElementById('gaugeBasisNote');
+  if (basisNoteEl) {
+    const dn = d.dataNote || {};
+    const collected = dn.collected || d.summary?.totalChats || 0;
+    const rangeText = currentDays === 'all' ? `ìµê·¼ ${dn.limit || 500}ê±´ íë` : `ìµê·¼ ${currentDays}ì¼`;
+    basisNoteEl.textContent = `${rangeText} Â· ${collected}ê±´ ê¸°ì¤ ë¶ì`;
+  }
+
+  if (factors.length === 0) {
+    ss.innerHTML = '<div class="hf-row-ok">â ê°ì  ìì¸ ìì</div>';
+  } else {
+    const totalDeduct = deductComplaint + deductSlow + deductConc;
+    ss.innerHTML = factors.map(f => `
+      <div class="hf-row">
+        <span class="hf-row-label">${f.label}</span>
+        <div class="hf-row-bar-wrap"><div class="hf-row-bar" style="width:${f.pct}%;background:${gs.barColor}"></div></div>
+        <span class="hf-row-val">${f.val}</span>
+        <span class="hf-row-deduct" style="color:${gs.color}">-${f.deduct}ì </span>
+      </div>
+    `).join('') + `<div class="hf-total-row">ì´ ê°ì  -${totalDeduct}ì  / 100ì </div>`;
+  }
 }
-function setProgress(pct) {
-  const bar = document.getElementById('loadProgressBar');
-  if (bar) bar.style.width = pct + '%';
+
+/* âââ Render: Insights Strip ââââââââââââââââââââââââââââââââââââââââââââââ */
+function renderInsights(insights) {
+  const strip = document.getElementById('insightsStrip');
+  if (!strip) return;
+  if (!insights.length) { strip.style.display = 'none'; return; }
+  strip.style.display = 'flex';
+  strip.innerHTML = `
+    <div class="insights-label">ìë ì¸ì¬ì´í¸</div>
+    ${insights.map(ins => `
+      <div class="insight-chip ${ins.type}">
+        <span class="insight-icon insight-label-badge">${ins.icon}</span>
+        <span>${ins.text}</span>
+      </div>
+    `).join('')}
+  `;
 }
 
-/* âââ Formatters ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */
-function fmt(n, unit = '') {
-  if (n == null) return 'â';
-  return Number(n).toLocaleString('ko-KR') + unit;
-}
-function initials(name) {
-  return (name || '?').replace(/ì¤í ì¤íì´_/, '').replace(/[^A-Za-zê°-í£]/g, '').slice(0, 2).toUpperCase() || '?';
-}
-function avatarStyle(idx) {
-  const [a, b] = AVATAR_COLORS[idx % AVATAR_COLORS.length].split(',');
-  return `background:linear-gradient(135deg,${a},${b})`;
-}
-
-/* âââ CS Health Score âââââââââââââââââââââââââââââââââââââââââââââââââââââ */
-function computeHealthScore(d) {
-  let score = 100;
+/* âââ Render: Alert Strip âââââââââââââââââââââââââââââââââââââââââââââââââ */
+function renderAlertStrip(d, scoreObj) {
+  const score = scoreObj.score;
+  const strip = document.getElementById('alertStrip');
+  if (!strip) return;
+  const alerts = [];
   const total = d.summary.totalChats || 1;
   const rb = d.resolutionBuckets || {};
   const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
+  const managers = (d.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
+
+  if (managers.length > 0) {
+    const topPct = Math.round((managers[0].count || 0) / total * 100);
+    if (topPct > 70) {
+      alerts.push({
+        level: 'danger', icon: 'ê³¼ë¶í',
+        title: 'ë´ë¹ì ê³¼ë¶í',
+        body: `${managers[0].name}ì´(ê°) ì ì²´ ${topPct}% (${managers[0].count}ê±´) ë¨ë ì²ë¦¬ ì¤. ìë¬´ ë¶ì° íì.`
+      });
+    }
+  }
 
   const complaints = (d.tags?.labels || []).reduce((acc, lbl, i) => {
     if (lbl.includes('ì»´íë ì¸')) acc += (d.tags.values[i] || 0);
     return acc;
   }, 0);
-  const complaintRate = complaints / total;
-  let deductComplaint = 0;
-  if (complaintRate > 0.20)      deductComplaint = 25;
-  else if (complaintRate > 0.15) deductComplaint = 18;
-  else if (complaintRate > 0.10) deductComplaint = 10;
-  else if (complaintRate > 0.05) deductComplaint = 4;
-  score -= deductComplaint;
-
-  const slowRate = (rb['8ìê°+'] || 0) / resTotal;
-  const medRate  = (rb['2~8ìê°'] || 0) / resTotal;
-  let deductSlow = 0;
-  if (slowRate > 0.50)      deductSlow = 20;
-  else if (slowRate > 0.35) deductSlow = 14;
-  else if (slowRate > 0.20) deductSlow = 8;
-  if (medRate > 0.30)       deductSlow += 5;
-  score -= deductSlow;
-
-  const managers = (d.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
-  let deductConc = 0;
-  if (managers.length > 0) {
-    const topPct = (managers[0].count || 0) / total;
-    if (topPct > 0.85)      deductConc = 20;
-    else if (topPct > 0.70) deductConc = 12;
-    else if (topPct > 0.55) deductConc = 5;
+  const complaintPct = Math.round(complaints / total * 100);
+  if (complaintPct >= 15) {
+    alerts.push({
+      level: 'danger', icon: 'ê¸´ê¸',
+      title: 'ì»´íë ì¸ ê¸ì¦',
+      body: `ì»´íë ì¸ íê·¸ ${complaintPct}% (${complaints}ê±´) â ìë¹ì¤ íì§ ì¦ì ì ê² ê¶ì¥.`
+    });
   }
-  score -= deductConc;
 
-  const quickRate = ((rb['0~5ë¶'] || 0) + (rb['5~30ë¶'] || 0)) / resTotal;
-  if (quickRate > 0.50)      score += 10;
-  else if (quickRate > 0.30) score += 5;
+  const slowPct = Math.round((rb['8ìê°+'] || 0) / resTotal * 100);
+  if (slowPct > 40) {
+    alerts.push({
+      level: 'warn', icon: 'ì§ì°',
+      title: 'ì¥ìê° ë¯¸í´ê²° ë¤ì',
+      body: `ì ì²´ì ${slowPct}%ê° 8ìê° ì´ì ìì. ë¹ëê¸° ìëµ ì ì± ê²í  ê¶ì¥.`
+    });
+  }
 
-  if (d.summary.openChats > 10) score -= 5;
+  if (score < 50) {
+    alerts.push({
+      level: 'danger', icon: 'Dë±ê¸',
+      title: 'CS ê±´ê° ìí ë¨ê³',
+      body: `CS ê±´ê° ì ì ${score}ì  â ë³µí© ìí ìí. ê¸´ê¸ CS ì´ì ê°ì  íì.`
+    });
+  }
 
-  return {
-    score: Math.max(0, Math.min(100, Math.round(score))),
-    deductComplaint,
-    deductSlow,
-    deductConc,
-    complaintPct: Math.round(complaintRate * 100),
-    slowPct: Math.round(slowRate * 100),
-    topPct: managers.length > 0 ? Math.round((managers[0].count || 0) / total * 100) : 0,
-  };
+  if (!alerts.length) { strip.style.display = 'none'; return; }
+  strip.style.display = 'flex';
+  strip.innerHTML = alerts.map(a => `
+    <div class="alert-item ${a.level}">
+      <div class="al-icon al-label-badge">${a.icon}</div>
+      <div class="al-text">
+        <div class="al-title">${a.title}</div>
+        <div class="al-body">${a.body}</div>
+      </div>
+    </div>
+  `).join('');
 }
 
-function getGrade(score) {
-  if (score >= 80) return { grade: 'A', label: 'ìí¸', color: '#15803d' };
-  if (score >= 65) return { grade: 'B', label: 'ë³´íµ', color: '#b45309' };
-  if (score >= 50) return { grade: 'C', label: 'ì£¼ì', color: '#dc2626' };
-  return { grade: 'D', label: 'ìí', color: '#be123c' };
-}
+/* âââ Render: Action Command Center ââââââââââââââââââââââââââââââââââââââ */
+function renderActionCenter(d, scoreObj, insights) {
+  // ë¯¸ë°°ì  ì±í ì¦ì ì¡°ì¹ ë°°ë
+  const unassignedCount = d.summary?.unassignedChats || 0;
+  const banner = document.getElementById('acUnassignedBanner');
+  if (banner) {
+    if (unassignedCount > 0) {
+      banner.style.display = 'flex';
+      const countEl = document.getElementById('acUnassignedCount');
+      if (countEl) countEl.textContent = unassignedCount;
+      const descEl = document.getElementById('acUnassignedDesc');
+      if (descEl) descEl.textContent = `ë´ë¹ì ë¯¸ë°°ì  ì±í ${unassignedCount}ê±´ â ì¦ì ë°°ì  íì. ì±ëí¡ ê´ë¦¬ì > ë¯¸ë°°ì  í íì¸.`;
+    } else {
+      banner.style.display = 'none';
+    }
+  }
 
-/* âââ Auto-Insights âââââââââââââââââââââââââââââââââââââââââââââââââââââââ */
-function generateInsights(d, scoreObj) {
   const score = scoreObj.score;
-  const insights = [];
   const total = d.summary.totalChats || 1;
   const rb = d.resolutionBuckets || {};
   const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
   const managers = (d.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
 
-  const complaintPct = scoreObj.complaintPct;
-  if (complaintPct >= 15) {
-    insights.push({ type: 'danger', icon: 'ìí', text: `ì»´íë ì¸ ${complaintPct}% â ì¦ê° ëì íì (ê¸°ì¤: 15% ì´ê³¼)` });
-  } else if (complaintPct >= 8) {
-    insights.push({ type: 'warn', icon: 'ì£¼ì', text: `ì»´íë ì¸ ${complaintPct}% â ëª¨ëí°ë§ íì (ê¸°ì¤: 8% ì´ê³¼)` });
-  }
-
-  if (managers.length > 0) {
-    const topPct = Math.round((managers[0].count || 0) / total * 100);
-    const topName = managers[0].name.replace('ì¤í ì¤íì´_', '');
-    const unassigned = d.summary?.unassignedChats || 0;
-    if (topPct > 80) {
-      insights.push({ type: 'danger', icon: 'ìí', text: `${topName} ì§ì¤ë ${topPct}% â ìë¬´ í¸ì¤ ì¬ê° (ê¸°ì¤: 80% ì´ê³¼)${unassigned > 0 ? ` Â· ë¯¸ë°°ì  ${unassigned}ê±´` : ''}` });
-    } else if (topPct > 60) {
-      insights.push({ type: 'warn', icon: 'ì£¼ì', text: `${topName} ì§ì¤ë ${topPct}% â ì¬ë°°ì  ê²í  ê¶ì¥ (ê¸°ì¤: 60% ì´ê³¼)${unassigned > 0 ? ` Â· ë¯¸ë°°ì  ${unassigned}ê±´` : ''}` });
-    } else if (unassigned > 0) {
-      insights.push({ type: 'warn', icon: 'ì£¼ì', text: `ë¯¸ë°°ì  ${unassigned}ê±´ â ë´ë¹ì ì§ì  íì` });
-    }
-  }
-
+  const complaints = (d.tags?.labels || []).reduce((acc, lbl, i) => {
+    if (lbl.includes('ì»´íë ì¸')) acc += (d.tags.values[i] || 0);
+    return acc;
+  }, 0);
+  const complaintPct = Math.round(complaints / total * 100);
   const slowPct = Math.round((rb['8ìê°+'] || 0) / resTotal * 100);
-  if (slowPct > 30) {
-    insights.push({ type: 'warn', icon: 'ì§ì°', text: `8ìê°+ í´ê²° ${slowPct}% â ë¹ëê¸° ëê¸° í¬í¨ Â· ì ì± ì ê² íì (ê¸°ì¤: 30% ì´ê³¼)` });
-  }
-
   const quickPct = Math.round(((rb['0~5ë¶'] || 0) + (rb['5~30ë¶'] || 0)) / resTotal * 100);
-  if (quickPct >= 40) {
-    insights.push({ type: 'good', icon: 'ìí¸', text: `30ë¶ ë´ í´ê²° ${quickPct}% â ì ì ëì ìí¸ (ê¸°ì¤: 40% ì´ì)` });
-  }
 
-  const subIdx = (d.tags?.labels || []).findIndex(l => l.includes('ì ê¸°êµ¬ë'));
-  if (subIdx >= 0) {
-    const subPct = Math.round((d.tags.values[subIdx] || 0) / total * 100);
-    if (subPct >= 25) {
-      insights.push({ type: 'info', icon: 'ì ê²', text: `êµ¬ë ê´ë ¨ ë¬¸ì ${subPct}% â FAQ ìëí íë¡ì° ì ê² ê¶ì¥` });
+  // ââ ì¹´ë 1: ì¤ë ì¡°ì¹í  í­ëª© ââ
+  const todayItems = [];
+
+  if (d.summary.openChats > 0) {
+    todayItems.push({
+      type: 'danger', label: 'ì¦ì',
+      title: `ë¯¸í´ê²° ì¤í ì±í ${d.summary.openChats}ê±´`,
+      desc: 'ì¦ì íì¸ ë° ìëµ íì â ê³ ê° ëê¸° ì¤'
+    });
+  }
+  if (complaintPct >= 15) {
+    todayItems.push({
+      type: 'danger', label: 'ê¸´ê¸',
+      title: `ì»´íë ì¸ ${complaintPct}% (${complaints}ê±´)`,
+      desc: 'ìë¹ì¤ ë¶ë§ ê¸ì¦ â ìì¸ íì ë° ì¦ì ëì'
+    });
+  } else if (complaintPct >= 8) {
+    todayItems.push({
+      type: 'warn', label: 'ì£¼ì',
+      title: `ì»´íë ì¸ ${complaintPct}% (${complaints}ê±´)`,
+      desc: 'ì§ì ëª¨ëí°ë§ â ì¶ì´ ê´ì°° ê¶ì¥'
+    });
+  }
+  if (managers.length > 0) {
+    const topPct2 = Math.round((managers[0].count || 0) / total * 100);
+    if (topPct2 > 70) {
+      todayItems.push({
+        type: 'danger', label: 'ë¶ì°íì',
+        title: `${managers[0].name} ì§ì¤ë ${topPct2}%`,
+        desc: 'ë¨ë ì²ë¦¬ ê³¼ë¶í â ë´ë¹ì ì¶ê° ë°°ì  ê²í  Â· ì¬ë°°ì  í íì¸'
+      });
     }
   }
-
-  const openCount = d.summary.openChats || 0;
-  if (openCount > 0) {
-    insights.push({ type: 'warn', icon: 'ëê¸°', text: `ë¯¸í´ê²° ì¤í ì±í ${openCount}ê±´ â íì¬ ì²ë¦¬ ì¤` });
-  } else {
-    insights.push({ type: 'good', icon: 'ìë£', text: 'íì¬ ë¯¸í´ê²° ì±í ìì' });
+  // 8ìê°+ ê±´ì´ ë§ì¼ë©´ drill-down ìë´ (í­ëª© #7 ì°ê³)
+  if ((rb['8ìê°+'] || 0) > 0) {
+    todayItems.push({
+      type: 'info', label: 'íì¸',
+      title: `8ìê°+ ë¯¸í´ê²° ${rb['8ìê°+'] || 0}ê±´`,
+      desc: `<a class="ac-drill-link" href="#" onclick="openLongChatsPanel();return false;">â¸ ìì¸ ëª©ë¡ ë³´ê¸° (ë ì§Â·íê·¸Â·ë´ë¹ì)</a>`
+    });
   }
 
-  const vals = (d.dailyTrend?.values || []).filter(v => v > 0);
-  if (vals.length > 3) {
-    const peak = Math.max(...vals);
-    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
-    if (peak > avg * 3) {
-      insights.push({ type: 'info', icon: 'í¼í¬', text: `${d.summary.peakDay?.label} ì´ì ê¸ì¦ (${peak}ê±´ Â· íê·  ${Math.round(avg)}ê±´ ëë¹ ${Math.round(peak/avg)}ë°°)` });
-    }
+  if (todayItems.length === 0) {
+    todayItems.push({ type: 'good', label: 'ì ì', title: 'ì¡°ì¹ íì í­ëª© ìì', desc: 'CS ìí ìí¸ â ì ê¸° ëª¨ëí°ë§ ì ì§' });
   }
 
-  return insights;
-}
-
-/* âââ Render: Health Score + ê°ì  ìì¸ (í­ëª© #4) âââââââââââââââââââââââââ */
-const GRADE_STYLES = {
-  A: { bg: '#f0fdf4', border: '#86efac', color: '#15803d', barColor: '#22c55e' },
-  B: { bg: '#fef9ec', border: '#fcd34d', color: '#b45309', barColor: '#f59e0b' },
-  C: { bg: '#fff7ed', border: '#fdba74', color: '#ea580c', barColor: '#f97316' },
-  D: { bg: '#fff1f2', border: '#fda4af', color: '#be123c', barColor: '#f43f5e' },
-};
-const GRADE_CARD_BORDER = { A: '#a7f3d0', B: '#fde68a', C: '#fed7aa', D: '#fecdd3' };
+  const countEl = document.getElementById('acTodayCountARD_BORDER = { A: '#a7f3d0', B: '#fde68a', C: '#fed7aa', D: '#fecdd3' };
 
 function renderHealthScore(scoreObj, d) {
   const { score, deductComplaint, deductSlow, deductConc, complaintPct, slowPct, topPct } = scoreObj;
@@ -635,7 +663,7 @@ function renderKPIs(d, scoreObj) {
     <div class="kpi-card a-${complaintPct >= 15 ? 'rose' : complaintPct >= 8 ? 'amber' : 'green'}">
       <div class="kpi-label">ì»´íë ì¸ì¨</div>
       <div class="kpi-value">${complaintPct}<span class="unit">%</span></div>
-      <div class="kpi-meta"><span class="data-badge badge-real">ì¤ë°ì´í°</span><span class="delta ${complaintPct >= 15 ? 'bad' : complaintPct >= 8 ? 'warn' : 'good'}">${complaintPct >= 15 ? 'ì¦ì ëì' : complaintPct >= 8 ? 'ëª¨ëí°ë§' : 'ìí¸'}</span></div>
+      <div class="kpi-meta"><span class="data-badge badge-real">ì¤ë°ì´í°</span><span class="delta ${complaintPct >= 15 ? 'bad' : complaintPct >= 8 ? 'warn' : 'good'}">${complaintPct >= 15 ? 'ì¦ì ëì' : complaintPct >= 8 ? 'ëª¨ëí°ë§' : 'ìí¸'}|/span></div>
       <div class="kpi-meta" style="margin-top:2px"><span style="font-size:10px;color:var(--muted)">${complaintCount}ê±´</span></div>
     </div>
   `;
@@ -827,4 +855,306 @@ function renderHeatmap(d) {
     }
     const top3Hours = Object.entries(hourTotals)
       .filter(([, v]) => v > 0)
-      .sort((a, b) => b[1] - a[
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3);
+
+    // ìì¼ë³ ì ì²´ í©ì°
+    const dayLabels = ['ì', 'í', 'ì', 'ëª©', 'ê¸', 'í ', 'ì¼'];
+    const dayTotals = {};
+    for (let di = 0; di < 7; di++) {
+      dayTotals[di] = 0;
+      for (let h = 0; h < 24; h++) dayTotals[di] += hm[`${di}-${h}`] || 0;
+    }
+    const peakDayIdx = Object.entries(dayTotals).sort((a, b) => b[1] - a[1])[0];
+
+    hmPeakEl.innerHTML = `
+      <div class="hm-peak-title">í¼í¬ ì§ì¤ ìê°ë</div>
+      <div class="hm-peak-list">
+        ${top3Hours.map(([h, v], rank) => `
+          <div class="hm-peak-row rank-${rank + 1}">
+            <span class="hm-peak-rank">${rank + 1}ì</span>
+            <span class="hm-peak-hour">${h}ì</span>
+            <div class="hm-peak-bar-wrap"><div class="hm-peak-bar" style="width:${Math.round(v / (top3Hours[0][1] || 1) * 100)}%"></div></div>
+            <span class="hm-peak-val">${v}ê±´</span>
+          </div>
+        `).join('')}
+      </div>
+      ${peakDayIdx ? `<div class="hm-peak-day-note">ð ì£¼ê° ìµë¤: <strong>${dayLabels[parseInt(peakDayIdx[0])]}ìì¼</strong> (${peakDayIdx[1]}ê±´)</div>` : ''}
+    `;
+  }
+}
+
+/* âââ Render: Category Doughnut âââââââââââââââââââââââââââââââââââââââââââ */
+function renderCategory(d) {
+  const { tags, summary } = d;
+  if (!tags?.labels?.length) return;
+  if (charts.cat) charts.cat.destroy();
+  charts.cat = new Chart(document.getElementById('categoryChart').getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: tags.labels,
+      datasets: [{ data: tags.values, backgroundColor: COLORS, borderColor: '#fff', borderWidth: 2, hoverOffset: 6 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '56%',
+      plugins: {
+        legend: { position: 'right', labels: { boxWidth: 7, boxHeight: 7, padding: 9, usePointStyle: true, pointStyle: 'rect', font: { size: 10 } } },
+        tooltip: {
+          backgroundColor: '#1c1917', padding: 10, cornerRadius: 7,
+          callbacks: { label: ctx => `${ctx.label}: ${ctx.parsed}ê±´ (${((ctx.parsed / summary.totalChats) * 100).toFixed(1)}%)` }
+        }
+      }
+    }
+  });
+}
+
+/* âââ Render: Category Bars (í­ëª© #5 â ì»´íë ì¸ ë¶ë¦¬) ââââââââââââââââââââ */
+function renderCategoryBars(d) {
+  const { tags, summary } = d;
+  const total = summary.totalChats || 1;
+
+  // ì»´íë ì¸ ë¶ë¦¬: "ì»´íë ì¸" ì ì²´, "ì»´íë ì¸/ì´ì©ë¶ê°" ë³ë íì
+  const groups = {
+    'êµ¬ë ê´ë ¨':         { count: 0, color: '#0f766e',  badge: 'ì¤ë°ì´í°' },
+    'ì»´íë ì¸ (ì ì²´)':   { count: 0, color: '#be123c',  badge: 'ì¤ë°ì´í°' },
+    'ì»´íë ì¸/ì´ì©ë¶ê°': { count: 0, color: '#e11d48',  badge: 'ì¤ë°ì´í°' },
+    'ì´ì© ë¬¸ì':         { count: 0, color: '#1d4ed8',  badge: 'ì¤ë°ì´í°' },
+    'ê¸°í/ì´ì':         { count: 0, color: '#6d28d9',  badge: 'ì¤ë°ì´í°' },
+  };
+
+  (tags?.labels || []).forEach((lbl, i) => {
+    const val = tags.values[i] || 0;
+    if (lbl.includes('ì ê¸°êµ¬ë') || lbl === 'êµ¬ë')   groups['êµ¬ë ê´ë ¨'].count += val;
+    else if (lbl === 'ì»´íë ì¸/ì´ì©ë¶ê°')              groups['ì»´íë ì¸/ì´ì©ë¶ê°'].count += val;
+    else if (lbl.includes('ì»´íë ì¸'))                 groups['ì»´íë ì¸ (ì ì²´)'].count += val;
+    else if (lbl.includes('ì´ì©') || lbl.includes('ë¨ì')) groups['ì´ì© ë¬¸ì'].count += val;
+    else                                               groups['ê¸°í/ì´ì'].count += val;
+  });
+
+  // ì»´íë ì¸ ì ì²´ = ì¼ë° ì»´íë ì¸ + ì´ì©ë¶ê° (ì¤ë³µ ì¹´ì´í¸ ìì´ íì)
+  groups['ì»´íë ì¸ (ì ì²´)'].count += groups['ì»´íë ì¸/ì´ì©ë¶ê°'].count;
+
+  const items = Object.entries(groups)
+    .map(([label, g]) => ({ label, count: g.count, color: g.color, pct: Math.round(g.count / total * 100) }))
+    .sort((a, b) => b.count - a.count);
+
+  const maxCount = Math.max(...items.map(i => i.count), 1);
+  const el = document.getElementById('categoryBars');
+
+  // ì»´íë ì¸ ì ì²´ í©ê³ (ì ì²´ + ì´ì©ë¶ê° ì¤ë³µ ìì´ ì´ë¯¸ ê³ì°ë¨)
+  const complaintItem = items.find(i => i.label === 'ì»´íë ì¸ (ì ì²´)');
+  const complaintSummaryHtml = complaintItem && complaintItem.count > 0 ? `
+    <div class="cat-complaint-header">
+      <span class="cat-complaint-icon">â </span>
+      <span class="cat-complaint-label">ì»´íë ì¸ ì ì²´</span>
+      <span class="cat-complaint-count">${complaintItem.count}ê±´</span>
+      <span class="cat-complaint-pct">${complaintItem.pct}%</span>
+      ${complaintItem.pct >= 15 ? '<span class="cat-complaint-badge danger">ì¦ì ëì</span>' : complaintItem.pct >= 8 ? '<span class="cat-complaint-badge warn">ëª¨ëí°ë§</span>' : ''}
+    </div>
+  ` : '';
+
+  el.innerHTML = complaintSummaryHtml + items.map(item => `
+    <div class="cat-bar-row${item.label === 'ì»´íë ì¸ (ì ì²´)' ? ' cat-bar-row-complaint' : ''}">
+      <div class="cat-bar-label">${item.label}</div>
+      <div class="cat-bar-track">
+        <div class="cat-bar-fill" style="width:${Math.max(item.count / maxCount * 100, item.count > 0 ? 3 : 0)}%;background:${item.color}"></div>
+      </div>
+      <div class="cat-bar-val">${item.count}ê±´<span class="cat-pct">${item.pct}%</span></div>
+    </div>
+  `).join('');
+}
+
+/* âââ Render: Channel Chart âââââââââââââââââââââââââââââââââââââââââââââââ */
+function renderChannel(d) {
+  const { sources, summary } = d;
+  const total = summary.totalChats || 1;
+  const labels = ['ìì¬ ì±/ì¹', 'ì í'];
+  const values = [sources.native || 0, sources.phone || 0];
+  const bgColors = ['#0f766e', '#1d4ed8'];
+  if ((sources.other || 0) > 0) { labels.push('ê¸°í'); values.push(sources.other); bgColors.push('#a8a29e'); }
+
+  if (charts.ch) charts.ch.destroy();
+  charts.ch = new Chart(document.getElementById('channelChart').getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets: [{ data: values, backgroundColor: bgColors, borderRadius: 4, barThickness: 22 }] },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { backgroundColor: '#1c1917', padding: 9, cornerRadius: 7, callbacks: { label: ctx => `${ctx.parsed.x.toLocaleString()}ê±´ (${((ctx.parsed.x / total) * 100).toFixed(1)}%)` } }
+      },
+      scales: {
+        x: { ticks: { callback: v => v + 'ê±´', font: { size: 11 } }, grid: { color: '#f1efe8' }, beginAtZero: true },
+        y: { grid: { display: false }, ticks: { font: { size: 11.5 } } }
+      }
+    }
+  });
+}
+
+/* âââ Render: Channel Stats âââââââââââââââââââââââââââââââââââââââââââââââ */
+function renderChannelStats(d) {
+  const { sources, summary } = d;
+  const total = summary.totalChats || 1;
+  const items = [
+    { label: 'ìì¬ ì±/ì¹ (native)', count: sources.native || 0, color: '#0f766e' },
+    { label: 'ì í (phone)',        count: sources.phone || 0,  color: '#1d4ed8' },
+    { label: 'ê¸°í',                count: sources.other || 0,  color: '#a8a29e' },
+  ];
+  const el = document.getElementById('channelStats');
+  el.innerHTML = items.filter(s => s.count > 0).map(s => `
+    <div class="ch-stat">
+      <div class="ch-stat-dot" style="background:${s.color}"></div>
+      <div class="ch-stat-label">${s.label}</div>
+      <div class="ch-stat-count">${s.count.toLocaleString()}ê±´</div>
+      <div class="ch-stat-pct">${Math.round(s.count / total * 100)}%</div>
+    </div>
+  `).join('');
+}
+
+/* âââ Render: Resolution Time âââââââââââââââââââââââââââââââââââââââââââââ */
+function renderResolution(d) {
+  const rb = d.resolutionBuckets;
+  const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
+  const quick = (rb['0~5ë¶'] || 0) + (rb['5~30ë¶'] || 0);
+  const quickPct = Math.round(quick / resTotal * 100);
+  const slowPct  = Math.round((rb['8ìê°+'] || 0) / resTotal * 100);
+
+  const rs = d.resolutionStats || {};
+  // 0ì ë°ì´í° ììì¼ë¡ ì²ë¦¬ (ë¹ì´ìë resolutionStatsìì 0ì´ ë°íë  ì ìì)
+  const medianMin  = (rs.median  > 0) ? rs.median  : null;
+  const p90Min     = (rs.p90     > 0) ? rs.p90     : null;
+  const avgEx8hMin = (rs.avgEx8h > 0) ? rs.avgEx8h : null;
+
+  const resSummary = document.getElementById('resSummary');
+  if (resSummary) {
+    resSummary.innerHTML = `
+      <div class="res-big ${quickPct >= 50 ? 'good' : quickPct >= 30 ? 'warn' : 'bad'}">
+        <div class="res-big-val">${quickPct}%</div>
+        <div class="res-big-lbl">30ë¶ ë´ í´ê²°ë¥ </div>
+      </div>
+      <div class="res-big ${slowPct <= 20 ? 'good' : slowPct <= 40 ? 'warn' : 'bad'}">
+        <div class="res-big-val">${slowPct}%</div>
+        <div class="res-big-lbl">8ìê°+ ì¥ê¸°</div>
+        ${(rb['8ìê°+'] || 0) > 0 ? `<a href="#" class="drill-link" onclick="openLongChatsPanel();return false;">â¸ ìì¸ë³´ê¸°</a>` : ''}
+      </div>
+      <div class="res-big">
+        <div class="res-big-val">${d.summary.avgResolutionMin ?? 'â'}</div>
+        <div class="res-big-lbl">íê· (ë¶)</div>
+      </div>
+    `;
+  }
+
+  // ë³´ì¡° íµê³ ë¸ë¡ (ì¤ìê° Â· p90 Â· 8h+ì ì¸ íê· )
+  const resAuxEl = document.getElementById('resAuxStats');
+  if (resAuxEl) {
+    resAuxEl.innerHTML = `
+      <div class="res-aux-row">
+        <span class="res-aux-item" title="ì ì²´ í´ê²°ìê°ì ì¤ê°ê° â ê·¹ë¨ê°ì ë ë¯¼ê°í ëíê°">
+          <span class="res-aux-lbl">ì¤ìê°</span>
+          <span class="res-aux-val">${medianMin != null ? medianMin + 'ë¶' : 'â'}</span>
+          <span class="data-badge badge-calc" style="font-size:9px">ê³ì°ê°</span>
+        </span>
+        <span class="res-aux-item" title="ìì 10% ê¸°ì¤ì  â ì´ ê°ì ì´ê³¼íë©´ ì¥ê¸° ì¼ì´ì¤">
+          <span class="res-aux-lbl">90í¼ì¼íì¼</span>
+          <span class="res-aux-val">${p90Min != null ? p90Min + 'ë¶' : 'â'}</span>
+          <span class="data-badge badge-calc" style="font-size:9px">ê³ì°ê°</span>
+        </span>
+        <span class="res-aux-item" title="8ìê°+ ë¹ëê¸° ì±í ì ì¸ íê·  â ì¤ì  ìë ìê°ì ë ê·¼ì ">
+          <span class="res-aux-lbl">8h+ì ì¸ íê· </span>
+          <span class="res-aux-val ${avgEx8hMin != null && avgEx8hMin > 120 ? 'warn-text' : ''}">${avgEx8hMin != null ? avgEx8hMin + 'ë¶' : 'â'}</span>
+          <span class="data-badge badge-analyze" style="font-size:9px">ë¶ìê°</span>
+        </span>
+      </div>
+    `;
+  }
+
+  const buckets = [
+    { label: '0~5ë¶',      val: rb['0~5ë¶'] || 0,      cls: 'ok',   note: 'ì¢ì í´ê²°' },
+    { label: '5~30ë¶',     val: rb['5~30ë¶'] || 0,     cls: 'ok',   note: 'ì ì ì²ë¦¬' },
+    { label: '30ë¶~2ìê°', val: rb['30ë¶~2ìê°'] || 0, cls: 'warn', note: 'ì¼ë°' },
+    { label: '2~8ìê°',    val: rb['2~8ìê°'] || 0,    cls: 'warn', note: 'ì§ì°' },
+    { label: '8ìê°+',     val: rb['8ìê°+'] || 0,     cls: 'bad',  note: 'ë¹ëê¸°Â·ìµì¼' },
+  ];
+  const resList = document.getElementById('resList');
+  if (resList) {
+    resList.innerHTML = buckets.map(b => {
+      const pct = Math.round(b.val / resTotal * 100);
+      const barW = Math.max(pct, b.val > 0 ? 3 : 0);
+      const noteColor = b.cls === 'ok' ? 'var(--teal)' : b.cls === 'warn' ? '#b45309' : 'var(--rose)';
+      return `
+        <div class="rt-row">
+          <span class="rt-label">${b.label}</span>
+          <div class="rt-bar-wrap">
+            <div class="rt-bar ${b.cls}" style="width:${barW}%">
+              <span class="rt-bar-label${pct < 18 ? ' light' : ''}">${b.val}ê±´ Â· ${pct}%</span>
+            </div>
+          </div>
+          <span class="rt-value" style="color:${noteColor}">${b.note}</span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  const note = document.getElementById('avgResNote');
+  if (note) {
+    const avg = d.summary.avgResolutionMin;
+    note.textContent = avg != null
+      ? `ì ì²´ íê·  ${avg}ë¶ (â${Math.round(avg / 60 * 10) / 10}ìê°) Â· ë¹ëê¸° ì±í í¹ì±ì ê³ ê° ë¯¸ìëµ ìê° í¬í¨`
+      : 'íê·  í´ê²°ìê° ë°ì´í° ìì';
+  }
+}
+
+/* âââ Render: VOC (í­ëª© #8 â ë¹ì¨ ê¸°ë°ìì ëªíí) âââââââââââââââââââââââ */
+function renderVOC(d) {
+  const { tags, summary } = d;
+  const el = document.getElementById('vocList');
+  if (!tags?.labels?.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:12px">íê·¸ ë°ì´í° ìì</div>';
+    return;
+  }
+  const totalForPct = summary.totalChats || 1;
+  el.innerHTML = tags.labels.slice(0, 8).map((lbl, i) => {
+    const cnt = tags.values[i];
+    const pct = Math.round(cnt / totalForPct * 100);
+    const cls = pct >= 15 ? 'rising' : pct >= 8 ? 'warn-r' : '';
+    const ctx = VOC_CONTEXTS[lbl] || 'ê´ë ¨ ë¬¸ì';
+    // í­ëª© #8: ì ì£¼ ëë¹ ë¹êµ ìì´ "ë¹ì¨ ê¸°ë°" íììì ëªíí
+    const trendHtml = pct >= 15
+      ? '<span class="voc-trend up">ë¹ì¨ ìì</span>'
+      : pct >= 8
+        ? '<span class="voc-trend up" style="background:var(--amber-bg);color:var(--amber)">ì£¼ëª© íì</span>'
+        : '<span class="voc-trend flat">ì¼ë°</span>';
+    return `
+      <div class="voc-item ${cls}">
+        <div>
+          <div class="voc-keyword">#${lbl} ${trendHtml}</div>
+          <div class="voc-context">${ctx}</div>
+        </div>
+        <div class="voc-count">ì´ <strong>${cnt}</strong>ê±´</div>
+        <div class="voc-pct ${pct >= 15 ? 'pct-high' : pct >= 8 ? 'pct-mid' : 'pct-low'}">${pct}%</div>
+      </div>
+    `;
+  }).join('');
+}
+
+/* âââ Manager Sort State ââââââââââââââââââââââââââââââââââââââââââââââââââ */
+let agentSortKey = 'count';
+let lastManagerData = null;
+
+// í­ëª© #12: ì´ëª¨ì§ â íì¤í¸ ë¼ë²¨ ê¸°ë° ì½ë©í¸
+function agentComment(m, rank) {
+  if (!m.count) return '<span class="agent-comment off">ë¹íì±</span>';
+  if (rank === 0 && m.operatorScore > 30 && m.touchScore > 50)
+    return '<span class="agent-comment top">TOP í¼í¬ë¨¸</span>';
+  if (m.operatorScore < 10 && m.touchScore < 20)
+    return '<span class="agent-comment warn">ì½ì¹­ íì</span>';
+  if (m.touchScore < 20)
+    return '<span class="agent-comment warn">ìë ë³´ì</span>';
+  if (m.operatorScore < 10)
+    return '<span class="agent-comment warn">í¨ì¨ ì ê²</span>';
+  return '<span class="agent-comment normal">ì ì</span>';
+}
+
+/* âââ Render: Manager Rows (í­ëª© #3 â ë´ë¹ìë³ ê°ë³ í´ê²°ìê°) âââââââââââ */
+function renderManagerRows(managers, total, _avgRes) {
+  const tbody = document.getE
