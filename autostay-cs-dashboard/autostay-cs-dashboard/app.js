@@ -511,6 +511,36 @@ function renderActionCenter(d, scoreObj, insights) {
   }
 }
 
+/* ─── Render: Hero Quick Stats (hero-copy 하단 핵심 수치) ──────────────── */
+function renderHeroQuickStats(d, scoreObj) {
+  const el = document.getElementById('heroQuickStats');
+  if (!el) return;
+
+  const totalChats   = d.summary?.totalChats || 0;
+  const openChats    = d.summary?.openChats  ?? '—';
+  const complaintPct = scoreObj ? (scoreObj.complaintPct || 0) : 0;
+  const avgRes       = d.summary?.avgResolutionMin;
+
+  // 평균해결시간 포맷
+  let avgResText = '—';
+  if (avgRes != null && avgRes > 0) {
+    avgResText = avgRes >= 60
+      ? `${Math.floor(avgRes / 60)}h${avgRes % 60 > 0 ? Math.floor(avgRes % 60) + 'm' : ''}`
+      : `${Math.round(avgRes)}분`;
+  }
+
+  // 컴플레인율 색상
+  const complaintColor = complaintPct >= 15 ? 'var(--rose)' : complaintPct >= 8 ? 'var(--amber)' : 'var(--teal)';
+
+  document.getElementById('hqsTotal').textContent     = fmt(totalChats) + '건';
+  document.getElementById('hqsOpen').textContent      = openChats + '건';
+  document.getElementById('hqsComplaint').textContent = complaintPct + '%';
+  document.getElementById('hqsComplaint').style.color = complaintColor;
+  document.getElementById('hqsAvgRes').textContent    = avgResText;
+
+  el.style.display = 'flex';
+}
+
 /* ─── Render: KPI Grid (항목 #2 — 데이터 수집 기준 명시) ──────────────── */
 function renderKPIs(d, scoreObj) {
   const { summary } = d;
@@ -1563,6 +1593,7 @@ async function render() {
     const insights = generateInsights(data, scoreObj);
 
     renderHealthScore(scoreObj, data);
+    renderHeroQuickStats(data, scoreObj);
     renderKPIs(data, scoreObj);
     renderAlertStrip(data, scoreObj);
     renderInsights(insights);
@@ -1627,6 +1658,7 @@ async function silentRefresh() {
     const scoreObj = computeHealthScore(data);
     const insights = generateInsights(data, scoreObj);
     renderHealthScore(scoreObj, data);
+    renderHeroQuickStats(data, scoreObj);
     renderKPIs(data, scoreObj);
     renderAlertStrip(data, scoreObj);
     renderInsights(insights);
