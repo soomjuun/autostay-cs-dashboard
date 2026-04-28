@@ -241,9 +241,19 @@ function renderHealthScore(scoreObj, d) {
   if (deductSlow > 0)      factors.push({ label: '8시간+ 응답', val: `${slowPct}%`,      pct: Math.min(slowPct, 100),      deduct: deductSlow });
   if (deductConc > 0)      factors.push({ label: '집중도',     val: `${topPct}%`,       pct: Math.min(topPct, 100),       deduct: deductConc });
 
+  // 분석 기준 노트 (게이지 하단)
+  const basisNoteEl = document.getElementById('gaugeBasisNote');
+  if (basisNoteEl) {
+    const dn = d.dataNote || {};
+    const collected = dn.collected || d.summary?.totalChats || 0;
+    const rangeText = currentDays === 'all' ? `최근 ${dn.limit || 500}건 한도` : `최근 ${currentDays}일`;
+    basisNoteEl.textContent = `${rangeText} · ${collected}건 기준 분석`;
+  }
+
   if (factors.length === 0) {
     ss.innerHTML = '<div class="hf-row-ok">✓ 감점 요인 없음</div>';
   } else {
+    const totalDeduct = deductComplaint + deductSlow + deductConc;
     ss.innerHTML = factors.map(f => `
       <div class="hf-row">
         <span class="hf-row-label">${f.label}</span>
@@ -251,7 +261,7 @@ function renderHealthScore(scoreObj, d) {
         <span class="hf-row-val">${f.val}</span>
         <span class="hf-row-deduct" style="color:${gs.color}">-${f.deduct}점</span>
       </div>
-    `).join('');
+    `).join('') + `<div class="hf-total-row">총 감점 -${totalDeduct}점 / 100점</div>`;
   }
 }
 
@@ -339,6 +349,21 @@ function renderAlertStrip(d, scoreObj) {
 
 /* ─── Render: Action Command Center ────────────────────────────────────── */
 function renderActionCenter(d, scoreObj, insights) {
+  // 미배정 채팅 즉시 조치 배너
+  const unassignedCount = d.summary?.unassignedChats || 0;
+  const banner = document.getElementById('acUnassignedBanner');
+  if (banner) {
+    if (unassignedCount > 0) {
+      banner.style.display = 'flex';
+      const countEl = document.getElementById('acUnassignedCount');
+      if (countEl) countEl.textContent = unassignedCount;
+      const descEl = document.getElementById('acUnassignedDesc');
+      if (descEl) descEl.textContent = `담당자 미배정 채팅 ${unassignedCount}건 — 즉시 배정 필요. 채널톡 관리자 > 미배정 큐 확인.`;
+    } else {
+      banner.style.display = 'none';
+    }
+  }
+
   const score = scoreObj.score;
   const total = d.summary.totalChats || 1;
   const rb = d.resolutionBuckets || {};
@@ -487,7 +512,7 @@ function renderActionCenter(d, scoreObj, insights) {
 }
 
 /* ─── Render: KPI Grid (항목 #2 — 데이터 수집 기준 명시) ──────────────── */
-function renderKPIs(d) {
+function renderKPIs(d, scoreObj) {
   const { summary } = d;
   const managers = (d.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
   const topMgr   = managers[0];
@@ -500,6 +525,13 @@ function renderKPIs(d) {
   const rb          = d.resolutionBuckets || {};
   const resTotal    = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
   const quickPct    = Math.round(((rb['0~5분'] || 0) + (rb['5~30분'] || 0)) / resTotal * 100);
+
+  // 컴플레인 KPI (scoreObj로부터)
+  const complaintPct = scoreObj ? (scoreObj.complaintPct || 0) : 0;
+  const complaintCount = (d.tags?.labels || []).reduce((acc, lbl, i) => {
+    if (lbl.includes('컴플레인')) acc += (d.tags.values[i] || 0);
+    return acc;
+  }, 0);
 
   const TARGET_AVG_MIN  = 120;
   const TARGET_QUICK_PCT = 60;
@@ -519,6 +551,14 @@ function renderKPIs(d) {
   const basisNote  = currentDays === 'all'
     ? `${isSampled ? `⚠ 수집 상한(${limitVal}건) 도달 · 전체 기간 아님` : `수집 ${collected}건`} · closed 채팅 기준 · KST`
     : `최근 ${currentDays}일 · closed 채팅 최대 ${limitVal}건 기준 · ${totalChats}건 집계 · KST`;
+
+  // 분석 기준 헤더 표시
+  const kpiBasisHeaderEl = document.getElementById('kpiBasisHeader');
+  if (kpiBasisHeaderEl) {
+    kpiBasisHeaderEl.style.display = 'flex';
+    const sampledWarn = isSampled ? ` <span style="color:var(--amber);font-weight:700">⚠ 수집 상한(${limitVal}건) 도달</span>` : '';
+    kpiBasisHeaderEl.innerHTML = `<span>📊 분석 기준</span> <span style="font-weight:400;color:#0d9488">${currentDays === 'all' ? `최근 ${limitVal}건 한도` : `최근 ${currentDays}일`} · closed 채팅 <strong>${totalChats}건</strong> 집계 · KST 기준</span>${sampledWarn}`;
+  }
 
   const grid = document.getElementById('kpiGrid');
   if (!grid) return;
@@ -562,7 +602,12 @@ function renderKPIs(d) {
       <div class="kpi-value">${fmt(peakCount)}<span class="unit">건</span></div>
       <div class="kpi-meta"><span class="data-badge badge-real">실데이터</span><span class="delta bad">${peakLabel}</span></div>
     </div>
-    <div class="kpi-basis-note" id="kpiBasisNote">${basisNote}</div>
+    <div class="kpi-card a-${complaintPct >= 15 ? 'rose' : complaintPct >= 8 ? 'amber' : 'green'}">
+      <div class="kpi-label">컴플레인율</div>
+      <div class="kpi-value">${complaintPct}<span class="unit">%</span></div>
+      <div class="kpi-meta"><span class="data-badge badge-real">실데이터</span><span class="delta ${complaintPct >= 15 ? 'bad' : complaintPct >= 8 ? 'warn' : 'good'}">${complaintPct >= 15 ? '즉시 대응' : complaintPct >= 8 ? '모니터링' : '양호'}</span></div>
+      <div class="kpi-meta" style="margin-top:2px"><span style="font-size:10px;color:var(--muted)">${complaintCount}건</span></div>
+    </div>
   `;
 }
 
@@ -917,9 +962,10 @@ function renderResolution(d) {
   const slowPct  = Math.round((rb['8시간+'] || 0) / resTotal * 100);
 
   const rs = d.resolutionStats || {};
-  const medianMin  = rs.median  ?? null;
-  const p90Min     = rs.p90     ?? null;
-  const avgEx8hMin = rs.avgEx8h ?? null;
+  // 0은 데이터 없음으로 처리 (비어있는 resolutionStats에서 0이 반환될 수 있음)
+  const medianMin  = (rs.median  > 0) ? rs.median  : null;
+  const p90Min     = (rs.p90     > 0) ? rs.p90     : null;
+  const avgEx8hMin = (rs.avgEx8h > 0) ? rs.avgEx8h : null;
 
   const resSummary = document.getElementById('resSummary');
   if (resSummary) {
@@ -1319,7 +1365,7 @@ function renderBotsGroups(d) {
         <div class="panel-title">자동화 효과</div>
         <div class="panel-sub">챗봇 · FAQ · 셀프 해결 성과</div>
       </div>
-      <span class="data-badge badge-calc" title="해결시간 구간 데이터 기반 추정값 · 채널톡 API는 챗봇 해결률을 직접 제공하지 않음">≈ 계산값</span>
+      <span class="data-badge badge-analyze" title="해결시간 구간 데이터 기반 추정값 · 채널톡 API는 챗봇 해결률을 직접 제공하지 않음">≈ 추정값</span>
     </div>
 
     <!-- 2-KPI 카드 행 -->
@@ -1517,7 +1563,7 @@ async function render() {
     const insights = generateInsights(data, scoreObj);
 
     renderHealthScore(scoreObj, data);
-    renderKPIs(data);
+    renderKPIs(data, scoreObj);
     renderAlertStrip(data, scoreObj);
     renderInsights(insights);
     renderActionCenter(data, scoreObj, insights);
@@ -1581,7 +1627,7 @@ async function silentRefresh() {
     const scoreObj = computeHealthScore(data);
     const insights = generateInsights(data, scoreObj);
     renderHealthScore(scoreObj, data);
-    renderKPIs(data);
+    renderKPIs(data, scoreObj);
     renderAlertStrip(data, scoreObj);
     renderInsights(insights);
     renderActionCenter(data, scoreObj, insights);
