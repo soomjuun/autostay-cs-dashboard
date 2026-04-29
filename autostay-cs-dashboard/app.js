@@ -396,10 +396,10 @@ function renderActionCenter(d, scoreObj, insights) {
     : `${(avgRes / 60).toFixed(1)}h`;
 
   const pulseMetrics = [
-    { label: '미해결',    value: `${openChats}건`,       color: openChats > 5 ? 'red' : openChats > 0 ? 'amber' : 'green' },
-    { label: '평균응답',  value: avgResStr,               color: avgRes == null ? 'blue' : avgRes > 120 ? 'amber' : 'green' },
-    { label: '컴플레인율', value: `${complaintPct}%`,    color: complaintPct >= 15 ? 'red' : complaintPct >= 8 ? 'amber' : 'green' },
-    { label: '30분↓해결', value: `${quickPct}%`,         color: quickPct >= 60 ? 'green' : quickPct >= 30 ? 'amber' : 'red' }
+    { label: '미배정',    value: `${unassignedCount}건`, color: unassignedCount > 0 ? 'red' : 'green' },
+    { label: '오픈',      value: `${openChats}건`,       color: openChats > 5 ? 'red' : openChats > 0 ? 'amber' : 'green' },
+    { label: '8h+',       value: `${rb['8시간+'] || 0}건`, color: (rb['8시간+'] || 0) > 5 ? 'red' : (rb['8시간+'] || 0) > 0 ? 'amber' : 'green' },
+    { label: '컴플레인',  value: `${complaintPct}%`,    color: complaintPct >= 15 ? 'red' : complaintPct >= 8 ? 'amber' : 'green' }
   ];
 
   const pulseEl = document.getElementById('acPulseMetrics');
@@ -413,26 +413,21 @@ function renderActionCenter(d, scoreObj, insights) {
     `).join('');
   }
 
-  // ── Col 1: 조치 필요 항목 ──
+  // ── Col 1: 조치 필요 항목 (우선순위: 미배정 → 담당자편중 → 8h+ → 오픈 → 컴플레인) ──
   const todayItems = [];
+  const topMgrPct = managers.length > 0 ? Math.round((managers[0].count || 0) / total * 100) : 0;
 
-  if (openChats > 0) {
-    todayItems.push({ type: 'danger', title: '미해결 오픈 채팅', desc: '즉시 확인 및 응답 — 고객 대기 중', metric: openChats + '건' });
-  }
+  // 1순위: 미배정
   if (unassignedCount > 0) {
-    todayItems.push({ type: 'danger', title: '미배정 채팅', desc: '담당자 즉시 배정 필요', metric: unassignedCount + '건' });
+    todayItems.push({ type: 'danger', title: '미배정 채팅', desc: '채널톡 관리자 &gt; 미배정 큐에서 즉시 배정 필요', metric: unassignedCount + '건' });
   }
-  if (complaintPct >= 15) {
-    todayItems.push({ type: 'danger', title: '컴플레인 급증', desc: '서비스 불만 — 원인 파악 및 즉시 대응', metric: complaintPct + '%' });
-  } else if (complaintPct >= 8) {
-    todayItems.push({ type: 'warn', title: '컴플레인 증가', desc: '지속 모니터링 — 추이 관찰 권장', metric: complaintPct + '%' });
+
+  // 2순위: 담당자 편중 (과부하)
+  if (managers.length > 0 && topMgrPct > 70) {
+    todayItems.push({ type: 'danger', title: `${managers[0].name.replace('오토스테이_','')} 과부하`, desc: '담당자 편중 ' + topMgrPct + '% — 추가 배정 검토 필요', metric: topMgrPct + '%' });
   }
-  if (managers.length > 0) {
-    const topPct = Math.round((managers[0].count || 0) / total * 100);
-    if (topPct > 70) {
-      todayItems.push({ type: 'danger', title: `${managers[0].name} 과부하`, desc: '담당자 추가 배정 검토 필요', metric: topPct + '%' });
-    }
-  }
+
+  // 3순위: 8시간+ 미해결
   if ((rb['8시간+'] || 0) > 0) {
     todayItems.push({
       type: 'warn', title: '8시간+ 미해결',
@@ -440,8 +435,23 @@ function renderActionCenter(d, scoreObj, insights) {
       metric: (rb['8시간+'] || 0) + '건'
     });
   }
+
+  // 4순위: 오픈 채팅 (미응답)
+  if (openChats > 0) {
+    todayItems.push({ type: openChats > 5 ? 'danger' : 'warn', title: '미해결 오픈 채팅', desc: '최근 동기화 기준 고객 대기 중', metric: openChats + '건' });
+  }
+
+  // 5순위: 컴플레인
+  if (complaintPct >= 15) {
+    todayItems.push({ type: 'danger', title: '컴플레인 급증', desc: '위험 기준(15%) 초과 — 원인 파악 및 즉시 대응', metric: complaintPct + '%' });
+  } else if (complaintPct >= 14) {
+    todayItems.push({ type: 'warn', title: '컴플레인 위험 근접', desc: '위험 기준 1%p 미만 — 집중 모니터링 필요', metric: complaintPct + '%' });
+  } else if (complaintPct >= 8) {
+    todayItems.push({ type: 'warn', title: '컴플레인 증가', desc: '주의 기준(8%) 초과 — 추이 관찰 권장', metric: complaintPct + '%' });
+  }
+
   if (todayItems.length === 0) {
-    todayItems.push({ type: 'good', title: '조치 필요 항목 없음', desc: 'CS 상태 양호 — 정기 모니터링 유지', metric: '✓' });
+    todayItems.push({ type: 'good', title: '조치 필요 항목 없음', desc: 'CS 상태 양호 — 최근 동기화 기준 5분 주기 갱신', metric: '✓' });
   }
 
   const urgentCount = todayItems.filter(i => i.type === 'danger').length;
@@ -574,112 +584,118 @@ function renderHeroQuickStats(d, scoreObj) {
   el.style.display = 'flex';
 }
 
-/* ─── Render: KPI Grid (항목 #2 — 데이터 수집 기준 명시) ──────────────── */
+/* ─── Render: KPI Grid (5카드: 미배정·오픈·8h+·컴플레인·담당자편중) ─── */
 function renderKPIs(d, scoreObj) {
   const { summary } = d;
-  const managers = (d.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
-  const topMgr   = managers[0];
-  const totalChats  = summary.totalChats;
-  const openChats   = summary.openChats;
-  const avgRes      = summary.avgResolutionMin;
-  const peakCount   = summary.peakDay?.count || 0;
-  const peakLabel   = summary.peakDay?.label || '—';
-  const topPct      = topMgr ? Math.round((topMgr.count / totalChats) * 100) : 0;
+  const managers    = (d.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
+  const topMgr      = managers[0];
+  const totalChats  = summary.totalChats || 1;
+  const openChats   = summary.openChats  || 0;
+  const unassigned  = summary.unassignedChats || 0;
   const rb          = d.resolutionBuckets || {};
   const resTotal    = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
-  const quickPct    = Math.round(((rb['0~5분'] || 0) + (rb['5~30분'] || 0)) / resTotal * 100);
+  const slow8h      = rb['8시간+'] || 0;
+  const slow8hPct   = Math.round(slow8h / resTotal * 100);
+  const topPct      = topMgr ? Math.round((topMgr.count / totalChats) * 100) : 0;
 
-  // 컴플레인 KPI (scoreObj로부터)
-  const complaintPct = scoreObj ? (scoreObj.complaintPct || 0) : 0;
+  // 컴플레인
+  const complaintPct   = scoreObj ? (scoreObj.complaintPct || 0) : 0;
   const complaintCount = (d.tags?.labels || []).reduce((acc, lbl, i) => {
     if (lbl.includes('컴플레인')) acc += (d.tags.values[i] || 0);
     return acc;
   }, 0);
+  // 위험 기준 근접 여부 (위험=15%, 경고=8%)
+  const complaintNear15 = complaintPct >= 14 && complaintPct < 15;
+  const complaintNear8  = complaintPct >= 7  && complaintPct < 8;
 
-  const TARGET_AVG_MIN  = 120;
-  const TARGET_QUICK_PCT = 60;
-  const avgResFill  = avgRes != null ? Math.min(Math.round((TARGET_AVG_MIN / Math.max(avgRes, 1)) * 100), 100) : 0;
-  const avgResClass = avgRes != null && avgRes <= TARGET_AVG_MIN ? '' : avgRes <= TARGET_AVG_MIN * 1.5 ? 'warn' : 'danger';
-  const quickFill   = Math.min(quickPct, 100);
-  const quickClass  = quickPct >= TARGET_QUICK_PCT ? '' : quickPct >= TARGET_QUICK_PCT * 0.7 ? 'warn' : 'danger';
-
-  // 수집 기준 문구 (항목 #1 — 탭 명칭, #2 — 기준 명시)
+  // 수집 기준 문구
   const dataNote   = d.dataNote || {};
-  const collected  = dataNote.collected  || 0;
-  const isSampled  = dataNote.isSampled  || false;
-  const limitVal   = dataNote.limit      || 500;
-  const rangeLabel = currentDays === 'all'
-    ? (isSampled ? `최근 ${limitVal}건 한도` : `수집 ${collected}건`)
-    : `${currentDays}일`;
-  const basisNote  = currentDays === 'all'
-    ? `${isSampled ? `⚠ 수집 상한(${limitVal}건) 도달 · 전체 기간 아님` : `수집 ${collected}건`} · closed 채팅 기준 · KST`
-    : `최근 ${currentDays}일 · closed 채팅 최대 ${limitVal}건 기준 · ${totalChats}건 집계 · KST`;
+  const collected  = dataNote.collected || 0;
+  const isSampled  = dataNote.isSampled || false;
+  const limitVal   = dataNote.limit     || 500;
 
   // 분석 기준 헤더 표시
   const kpiBasisHeaderEl = document.getElementById('kpiBasisHeader');
   if (kpiBasisHeaderEl) {
     kpiBasisHeaderEl.style.display = 'flex';
     const sampledWarn = isSampled ? ` <span style="color:var(--amber);font-weight:700">⚠ 수집 상한(${limitVal}건) 도달</span>` : '';
-    kpiBasisHeaderEl.innerHTML = `<span>📊 분석 기준</span> <span style="font-weight:400;color:#0d9488">${currentDays === 'all' ? `최근 ${limitVal}건 한도` : `최근 ${currentDays}일`} · closed 채팅 <strong>${totalChats}건</strong> 집계 · KST 기준</span>${sampledWarn}`;
+    kpiBasisHeaderEl.innerHTML = `<span>📊 분석 기준</span> <span style="font-weight:400;color:#0d9488">${currentDays === 'all' ? `최근 ${limitVal}건 한도` : `최근 ${currentDays}일`} · closed 채팅 <strong>${totalChats}건</strong> 집계 · 최근 동기화 기준 5분 주기 갱신 · KST</span>${sampledWarn}`;
   }
 
   const grid = document.getElementById('kpiGrid');
   if (!grid) return;
 
   grid.innerHTML = `
-    <div class="kpi-card">
-      <div class="kpi-label">분석 채팅 수</div>
-      <div class="kpi-value">${fmt(totalChats)}<span class="unit">건</span></div>
-      <div class="kpi-meta"><span class="data-badge badge-real">실데이터</span><span class="delta neutral">${rangeLabel}</span></div>
+    <div class="kpi-card a-${unassigned > 0 ? 'rose' : 'green'}">
+      <div class="kpi-label">미배정</div>
+      <div class="kpi-value">${fmt(unassigned)}<span class="unit">건</span></div>
+      <div class="kpi-meta">
+        <span class="data-badge badge-real">실데이터</span>
+        <span class="delta ${unassigned > 0 ? 'bad' : 'good'}">${unassigned > 0 ? '즉시 배정' : '없음'}</span>
+      </div>
+      ${unassigned > 0 ? `<div class="kpi-meta" style="margin-top:3px"><span style="font-size:10px;color:var(--rose);font-weight:700">⚠ 담당자 미배정</span></div>` : ''}
     </div>
+
     <div class="kpi-card a-${openChats > 5 ? 'rose' : openChats > 0 ? 'amber' : 'green'}">
-      <div class="kpi-label">현재 오픈</div>
+      <div class="kpi-label">오픈 채팅</div>
       <div class="kpi-value">${fmt(openChats)}<span class="unit">건</span></div>
-      <div class="kpi-meta"><span class="data-badge badge-real">실데이터</span><span class="delta ${openChats === 0 ? 'good' : 'bad'}">${openChats === 0 ? '없음' : '진행중'}</span><span class="delta-lbl">실시간</span></div>
-    </div>
-    <div class="kpi-card a-${avgResClass === 'danger' ? 'rose' : avgResClass === 'warn' ? 'amber' : 'green'}">
-      <div class="kpi-label">평균 해결시간</div>
-      <div class="kpi-value">${fmt(avgRes)}<span class="unit">분</span></div>
-      <div class="kpi-meta"><span class="data-badge badge-calc">계산값</span><span class="delta neutral">목표 ${TARGET_AVG_MIN}분</span></div>
-      <div class="kpi-target-wrap">
-        <div class="kpi-target-label"><span>달성률</span><span>${avgResFill}%</span></div>
-        <div class="kpi-target"><div class="kpi-target-fill ${avgResClass}" style="width:${avgResFill}%"></div></div>
+      <div class="kpi-meta">
+        <span class="data-badge badge-real">실데이터</span>
+        <span class="delta ${openChats === 0 ? 'good' : openChats > 5 ? 'bad' : 'neutral'}">${openChats === 0 ? '없음' : '진행중'}</span>
       </div>
     </div>
-    <div class="kpi-card a-${quickPct >= TARGET_QUICK_PCT ? 'green' : quickPct >= 30 ? 'amber' : 'rose'}">
-      <div class="kpi-label">30분 내 해결률</div>
-      <div class="kpi-value">${quickPct}<span class="unit">%</span></div>
-      <div class="kpi-meta"><span class="data-badge badge-calc">계산값</span><span class="delta ${quickPct >= TARGET_QUICK_PCT ? 'good' : 'bad'}">${quickPct >= TARGET_QUICK_PCT ? '목표 달성' : '개선 필요'}</span></div>
-      <div class="kpi-target-wrap">
-        <div class="kpi-target-label"><span>목표 ${TARGET_QUICK_PCT}%</span><span>${quickFill}%</span></div>
-        <div class="kpi-target"><div class="kpi-target-fill ${quickClass}" style="width:${quickFill}%"></div></div>
+
+    <div class="kpi-card a-${slow8h > 10 ? 'rose' : slow8h > 0 ? 'amber' : 'green'}">
+      <div class="kpi-label">8시간+ 미해결</div>
+      <div class="kpi-value">${fmt(slow8h)}<span class="unit">건</span></div>
+      <div class="kpi-meta">
+        <span class="data-badge badge-calc">계산값</span>
+        <span class="delta ${slow8h === 0 ? 'good' : slow8h > 10 ? 'bad' : 'neutral'}">${slow8hPct}%</span>
       </div>
+      ${slow8h > 0 ? `<div class="kpi-meta" style="margin-top:2px"><a href="#" onclick="openLongChatsPanel();return false;" style="font-size:10px;color:var(--rose)">▸ 상세 보기</a></div>` : ''}
     </div>
-    <div class="kpi-card a-${topPct > 80 ? 'rose' : topPct > 60 ? 'amber' : 'green'}">
-      <div class="kpi-label">주담당자 집중도</div>
-      <div class="kpi-value">${topPct}<span class="unit">%</span></div>
-      <div class="kpi-meta"><span class="data-badge badge-calc">계산값</span><span class="delta neutral">${topMgr?.name || '—'}</span></div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">일 최고 피크</div>
-      <div class="kpi-value">${fmt(peakCount)}<span class="unit">건</span></div>
-      <div class="kpi-meta"><span class="data-badge badge-real">실데이터</span><span class="delta bad">${peakLabel}</span></div>
-    </div>
+
     <div class="kpi-card a-${complaintPct >= 15 ? 'rose' : complaintPct >= 8 ? 'amber' : 'green'}">
       <div class="kpi-label">컴플레인율</div>
       <div class="kpi-value">${complaintPct}<span class="unit">%</span></div>
-      <div class="kpi-meta"><span class="data-badge badge-real">실데이터</span><span class="delta ${complaintPct >= 15 ? 'bad' : complaintPct >= 8 ? 'warn' : 'good'}">${complaintPct >= 15 ? '즉시 대응' : complaintPct >= 8 ? '모니터링' : '양호'}</span></div>
-      <div class="kpi-meta" style="margin-top:2px"><span style="font-size:10px;color:var(--muted)">${complaintCount}건</span></div>
+      <div class="kpi-meta">
+        <span class="data-badge badge-real">실데이터</span>
+        <span class="delta ${complaintPct >= 15 ? 'bad' : complaintPct >= 8 ? 'neutral' : 'good'}">${complaintPct >= 15 ? '즉시 대응' : complaintPct >= 8 ? '모니터링' : '양호'}</span>
+      </div>
+      ${complaintNear15 ? `<div class="kpi-meta" style="margin-top:2px"><span style="font-size:9.5px;color:var(--rose);font-weight:700">⚠ 위험 기준 1%p 미만</span></div>`
+        : complaintNear8 ? `<div class="kpi-meta" style="margin-top:2px"><span style="font-size:9.5px;color:var(--amber);font-weight:700">주의 기준 1%p 미만</span></div>`
+        : `<div class="kpi-meta" style="margin-top:2px"><span style="font-size:10px;color:var(--muted)">${complaintCount}건</span></div>`}
+    </div>
+
+    <div class="kpi-card a-${topPct > 80 ? 'rose' : topPct > 60 ? 'amber' : 'green'}">
+      <div class="kpi-label">담당자 편중</div>
+      <div class="kpi-value">${topPct}<span class="unit">%</span></div>
+      <div class="kpi-meta">
+        <span class="data-badge badge-calc">계산값</span>
+        <span class="delta ${topPct > 80 ? 'bad' : topPct > 60 ? 'neutral' : 'good'}">${topPct > 80 ? '과부하' : topPct > 60 ? '주의' : '분산 양호'}</span>
+      </div>
+      <div class="kpi-meta" style="margin-top:2px"><span style="font-size:10px;color:var(--muted)">${topMgr?.name?.replace('오토스테이_','') || '—'}</span></div>
     </div>
   `;
 }
 
-/* ─── Render: Trend Chart ───────────────────────────────────────────────── */
+/* ─── Helper: 7일 이동 평균 계산 ────────────────────────────────────────── */
+function computeMovingAvg(values, window = 7) {
+  return values.map((_, i) => {
+    const start = Math.max(0, i - window + 1);
+    const slice = values.slice(start, i + 1);
+    const sum = slice.reduce((a, b) => a + b, 0);
+    return Math.round(sum / slice.length);
+  });
+}
+
+/* ─── Render: Trend Chart (7일 이동평균 추가) ──────────────────────────── */
 function renderTrend(d) {
   const { dailyTrend, summary } = d;
   const activeVals = dailyTrend.values.filter(v => v > 0);
-  const avg = activeVals.length ? Math.round(activeVals.reduce((a, b) => a + b, 0) / activeVals.length) : 0;
+  const avg  = activeVals.length ? Math.round(activeVals.reduce((a, b) => a + b, 0) / activeVals.length) : 0;
   const peak = Math.max(...dailyTrend.values, 0);
+  const ma7  = computeMovingAvg(dailyTrend.values, 7);
 
   document.getElementById('trendTotal').textContent = fmt(summary.totalChats);
   document.getElementById('trendPeak').textContent = fmt(peak);
@@ -693,7 +709,8 @@ function renderTrend(d) {
   document.getElementById('trendLegend').innerHTML = `
     <span class="trend-legend-item"><span style="width:10px;height:10px;border-radius:2px;background:#0f766e;display:inline-block"></span>일반</span>
     <span class="trend-legend-item"><span style="width:10px;height:10px;border-radius:2px;background:#be123c;display:inline-block"></span>피크</span>
-    <span class="trend-legend-item"><span style="width:22px;height:3px;background:none;border-top:1.5px dashed #f59e0b;display:inline-block"></span>평균선</span>
+    <span class="trend-legend-item"><span style="width:22px;height:3px;background:none;border-top:1.5px dashed #f59e0b;display:inline-block"></span>활성일평균</span>
+    <span class="trend-legend-item"><span style="width:22px;height:3px;background:none;border-top:2px solid #6d28d9;display:inline-block"></span>7일이동평균</span>
   `;
 
   if (charts.trend) charts.trend.destroy();
@@ -708,13 +725,19 @@ function renderTrend(d) {
           backgroundColor: dailyTrend.values.map(v =>
             v >= peak * 0.8 ? '#be123c' : v >= peak * 0.45 ? '#0f766e' : '#14b8a6'
           ),
-          borderRadius: 3, borderSkipped: false,
+          borderRadius: 3, borderSkipped: false, order: 2,
         },
         {
-          label: '일 평균',
+          label: '활성일 평균',
           data: Array(dailyTrend.labels.length).fill(avg),
           type: 'line', borderColor: '#f59e0b', borderWidth: 1.5,
-          borderDash: [5, 4], pointRadius: 0, fill: false, tension: 0,
+          borderDash: [5, 4], pointRadius: 0, fill: false, tension: 0, order: 1,
+        },
+        {
+          label: '7일 이동평균',
+          data: ma7,
+          type: 'line', borderColor: '#6d28d9', borderWidth: 2,
+          pointRadius: 0, fill: false, tension: 0.35, order: 0,
         }
       ]
     },
@@ -724,7 +747,13 @@ function renderTrend(d) {
         legend: { display: false },
         tooltip: {
           backgroundColor: '#1c1917', padding: 10, cornerRadius: 7,
-          callbacks: { label: ctx => ctx.dataset.type === 'line' ? `평균: ${ctx.parsed.y}건` : `${ctx.parsed.y}건` }
+          callbacks: {
+            label: ctx => {
+              if (ctx.dataset.label === '7일 이동평균') return `7일MA: ${ctx.parsed.y}건`;
+              if (ctx.dataset.label === '활성일 평균') return `평균: ${ctx.parsed.y}건`;
+              return `${ctx.parsed.y}건`;
+            }
+          }
         },
         annotation: {
           annotations: peak > avg * 2 ? {
@@ -886,6 +915,25 @@ function renderHeatmap(d) {
       </div>
       ${peakDayIdx ? `<div class="hm-peak-day-note">📅 주간 최다: <strong>${dayLabels[parseInt(peakDayIdx[0])]}요일</strong> (${peakDayIdx[1]}건)</div>` : ''}
     `;
+
+    // ── 피크 시간대 운영 권고 ─────────────────────────────────────────────
+    const hmStaffingEl = document.getElementById('hmStaffingGuide');
+    if (hmStaffingEl && top3Hours.length > 0) {
+      const peakHours = top3Hours.map(([h]) => `${h}시`).join(', ');
+      const peak1 = top3Hours[0] ? parseInt(top3Hours[0][0]) : null;
+      const prepHour = peak1 !== null ? `${peak1 - 1 >= 0 ? peak1 - 1 : 23}시` : '—';
+      hmStaffingEl.innerHTML = `
+        <div class="hm-staffing-title">📋 피크 시간대 운영 권고</div>
+        <div class="hm-staffing-row">
+          <span class="hm-staffing-icon">👥</span>
+          <span class="hm-staffing-text">집중 시간대 <strong>${peakHours}</strong> — 담당자 추가 배치 권장</span>
+        </div>
+        <div class="hm-staffing-row">
+          <span class="hm-staffing-icon">⏰</span>
+          <span class="hm-staffing-text">피크 30분 전 (<strong>${prepHour} 30분~</strong>) 사전 준비 권장</span>
+        </div>
+      `;
+    }
   }
 }
 
@@ -1143,7 +1191,7 @@ function renderVOC(d) {
 }
 
 /* ─── Manager Sort State ────────────────────────────────────────────────── */
-let agentSortKey = 'count';
+let agentSortKey = 'risk';
 let lastManagerData = null;
 
 // 항목 #12: 이모지 → 텍스트 라벨 기반 코멘트
@@ -1167,8 +1215,69 @@ function renderManagerRows(managers, total, _avgRes) {
     tbody.innerHTML = '<tr><td colspan="9" class="tbl-loading">담당자 데이터 없음</td></tr>';
     return;
   }
-  const sorted = [...managers].sort((a, b) => (b[agentSortKey] || 0) - (a[agentSortKey] || 0));
+  const sorted = [...managers].sort((a, b) => {
+    if (agentSortKey === 'risk') {
+      const riskScore = m => {
+        const concPct = total > 0 ? (m.count / total * 100) : 0;
+        const resFactor = Math.min((m.avgResolutionMin || 0) / 30, 30);
+        return concPct + resFactor;
+      };
+      return riskScore(b) - riskScore(a);
+    }
+    if (agentSortKey === 'avgResolution') {
+      return (b.avgResolutionMin || 0) - (a.avgResolutionMin || 0);
+    }
+    if (agentSortKey === 'operatorScore') return (b.operatorScore || 0) - (a.operatorScore || 0);
+    if (agentSortKey === 'touchScore') return (b.touchScore || 0) - (a.touchScore || 0);
+    return (b[agentSortKey] || 0) - (a[agentSortKey] || 0);
+  });
 
+  // ── 모바일 카드 렌더링 ──────────────────────────────────────────────────
+  const cardsEl = document.getElementById('agentCards');
+  if (cardsEl) {
+    cardsEl.innerHTML = sorted.map((m, i) => {
+      const origRank = managers.indexOf(m);
+      const topPct   = total > 0 ? Math.round(m.count / total * 100) : 0;
+      const isActive = m.count > 0;
+      const opColor  = m.operatorScore > 30 ? 'var(--teal)' : m.operatorScore > 10 ? 'var(--amber)' : 'var(--muted)';
+      const tcColor  = m.touchScore > 50    ? 'var(--teal)' : m.touchScore > 20    ? 'var(--amber)' : 'var(--muted)';
+      const rankLabel = isActive ? i + 1 : '—';
+      const badgeHtml = origRank === 0 && isActive ? '<span class="badge-top">주담당</span>'
+                      : !isActive ? '<span class="badge-off">비활성</span>' : '';
+      const resText = isActive && m.avgResolutionMin != null ? `${m.avgResolutionMin}분` : isActive ? '—' : '—';
+      return `
+        <div class="agent-mobile-card">
+          <div class="amc-header">
+            <span class="amc-rank">${rankLabel}</span>
+            <div class="amc-avatar" style="${avatarStyle(origRank)}">${initials(m.name)}</div>
+            <span class="amc-name">${m.name.replace('오토스테이_', '')}</span>
+          </div>
+          ${badgeHtml ? `<div class="amc-badge">${badgeHtml}</div>` : ''}
+          <div class="amc-stats">
+            <div class="amc-stat">
+              <div class="amc-stat-val">${isActive ? m.count : '—'}</div>
+              <div class="amc-stat-lbl">처리건수</div>
+            </div>
+            <div class="amc-stat">
+              <div class="amc-stat-val" style="color:${opColor}">${isActive ? m.operatorScore : '—'}</div>
+              <div class="amc-stat-lbl">운영 점수</div>
+            </div>
+            <div class="amc-stat">
+              <div class="amc-stat-val" style="color:${tcColor}">${isActive ? m.touchScore : '—'}</div>
+              <div class="amc-stat-lbl">응대 점수</div>
+            </div>
+          </div>
+          <div class="amc-footer">
+            <span>비중 <strong>${topPct}%</strong></span>
+            <span>평균 해결 <strong>${resText}</strong></span>
+            <span>${agentComment(m, origRank).replace(/<[^>]*>/g, '')}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // ── 데스크톱 테이블 렌더링 ───────────────────────────────────────────────
   tbody.innerHTML = sorted.map((m, i) => {
     const origRank    = managers.indexOf(m);
     const displayRank = origRank + 1;
@@ -1279,8 +1388,8 @@ function renderManagers(d) {
       </div>
       <div class="agent-stat-card">
         <div class="agent-stat-card-title">📊 평균 지표</div>
-        <div class="agent-stat-row"><span class="agent-stat-label">Operator Score</span><span class="agent-stat-value" style="color:${avgOp > 20 ? 'var(--teal)' : 'var(--amber)'}">${avgOp}</span></div>
-        <div class="agent-stat-row"><span class="agent-stat-label">Touch Score</span><span class="agent-stat-value" style="color:${avgTc > 30 ? 'var(--teal)' : 'var(--amber)'}">${avgTc}</span></div>
+        <div class="agent-stat-row"><span class="agent-stat-label">운영 점수</span><span class="agent-stat-value" style="color:${avgOp > 20 ? 'var(--teal)' : 'var(--amber)'}">${avgOp}</span></div>
+        <div class="agent-stat-row"><span class="agent-stat-label">응대 점수</span><span class="agent-stat-value" style="color:${avgTc > 30 ? 'var(--teal)' : 'var(--amber)'}">${avgTc}</span></div>
       </div>
       ${topMgr ? `<div class="agent-stat-card">
         <div class="agent-stat-card-title">🏆 주요 인사이트</div>
@@ -1312,7 +1421,7 @@ function renderManagers(d) {
 
   // 담당자 노트 업데이트
   const note = document.getElementById('agentTblNote');
-  if (note) note.textContent = '※ Operator Score · Touch Score: 채널톡 API 실데이터 / 평균 해결시간: 해당 담당자 처리 건 실측값';
+  if (note) note.textContent = '※ 운영 점수 · 응대 점수: 채널톡 API 실데이터 / 평균 해결시간: 해당 담당자 처리 건 실측값';
 }
 
 /* ─── 8시간+ Drill-Down Panel (항목 #6) ────────────────────────────────── */
@@ -1356,43 +1465,92 @@ function closeLongChatsPanel() {
   if (modal) modal.style.display = 'none';
 }
 
-/* ─── CSV Download (항목 #14) ───────────────────────────────────────────── */
-function downloadCSV() {
+/* ─── CSV Download 공통 헬퍼 ───────────────────────────────────────────── */
+function _triggerCSV(csvLines, filename) {
+  const BOM = '﻿';
+  const blob = new Blob([BOM + csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+function _csvHeader() {
+  const dateStr = new Date().toLocaleString('ko-KR');
+  const rangeStr = (typeof currentDays !== 'undefined' && currentDays === 'all')
+    ? '전체 수집 최대 500건'
+    : `최근 ${typeof currentDays !== 'undefined' ? currentDays : '?'}일`;
+  const total = lastData?.summary?.totalChats ?? '?';
+  return [
+    `# 오토스테이 CS 대시보드 내보내기 — ${dateStr}`,
+    `# 기간: ${rangeStr} · 분석 채팅: ${total}건`,
+    '',
+  ];
+}
+
+/* 담당자 성과 CSV */
+function downloadAgentCSV() {
   if (!lastData) return;
   const managers = (lastData.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
   const total = lastData.summary.totalChats || 1;
-
-  // 담당자 성과 CSV
-  const mgrRows = managers.map(m => {
+  const rows = managers.map(m => {
     const topPct = Math.round(m.count / total * 100);
-    return [m.name, m.count, topPct + '%', m.operatorScore, m.touchScore, m.avgResolutionMin ?? '', agentComment(m, managers.indexOf(m)).replace(/<[^>]*>/g, '')].join(',');
+    const comment = agentComment(m, managers.indexOf(m)).replace(/<[^>]*>/g, '');
+    return [m.name, m.count, `${topPct}%`, m.operatorScore, m.touchScore, m.avgResolutionMin ?? '', comment].join(',');
   });
-
-  const header = ['담당자명', '처리건수', '비중', 'OperatorScore', 'TouchScore', '평균해결시간(분)', '코멘트'];
-  const csvLines = [
-    `# 오토스테이 CS 대시보드 내보내기 — ${new Date().toLocaleString('ko-KR')}`,
-    `# 기간: ${currentDays === 'all' ? '전체 수집 최대 500건' : '최근 ' + currentDays + '일'} · 분석 채팅: ${total}건`,
-    '',
+  const lines = [
+    ..._csvHeader(),
     '=== 담당자 성과 ===',
-    header.join(','),
-    ...mgrRows,
-    '',
+    '담당자명,처리건수,비중,운영점수,응대점수,평균해결시간(분),코멘트',
+    ...rows,
+  ];
+  _triggerCSV(lines, `autostay-agent-${new Date().toISOString().slice(0, 10)}.csv`);
+}
+
+/* 해결시간 & VOC CSV */
+function downloadResolutionCSV() {
+  if (!lastData) return;
+  const rb = lastData.resolutionBuckets || {};
+  const rbTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
+  const rbRows = Object.entries(rb).map(([k, v]) => `${k},${v},${Math.round(v / rbTotal * 100)}%`);
+  const tags = lastData.tags || {};
+  const tagTotal = lastData.summary.totalChats || 1;
+  const tagRows = (tags.labels || []).map((lbl, i) => {
+    const cnt = tags.values[i];
+    return `${lbl},${cnt},${Math.round(cnt / tagTotal * 100)}%`;
+  });
+  const lines = [
+    ..._csvHeader(),
     '=== 해결시간 분포 ===',
     '구간,건수,비율',
-    ...Object.entries(lastData.resolutionBuckets || {}).map(([k, v]) => `${k},${v},${Math.round(v / Object.values(lastData.resolutionBuckets).reduce((a, b) => a + b, 1) * 100)}%`),
+    ...rbRows,
     '',
-    '=== 태그 TOP 10 ===',
-    '태그,건수',
-    ...(lastData.tags?.labels || []).map((lbl, i) => `${lbl},${lastData.tags.values[i]}`),
-  ].join('\n');
+    '=== VOC 태그 TOP 10 ===',
+    '태그,건수,비율',
+    ...tagRows,
+  ];
+  _triggerCSV(lines, `autostay-resolution-${new Date().toISOString().slice(0, 10)}.csv`);
+}
 
-  const BOM = '﻿';
-  const blob = new Blob([BOM + csvLines], { type: 'text/csv;charset=utf-8;' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = `autostay-cs-${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(a); a.click();
-  document.body.removeChild(a); URL.revokeObjectURL(url);
+/* 태그 & VOC 리스크 CSV */
+function downloadTagCSV() {
+  if (!lastData) return;
+  const tags = lastData.tags || {};
+  const total = lastData.summary.totalChats || 1;
+  const rows = (tags.labels || []).map((lbl, i) => {
+    const cnt = tags.values[i];
+    const pct = Math.round(cnt / total * 100);
+    const risk = pct >= 15 ? '위험' : pct >= 8 ? '주의' : '정상';
+    return `${lbl},${cnt},${pct}%,${risk}`;
+  });
+  const lines = [
+    ..._csvHeader(),
+    '=== 태그 & VOC 리스크 ===',
+    '태그,건수,비율,리스크등급',
+    ...rows,
+  ];
+  _triggerCSV(lines, `autostay-tags-${new Date().toISOString().slice(0, 10)}.csv`);
 }
 
 /* ─── Render: 자동화 효과 & 운영 현황 ──────────────────────────────────── */

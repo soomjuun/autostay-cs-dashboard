@@ -237,7 +237,7 @@ body {
 
 /* Hero KPI Strip */
 .hero-kpi-strip {
-  display: grid; grid-template-columns: repeat(7, 1fr);
+  display: grid; grid-template-columns: repeat(5, 1fr);
   gap: 10px; margin-bottom: 18px;
 }
 
@@ -702,6 +702,25 @@ body {
 .hm-legend-scale { display: flex; gap: 2px; }
 .hm-legend-scale span { width: 12px; height: 12px; border-radius: 2px; display: block; }
 
+/* Heatmap Staffing Guide */
+.hm-staffing-guide {
+  margin-top: 10px; padding: 10px 12px;
+  background: linear-gradient(135deg, var(--teal-s), #f0fdf9);
+  border: 1px solid #99f6e4; border-radius: 8px; font-size: 11px;
+}
+.hm-staffing-title {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--teal); margin-bottom: 7px;
+}
+.hm-staffing-row {
+  display: flex; align-items: flex-start; gap: 8px; margin-bottom: 5px;
+  font-size: 11px; color: var(--text); line-height: 1.4;
+}
+.hm-staffing-row:last-child { margin-bottom: 0; }
+.hm-staffing-icon { font-size: 13px; flex-shrink: 0; margin-top: 0; }
+.hm-staffing-text { flex: 1; }
+.hm-staffing-text strong { color: var(--rose); }
+
 /* ═══════════════════════════════════════════════════════════════════════════
    CATEGORY BARS
 ═══════════════════════════════════════════════════════════════════════════ */
@@ -948,7 +967,7 @@ body {
   .col-4 { flex: 0 0 calc(40% - 6px); }
 }
 @media (max-width: 1080px) {
-  .hero-kpi-strip { grid-template-columns: repeat(3, 1fr); }
+  .hero-kpi-strip { grid-template-columns: repeat(3, 1fr) !important; }
   .ac-main { grid-template-columns: 1fr 1fr; }
   .ac-col:last-child { grid-column: span 2; border-right: none; border-top: 1px solid var(--border-soft); }
   .col-8, .col-7, .col-6, .col-5, .col-4 { flex: 0 0 100%; }
@@ -1386,58 +1405,81 @@ body {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
+/* CSV 다운로드 버튼                                                            */
+/* ══════════════════════════════════════════════════════════════════════════ */
+.csv-btn {
+  font-size: 10.5px; font-weight: 700; font-family: inherit;
+  padding: 4px 10px; border-radius: 6px;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--muted); cursor: pointer; white-space: nowrap;
+  transition: all .15s; letter-spacing: -.01em;
+}
+.csv-btn:hover {
+  background: var(--teal-s); border-color: var(--teal);
+  color: var(--teal);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
 /* 항목 #11: 담당자 테이블 → 모바일 카드형 전환                                  */
 /* ══════════════════════════════════════════════════════════════════════════ */
+/* 기본: 카드 숨김, 테이블 표시 */
+.agent-cards-mobile { display: none; }
+
 @media (max-width: 700px) {
-  .agent-table colgroup { display: none; }
-  .agent-table thead    { display: none; }
-  .agent-table tbody    { display: block; }
-  .agent-table tbody tr {
-    display: grid;
-    grid-template-columns: 32px 1fr 1fr;
-    grid-template-rows: auto auto;
-    gap: 4px 8px;
-    padding: 12px;
-    border-bottom: 1px solid var(--border-soft);
-    margin-bottom: 4px;
-    background: var(--surface);
-    border-radius: 10px;
-    box-shadow: 0 1px 4px rgba(0,0,0,.05);
+  /* 테이블 숨기고 카드 표시 */
+  .agent-table-area { display: none; }
+  .agent-cards-mobile {
+    display: flex; flex-direction: column; gap: 10px;
+    padding-bottom: 4px;
   }
-  .agent-table tbody tr:hover td { background: transparent; }
-  .agent-table td {
-    display: block; padding: 0; border: none;
-    white-space: normal; font-size: 11.5px;
-    background: transparent !important;
-  }
-  /* 순위 */
-  .agent-table td:nth-child(1) {
-    grid-row: 1 / 3; grid-column: 1;
-    display: flex; align-items: center; justify-content: center;
-  }
-  /* 담당자명 */
-  .agent-table td:nth-child(2) {
-    grid-row: 1; grid-column: 2 / 4;
-    font-size: 13px; font-weight: 700; color: var(--text);
-  }
-  /* 처리건수 */
-  .agent-table td:nth-child(3) {
-    grid-row: 2; grid-column: 2;
-    font-size: 11px; color: var(--muted);
-  }
-  .agent-table td:nth-child(3)::before { content: '처리 '; font-weight: 700; }
-  /* 비중 바 */
-  .agent-table td:nth-child(4) { display: none; }
-  /* Operator Score */
-  .agent-table td:nth-child(5) {
-    grid-row: 2; grid-column: 3;
-    font-size: 11px;
-  }
-  /* Touch Score, 해결시간, 상태, 코멘트 → 숨김 (카드 하단 요약) */
-  .agent-table td:nth-child(6),
-  .agent-table td:nth-child(7),
-  .agent-table td:nth-child(8),
-  .agent-table td:nth-child(9) { display: none; }
+}
+
+/* 카드 컴포넌트 */
+.agent-mobile-card {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.05);
+  position: relative;
+}
+.amc-header {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+}
+.amc-rank {
+  font-size: 10px; font-weight: 800; color: var(--muted);
+  width: 20px; text-align: center; flex-shrink: 0;
+}
+.amc-avatar {
+  width: 34px; height: 34px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: #fff; flex-shrink: 0;
+}
+.amc-name {
+  font-size: 13px; font-weight: 700; color: var(--text); flex: 1;
+}
+.amc-badge { position: absolute; top: 12px; right: 14px; }
+.amc-stats {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+.amc-stat {
+  background: var(--bg); border-radius: 8px;
+  padding: 8px 10px; text-align: center;
+}
+.amc-stat-val {
+  font-size: 14px; font-weight: 800; color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.amc-stat-lbl {
+  font-size: 9.5px; color: var(--muted); margin-top: 1px;
+  white-space: nowrap;
+}
+.amc-footer {
+  margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 10.5px; color: var(--muted);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
