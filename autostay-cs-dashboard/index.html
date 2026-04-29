@@ -221,30 +221,101 @@
   </section>
 
   <!-- ══════════════════════════════════════════════════════════════════════
-       SECTION: 태그 & VOC 리스크
+       SECTION: 핵심 리스크
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <section class="dashboard-section">
+    <div class="section-header">
+      <span class="section-icon">🎯</span>
+      <span class="section-title">핵심 리스크</span>
+      <span class="section-tag">조치 필요</span>
+      <button class="csv-btn" onclick="downloadTagCSV()" title="VOC 리스크 CSV">⬇ CSV</button>
+      <button class="collapse-toggle" data-target="riskSection" aria-label="펼치기/접기">▾</button>
+    </div>
+    <div class="collapsible-content" id="riskSection">
+      <div class="chart-master-grid">
+
+        <article class="panel col-7">
+          <div class="panel-header">
+            <div><div class="panel-title">VOC 리스크 조치 현황</div><div class="panel-sub">비율 8% 이상 항목 · 즉시 대응 필요</div></div>
+            <span class="real-badge">✓ 실데이터</span>
+          </div>
+          <div id="vocRiskCards" class="voc-risk-cards-wrap"></div>
+        </article>
+
+        <article class="panel col-5">
+          <div class="panel-header">
+            <div><div class="panel-title">담당자 편중 &amp; 미배정</div><div class="panel-sub">즉시 조치 필요 항목</div></div>
+            <span class="data-badge badge-warn">실시간</span>
+          </div>
+          <div id="concRiskPanel"></div>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SECTION: 해결 지연 분석
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <section class="dashboard-section">
+    <div class="section-header">
+      <span class="section-icon">⏱</span>
+      <span class="section-title">해결 지연 분석</span>
+      <span class="section-tag">해결시간 · 8h+</span>
+      <button class="csv-btn" onclick="downloadResolutionCSV()" title="해결시간 CSV">⬇ CSV</button>
+      <button class="collapse-toggle" data-target="resSection" aria-label="펼치기/접기">▾</button>
+    </div>
+    <div class="collapsible-content" id="resSection">
+      <div class="chart-master-grid">
+
+        <article class="panel col-6">
+          <div class="panel-header">
+            <div><div class="panel-title">해결 시간 분포</div><div class="panel-sub">resolutionTime 기준 · 비동기 포함</div></div>
+            <span class="real-badge">✓ 실데이터</span>
+          </div>
+          <div class="res-summary" id="resSummary"></div>
+          <div id="resAuxStats" class="res-aux-stats"></div>
+          <div class="rt-list" id="resList"></div>
+          <div class="res-note" id="avgResNote"></div>
+        </article>
+
+        <article class="panel col-6">
+          <div class="panel-header">
+            <div><div class="panel-title">8시간+ 지연 상세 &amp; 원인 분류</div><div class="panel-sub">장기 미해결 채팅 현황 · 원인 추정</div></div>
+            <span class="data-badge badge-warn">요주의</span>
+          </div>
+          <div id="longDelayPanel"></div>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SECTION: 문의 유형 분석
   ═══════════════════════════════════════════════════════════════════════ -->
   <section class="dashboard-section">
     <div class="section-header">
       <span class="section-icon">🏷</span>
-      <span class="section-title">태그 &amp; VOC 리스크</span>
-      <span class="section-tag">TOP 10</span>
-      <button class="csv-btn" onclick="downloadTagCSV()" title="태그 데이터 CSV 다운로드">⬇ CSV</button>
+      <span class="section-title">문의 유형 분석</span>
+      <span class="section-tag">태그 TOP 10</span>
+      <button class="csv-btn" onclick="downloadTagCSV()" title="태그 CSV">⬇ CSV</button>
       <button class="collapse-toggle" data-target="tagSection" aria-label="펼치기/접기">▾</button>
     </div>
     <div class="collapsible-content" id="tagSection">
       <div class="chart-master-grid">
 
-        <article class="panel col-6">
+        <article class="panel col-7">
           <div class="panel-header">
-            <div><div class="panel-title">문의 태그 TOP 10</div><div class="panel-sub">전체 문의 태그 비율 분포</div></div>
+            <div><div class="panel-title">문의 태그 TOP 10</div><div class="panel-sub">건수 기준 가로 막대 · 비율 표시</div></div>
             <span class="real-badge">✓ 실데이터</span>
           </div>
-          <div class="ch-220"><canvas id="categoryChart"></canvas></div>
+          <div class="ch-300 tag-bar-wrap"><canvas id="tagBarChart"></canvas></div>
         </article>
 
-        <article class="panel col-6">
+        <article class="panel col-5">
           <div class="panel-header">
-            <div><div class="panel-title">상위 분류 &amp; VOC 리스크</div><div class="panel-sub">구독·컴플레인·매장별 위험 분석</div></div>
+            <div><div class="panel-title">상위 분류 &amp; 자동화 후보</div><div class="panel-sub">구독·컴플레인·이용 유형 분류</div></div>
             <span class="real-badge">✓ 분석</span>
           </div>
           <div class="category-bars" id="categoryBars"></div>
@@ -282,7 +353,6 @@
             <div class="ts"><span class="ts-val green" id="trendOpen">—</span><span class="ts-lbl">현재 오픈</span></div>
           </div>
           <div class="ch-280"><canvas id="trendChart"></canvas></div>
-          <!-- 피크 분석 패널 (항목 #9) -->
           <div class="peak-analysis-panel" id="peakAnalysisPanel" style="display:none"></div>
         </article>
 
@@ -311,55 +381,20 @@
   </section>
 
   <!-- ══════════════════════════════════════════════════════════════════════
-       SECTION: 해결시간 & VOC
-  ═══════════════════════════════════════════════════════════════════════ -->
-  <section class="dashboard-section">
-    <div class="section-header">
-      <span class="section-icon">⏱</span>
-      <span class="section-title">해결시간 &amp; VOC</span>
-      <span class="section-tag">품질 분석</span>
-      <button class="csv-btn" onclick="downloadResolutionCSV()" title="해결시간 데이터 CSV 다운로드">⬇ CSV</button>
-      <button class="collapse-toggle" data-target="resSection" aria-label="펼치기/접기">▾</button>
-    </div>
-    <div class="collapsible-content" id="resSection">
-      <div class="chart-master-grid">
-
-        <article class="panel col-6">
-          <div class="panel-header">
-            <div><div class="panel-title">해결 시간 분포</div><div class="panel-sub">resolutionTime 기준 · 비동기 포함</div></div>
-            <span class="real-badge">✓ 실데이터</span>
-          </div>
-          <div class="res-summary" id="resSummary"></div>
-          <div id="resAuxStats" class="res-aux-stats"></div>
-          <div class="rt-list" id="resList"></div>
-          <div class="res-note" id="avgResNote"></div>
-        </article>
-
-        <article class="panel col-6">
-          <div class="panel-header">
-            <div><div class="panel-title">태그 기반 VOC 분석</div><div class="panel-sub">문의 유형 · 대응 권장</div></div>
-            <span class="real-badge">✓ 실데이터</span>
-          </div>
-          <div class="voc-list" id="vocList"></div>
-        </article>
-
-      </div>
-    </div>
-  </section>
-
-  <!-- ══════════════════════════════════════════════════════════════════════
-       SECTION: 담당자 성과
+       SECTION: 운영 현황
   ═══════════════════════════════════════════════════════════════════════ -->
   <section class="dashboard-section">
     <div class="section-header">
       <span class="section-icon">👥</span>
-      <span class="section-title">담당자 성과</span>
-      <span class="section-tag">실데이터</span>
-      <button class="csv-btn" onclick="downloadAgentCSV()" title="담당자 성과 CSV 다운로드">⬇ CSV</button>
+      <span class="section-title">운영 현황</span>
+      <span class="section-tag">담당자 · 자동화 · 채널</span>
+      <button class="csv-btn" onclick="downloadAgentCSV()" title="담당자 성과 CSV">⬇ CSV</button>
       <button class="collapse-toggle" data-target="agentSection" aria-label="펼치기/접기">▾</button>
     </div>
     <div class="collapsible-content" id="agentSection">
-      <article class="panel">
+
+      <!-- 담당자 성과 테이블 -->
+      <article class="panel" style="margin-bottom:12px">
         <div class="panel-header">
           <div>
             <div class="panel-title">담당자별 실 성과 현황</div>
@@ -370,7 +405,6 @@
             <span class="real-badge">✓ 실데이터</span>
           </div>
         </div>
-        <!-- 정렬 탭 -->
         <div class="tbl-sort-tabs" id="agentSortTabs">
           <button class="tbl-sort-tab active" data-sort="risk">리스크 순</button>
           <button class="tbl-sort-tab" data-sort="count">처리건수 순</button>
@@ -378,21 +412,11 @@
           <button class="tbl-sort-tab" data-sort="operatorScore">운영점수 순</button>
           <button class="tbl-sort-tab" data-sort="touchScore">응대점수 순</button>
         </div>
-
-        <!-- 테이블 + 사이드 성과 패널 그리드 -->
         <div class="agent-content-grid">
           <div class="agent-table-area">
             <table class="agent-table">
               <colgroup>
-                <col><!-- # 순위 -->
-                <col><!-- 담당자 -->
-                <col><!-- 처리 건수 -->
-                <col><!-- 비중 -->
-                <col><!-- Operator Score -->
-                <col><!-- Touch Score -->
-                <col><!-- 평균 해결 시간 -->
-                <col><!-- 상태 -->
-                <col><!-- 코멘트 -->
+                <col><col><col><col><col><col><col><col><col>
               </colgroup>
               <thead>
                 <tr>
@@ -400,8 +424,8 @@
                   <th>담당자</th>
                   <th>처리 건수</th>
                   <th>비중</th>
-                  <th class="num-r">운영 점수 <span class="th-tip-icon">ⓘ<span class="th-tip-text">채널톡 API 제공 담당자 운영 효율 점수 (Operator Score). 처리 건수·응대 품질·처리 속도 종합 산정.</span></span></th>
-                  <th class="num-r">응대 점수 <span class="th-tip-icon">ⓘ<span class="th-tip-text">고객 채팅에 직접 응답(터치)한 비율 점수 (Touch Score). 높을수록 적극적 고객 응대.</span></span></th>
+                  <th class="num-r">운영 점수 <span class="th-tip-icon">ⓘ<span class="th-tip-text">채널톡 API 제공 담당자 운영 효율 점수. 처리 건수·응대 품질·처리 속도 종합 산정.</span></span></th>
+                  <th class="num-r">응대 점수 <span class="th-tip-icon">ⓘ<span class="th-tip-text">고객 채팅에 직접 응답한 비율 점수. 높을수록 적극적 응대.</span></span></th>
                   <th class="num-r">평균 해결시간</th>
                   <th>상태</th>
                   <th>코멘트</th>
@@ -412,44 +436,26 @@
               </tbody>
             </table>
           </div>
-
-          <!-- 모바일 카드 레이아웃 (≤640px에서 테이블 대체) -->
           <div class="agent-cards-mobile" id="agentCards"></div>
-
-          <!-- 성과 요약 사이드 패널 (Area 2 대체 콘텐츠) -->
-          <div class="agent-stats-sidebar" id="agentSidebar">
-            <!-- JS 렌더링 -->
-          </div>
-        </div><!-- /agent-content-grid -->
-
-        <div class="tbl-note" id="agentTblNote">※ 운영 점수(Operator Score) · 응대 점수(Touch Score): 채널톡 API 실데이터 / 평균 해결시간: 해당 담당자 처리 건 실측값 / 리스크순: 집중도 + 해결시간 복합 산정</div>
+          <div class="agent-stats-sidebar" id="agentSidebar"></div>
+        </div>
+        <div class="tbl-note" id="agentTblNote">※ 운영 점수 · 응대 점수: 채널톡 API 실데이터 / 평균 해결시간: 해당 담당자 처리 건 실측값 / 리스크순: 집중도 + 해결시간 복합 산정</div>
       </article>
-    </div>
-  </section>
 
-  <!-- ══════════════════════════════════════════════════════════════════════
-       SECTION: 자동화 효과 & 운영 현황
-  ═══════════════════════════════════════════════════════════════════════ -->
-  <section class="dashboard-section">
-    <div class="section-header">
-      <span class="section-icon">🤖</span>
-      <span class="section-title">자동화 효과 &amp; 운영 현황</span>
-      <span class="section-tag">봇 · FAQ · 채널</span>
-      <button class="collapse-toggle" data-target="botSection" aria-label="펼치기/접기">▾</button>
-    </div>
-    <div class="collapsible-content" id="botSection">
-      <div class="chart-master-grid">
-        <div class="panel col-6" id="botPanel"></div>
-        <div class="panel col-3" id="groupPanel"></div>
+      <!-- 자동화 추정 효과 & 채널 3열 -->
+      <div class="chart-master-grid" id="botSection">
+        <div class="panel col-5" id="botPanel"></div>
+        <div class="panel col-4" id="groupPanel"></div>
         <article class="panel col-3">
           <div class="panel-header">
             <div><div class="panel-title">인입 채널</div><div class="panel-sub">source.medium 기준</div></div>
             <span class="real-badge">✓ 실데이터</span>
           </div>
-          <div class="ch-120"><canvas id="channelChart"></canvas></div>
+          <div class="ch-140"><canvas id="channelChart"></canvas></div>
           <div class="channel-stats" id="channelStats"></div>
         </article>
       </div>
+
     </div>
   </section>
 

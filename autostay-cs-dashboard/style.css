@@ -948,8 +948,12 @@ body {
 
 /* ─── Chart Containers ───────────────────────────────────────────────────── */
 .ch-280 { height: 280px; position: relative; }
+.ch-300 { height: 300px; position: relative; }
 .ch-220 { height: 220px; position: relative; }
+.ch-140 { height: 140px; position: relative; }
 .ch-120 { height: 120px; position: relative; }
+.tag-bar-wrap { width: 100%; }
+.tag-bar-wrap canvas { display: block; }
 
 /* ─── Footer ─────────────────────────────────────────────────────────────── */
 .footer-note {
@@ -1858,3 +1862,155 @@ body {
 }
 .ops-bucket-lbl { color: var(--muted); font-weight: 600; }
 .ops-bucket-val { color: var(--text); text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* Phase B 신규: VOC 리스크 액션 카드 (핵심 리스크 섹션)                           */
+/* ══════════════════════════════════════════════════════════════════════════ */
+.voc-risk-cards-wrap {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 8px;
+  padding: 4px 0;
+}
+.voc-risk-card {
+  border-radius: 10px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  display: flex; flex-direction: column; gap: 5px;
+  transition: box-shadow .15s;
+}
+.voc-risk-card:hover { box-shadow: 0 3px 12px rgba(0,0,0,.07); }
+.voc-risk-card.vrc-high {
+  border-color: #fecaca;
+  background: linear-gradient(135deg, #fff5f5, #fff);
+}
+.voc-risk-card.vrc-mid {
+  border-color: #fde68a;
+  background: linear-gradient(135deg, #fffbeb, #fff);
+}
+.voc-risk-card.vrc-low { border-color: var(--border-soft); }
+
+.vrc-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+}
+.vrc-tag {
+  font-size: 11px; font-weight: 700; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px;
+}
+.vrc-risk-badge {
+  font-size: 9px; font-weight: 800; padding: 2px 7px; border-radius: 5px;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+}
+.vrc-risk-badge.risk-high { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
+.vrc-risk-badge.risk-mid  { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+.vrc-risk-badge.risk-low  { background: var(--bg); color: var(--muted); border: 1px solid var(--border-soft); }
+
+.vrc-meta {
+  font-size: 10px; color: var(--muted); line-height: 1.35;
+}
+.vrc-numbers {
+  display: flex; align-items: baseline; gap: 6px; margin-top: 2px;
+}
+.vrc-count {
+  font-size: 15px; font-weight: 800; color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.vrc-pct {
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.vrc-action {
+  font-size: 10.5px; font-weight: 700; padding: 3px 9px; border-radius: 6px;
+  text-align: center; margin-top: 2px; align-self: flex-start;
+}
+.action-urgent { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
+.action-faq    { background: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.action-check  { background: #f3f4f6; color: var(--muted); border: 1px solid var(--border-soft); }
+.action-ok     { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* Phase B 신규: 집중도 리스크 패널 (concRiskPanel)                              */
+/* ══════════════════════════════════════════════════════════════════════════ */
+.conc-risk-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; border-radius: 9px; border: 1.5px solid var(--border-soft);
+  background: var(--surface); margin-bottom: 7px;
+  gap: 8px;
+}
+.conc-risk-row.crr-danger {
+  border-color: #fecaca; background: linear-gradient(135deg, #fff5f5, #fff);
+}
+.conc-risk-row.crr-warn {
+  border-color: #fde68a; background: linear-gradient(135deg, #fffbeb, #fff);
+}
+.conc-risk-row.crr-ok { border-color: var(--border-soft); }
+.crr-left { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.crr-label { font-size: 11.5px; font-weight: 700; color: var(--text); }
+.crr-sub   { font-size: 9.5px; color: var(--muted); }
+.crr-right { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex-shrink: 0; }
+.crr-value {
+  font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.crr-value.val-danger { color: #dc2626; }
+.crr-value.val-warn   { color: #b45309; }
+.crr-value.val-ok     { color: var(--teal); }
+.crr-action-tag {
+  font-size: 9.5px; font-weight: 700; padding: 2px 8px; border-radius: 5px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* Phase B 신규: 장기 지연 분석 패널 (longDelayPanel)                           */
+/* ══════════════════════════════════════════════════════════════════════════ */
+.long-delay-ok {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 24px 16px; gap: 6px; color: var(--teal);
+}
+.ld-ok-icon  { font-size: 22px; }
+.ld-ok-text  { font-size: 13px; font-weight: 700; color: var(--teal); }
+.ld-ok-sub   { font-size: 10.5px; color: var(--muted); }
+
+.long-delay-summary {
+  display: flex; align-items: baseline; gap: 7px; margin-bottom: 10px;
+}
+.lds-count { font-size: 22px; font-weight: 800; color: #dc2626; font-variant-numeric: tabular-nums; }
+.lds-label { font-size: 11.5px; font-weight: 600; color: var(--text); }
+.lds-note  { font-size: 9.5px; color: var(--muted); }
+
+.cause-card-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 6px; margin-bottom: 10px;
+}
+.cause-card {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 8px 4px; border-radius: 9px; border: 1.5px solid var(--border-soft);
+  gap: 3px; text-align: center;
+}
+.cause-card.cause-gray  { background: #f9fafb; border-color: #e5e7eb; }
+.cause-card.cause-blue  { background: #eff6ff; border-color: #bfdbfe; }
+.cause-card.cause-amber { background: #fffbeb; border-color: #fde68a; }
+.cause-card.cause-red   { background: #fff5f5; border-color: #fecaca; }
+.cc-icon  { font-size: 13px; }
+.cc-count { font-size: 14px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+.cc-label { font-size: 9.5px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+
+.long-delay-list-header {
+  font-size: 10.5px; font-weight: 700; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .04em; margin-bottom: 5px; margin-top: 2px;
+}
+.long-delay-list { display: flex; flex-direction: column; gap: 4px; }
+.delay-row {
+  display: grid; grid-template-columns: 70px 1fr 70px;
+  align-items: center; gap: 6px; padding: 5px 8px;
+  background: var(--bg); border-radius: 6px; font-size: 10.5px;
+}
+.delay-time { font-weight: 700; font-variant-numeric: tabular-nums; }
+.delay-tags { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.delay-mgr  { color: var(--muted); text-align: right; white-space: nowrap; }
+.ld-more-link {
+  display: block; font-size: 10.5px; font-weight: 700; color: var(--teal);
+  text-decoration: none; margin-top: 7px; text-align: right;
+}
+.ld-more-link:hover { text-decoration: underline; }
+.ld-no-detail { font-size: 10.5px; color: var(--muted); margin-top: 8px; }

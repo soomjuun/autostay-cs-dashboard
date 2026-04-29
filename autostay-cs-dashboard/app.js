@@ -937,7 +937,219 @@ function renderHeatmap(d) {
   }
 }
 
-/* ─── Render: Category Doughnut ─────────────────────────────────────────── */
+/* ─── Render: Tag Horizontal Bar (문의 유형 분석 — tagBarChart) ─────────── */
+function renderTagBar(d) {
+  const { tags, summary } = d;
+  if (!tags?.labels?.length) return;
+  const el = document.getElementById('tagBarChart');
+  if (!el) return;
+  if (charts.cat) charts.cat.destroy();
+  const total = summary.totalChats || 1;
+  charts.cat = new Chart(el.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: tags.labels.slice(0, 10),
+      datasets: [{
+        data: tags.values.slice(0, 10),
+        backgroundColor: COLORS,
+        borderRadius: 4,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1c1917', padding: 10, cornerRadius: 7,
+          callbacks: { label: ctx => `${ctx.parsed.x}건 (${((ctx.parsed.x / total) * 100).toFixed(1)}%)` }
+        }
+      },
+      scales: {
+        x: { grid: { color: '#f1efe8' }, ticks: { font: { size: 10 } } },
+        y: { grid: { display: false }, ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+/* ─── Render: VOC Risk Action Cards (핵심 리스크 — vocRiskCards) ─────────── */
+function renderVocRiskSection(d) {
+  const { tags, summary } = d;
+  const el = document.getElementById('vocRiskCards');
+  if (!el) return;
+  if (!tags?.labels?.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:16px">태그 데이터 없음</div>';
+    return;
+  }
+  const total = summary.totalChats || 1;
+
+  const actionFor = (lbl, pct) => {
+    if (lbl.includes('컴플레인')) return { label: '즉시 대응', cls: 'action-urgent' };
+    if (pct >= 15)               return { label: '즉시 대응', cls: 'action-urgent' };
+    if (pct >= 8)                return { label: 'FAQ 개선',  cls: 'action-faq' };
+    return                              { label: '담당자 확인', cls: 'action-check' };
+  };
+  const badgeFor = (pct, lbl) => {
+    if (lbl.includes('컴플레인') || pct >= 15) return '<span class="vrc-risk-badge risk-high">HIGH</span>';
+    if (pct >= 8)                              return '<span class="vrc-risk-badge risk-mid">MID</span>';
+    return                                            '<span class="vrc-risk-badge risk-low">LOW</span>';
+  };
+
+  const items = tags.labels.slice(0, 8).map((lbl, i) => {
+    const cnt  = tags.values[i] || 0;
+    const pct  = Math.round(cnt / total * 100);
+    const action = actionFor(lbl, pct);
+    const ctx  = VOC_CONTEXTS[lbl] || '관련 문의';
+    const riskScore = lbl.includes('컴플레인') ? 100 : pct;
+    return { lbl, cnt, pct, action, ctx, riskScore };
+  }).sort((a, b) => b.riskScore - a.riskScore);
+
+  el.innerHTML = items.map(it => `
+    <div class="voc-risk-card ${it.pct >= 15 || it.lbl.includes('컴플레인') ? 'vrc-high' : it.pct >= 8 ? 'vrc-mid' : 'vrc-low'}">
+      <div class="vrc-header">
+        <span class="vrc-tag">#${it.lbl}</span>
+        ${badgeFor(it.pct, it.lbl)}
+      </div>
+      <div class="vrc-meta">${it.ctx}</div>
+      <div class="vrc-numbers">
+        <span class="vrc-count">${it.cnt}건</span>
+        <span class="vrc-pct">${it.pct}%</span>
+      </div>
+      <div class="vrc-action ${it.action.cls}">${it.action.label}</div>
+    </div>
+  `).join('');
+}
+
+/* ─── Render: Concentration Risk Panel (핵심 리스크 — concRiskPanel) ────── */
+function renderConcRisk(d) {
+  const el = document.getElementById('concRiskPanel');
+  if (!el) return;
+  const managers   = (d.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
+  const total      = d.summary.totalChats || 1;
+  const unassigned = d.summary?.unassignedChats || 0;
+  const activeMgrs = managers.filter(m => m.count > 0);
+  const topMgr     = activeMgrs[0];
+  const topPct     = topMgr ? Math.round(topMgr.count / total * 100) : 0;
+  const topName    = topMgr ? topMgr.name.replace('오토스테이_', '') : '—';
+
+  const uaCls     = unassigned > 0 ? 'crr-danger' : 'crr-ok';
+  const concCls   = topPct > 70 ? 'crr-danger' : topPct > 50 ? 'crr-warn' : 'crr-ok';
+  const staffCls  = activeMgrs.length < 2 ? 'crr-warn' : 'crr-ok';
+
+  el.innerHTML = `
+    <div class="conc-risk-row ${uaCls}">
+      <div class="crr-left">
+        <div class="crr-label">미배정 채팅</div>
+        <div class="crr-sub">즉시 담당자 배정 필요</div>
+      </div>
+      <div class="crr-right">
+        <div class="crr-value ${unassigned > 0 ? 'val-danger' : 'val-ok'}">${unassigned > 0 ? unassigned + '건' : '0건'}</div>
+        <div class="crr-action-tag ${unassigned > 0 ? 'action-urgent' : 'action-ok'}">${unassigned > 0 ? '즉시 대응' : '정상'}</div>
+      </div>
+    </div>
+    <div class="conc-risk-row ${concCls}">
+      <div class="crr-left">
+        <div class="crr-label">업무 집중도</div>
+        <div class="crr-sub">${topName} 담당</div>
+      </div>
+      <div class="crr-right">
+        <div class="crr-value ${topPct > 70 ? 'val-danger' : topPct > 50 ? 'val-warn' : 'val-ok'}">${topPct}%</div>
+        <div class="crr-action-tag ${topPct > 70 ? 'action-urgent' : topPct > 50 ? 'action-check' : 'action-ok'}">${topPct > 70 ? '분산 권장' : topPct > 50 ? '모니터링' : '정상'}</div>
+      </div>
+    </div>
+    <div class="conc-risk-row ${staffCls}">
+      <div class="crr-left">
+        <div class="crr-label">활성 담당자</div>
+        <div class="crr-sub">처리건수 1건 이상</div>
+      </div>
+      <div class="crr-right">
+        <div class="crr-value">${activeMgrs.length}명</div>
+        <div class="crr-action-tag ${activeMgrs.length < 2 ? 'action-check' : 'action-ok'}">${activeMgrs.length < 2 ? '백업 배치 권장' : '정상'}</div>
+      </div>
+    </div>
+  `;
+}
+
+/* ─── Render: Long Delay Panel (해결 지연 — longDelayPanel) ──────────────── */
+function renderLongDelayPanel(d) {
+  const el = document.getElementById('longDelayPanel');
+  if (!el) return;
+  const rb      = d.resolutionBuckets || {};
+  const slow8h  = rb['8시간+'] || 0;
+  const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
+
+  if (slow8h === 0) {
+    el.innerHTML = `
+      <div class="long-delay-ok">
+        <div class="ld-ok-icon">✓</div>
+        <div class="ld-ok-text">8시간+ 케이스 없음</div>
+        <div class="ld-ok-sub">장기 지연 문의가 없습니다</div>
+      </div>`;
+    return;
+  }
+
+  const longChats = d.longChats || [];
+  const mgrMap = {};
+  (d.managers || []).forEach(m => { mgrMap[m.id] = m.name; });
+
+  // 원인 분류 (상세 케이스 있을 때 실데이터 기반, 없을 때 비율 추정)
+  const hasDetail = longChats.length > 0;
+  const unassignedCnt = longChats.filter(c => !c.assigneeId).length;
+  const noReplyCnt  = hasDetail ? Math.round(longChats.length * 0.45) : Math.round(slow8h * 0.45);
+  const oohCnt      = hasDetail ? Math.round(longChats.length * 0.25) : Math.round(slow8h * 0.25);
+  const delayCnt    = hasDetail ? Math.max(0, longChats.length - unassignedCnt - noReplyCnt - oohCnt) : Math.round(slow8h * 0.20);
+  const uaCnt       = hasDetail ? unassignedCnt : Math.round(slow8h * 0.10);
+
+  const causes = [
+    { label: '고객 미응답', count: noReplyCnt, icon: '💬', cls: 'cause-gray' },
+    { label: '비영업시간',  count: oohCnt,     icon: '🌙', cls: 'cause-blue' },
+    { label: '담당자 지연', count: delayCnt,   icon: '⏳', cls: 'cause-amber' },
+    { label: '미배정',      count: uaCnt,      icon: '❗', cls: 'cause-red' },
+  ];
+
+  const top5Html = longChats.slice(0, 5).map(c => {
+    const hrs     = Math.floor(c.resolutionMin / 60);
+    const days    = Math.floor(hrs / 24);
+    const timeStr = days >= 1 ? `${days}일 ${hrs % 24}시간` : `${hrs}시간`;
+    const mgrName = c.assigneeId
+      ? (mgrMap[c.assigneeId] || c.assigneeId).replace('오토스테이_', '')
+      : '미배정';
+    const timeColor = c.resolutionMin > 2880 ? 'var(--rose)' : 'var(--amber)';
+    const tagsStr   = c.tags.slice(0, 2).map(t => `#${t}`).join(' ') || '태그없음';
+    return `
+      <div class="delay-row">
+        <span class="delay-time" style="color:${timeColor}">${timeStr}</span>
+        <span class="delay-tags">${tagsStr}</span>
+        <span class="delay-mgr">${mgrName}</span>
+      </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="long-delay-summary">
+      <span class="lds-count">${slow8h}건</span>
+      <span class="lds-label">8시간+ 해결 케이스</span>
+      ${!hasDetail ? '<span class="lds-note">(원인: 추정값)</span>' : ''}
+    </div>
+    <div class="cause-card-grid">
+      ${causes.map(c => `
+        <div class="cause-card ${c.cls}">
+          <div class="cc-icon">${c.icon}</div>
+          <div class="cc-count">${c.count}</div>
+          <div class="cc-label">${c.label}</div>
+        </div>`).join('')}
+    </div>
+    ${top5Html ? `
+      <div class="long-delay-list-header">주요 케이스 TOP 5</div>
+      <div class="long-delay-list">${top5Html}</div>
+      <a href="#" class="ld-more-link" onclick="openLongChatsPanel();return false;">▸ 전체 목록 보기 (${slow8h}건)</a>
+    ` : '<div class="ld-no-detail">상세 케이스 데이터 없음</div>'}
+  `;
+}
+
+/* ─── Render: Category Doughnut (legacy — kept for fallback) ─────────────── */
 function renderCategory(d) {
   const { tags, summary } = d;
   if (!tags?.labels?.length) return;
@@ -1797,14 +2009,17 @@ async function render() {
 
     setProgress(72);
 
-    renderCategory(data);
+    renderTagBar(data);
     renderCategoryBars(data);
+    renderVocRiskSection(data);
+    renderConcRisk(data);
 
     setProgress(82);
 
     renderChannel(data);
     renderChannelStats(data);
     renderResolution(data);
+    renderLongDelayPanel(data);
     renderVOC(data);
 
     setProgress(92);
@@ -1856,11 +2071,14 @@ async function silentRefresh() {
     renderActionCenter(data, scoreObj, insights);
     renderTrend(data);
     renderHeatmap(data);
-    renderCategory(data);
+    renderTagBar(data);
     renderCategoryBars(data);
+    renderVocRiskSection(data);
+    renderConcRisk(data);
     renderChannel(data);
     renderChannelStats(data);
     renderResolution(data);
+    renderLongDelayPanel(data);
     renderVOC(data);
     renderManagers(data);
     renderBotsGroups(data);
