@@ -15,6 +15,7 @@
       fetch('/api/check?_t=' + Date.now(), { cache: 'no-store' })
         .then(function(r) {
           if (r.status === 401) {
+            // 로그인 페이지를 먼저 표시 (로딩 오버레이보다 먼저)
             window.location.href = '/api/auth';
           }
         })
