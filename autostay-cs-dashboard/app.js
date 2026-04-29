@@ -1309,29 +1309,7 @@ function renderResolution(d) {
     `;
   }
 
-  // 보조 통계 블록 (중앙값 · p90 · 8h+제외 평균)
-  const resAuxEl = document.getElementById('resAuxStats');
-  if (resAuxEl) {
-    resAuxEl.innerHTML = `
-      <div class="res-aux-row">
-        <span class="res-aux-item" title="전체 해결시간의 중간값 — 극단값에 덜 민감한 대표값">
-          <span class="res-aux-lbl">중앙값</span>
-          <span class="res-aux-val">${medianMin != null ? medianMin + '분' : '—'}</span>
-          <span class="data-badge badge-calc" style="font-size:9px">계산값</span>
-        </span>
-        <span class="res-aux-item" title="상위 10% 기준선 — 이 값을 초과하면 장기 케이스">
-          <span class="res-aux-lbl">90퍼센타일</span>
-          <span class="res-aux-val">${p90Min != null ? p90Min + '분' : '—'}</span>
-          <span class="data-badge badge-calc" style="font-size:9px">계산값</span>
-        </span>
-        <span class="res-aux-item" title="8시간+ 비동기 채팅 제외 평균 — 실제 응대 시간에 더 근접">
-          <span class="res-aux-lbl">8h+제외 평균</span>
-          <span class="res-aux-val ${avgEx8hMin != null && avgEx8hMin > 120 ? 'warn-text' : ''}">${avgEx8hMin != null ? avgEx8hMin + '분' : '—'}</span>
-          <span class="data-badge badge-analyze" style="font-size:9px">분석값</span>
-        </span>
-      </div>
-    `;
-  }
+  // resAuxStats element removed from HTML — skip rendering
 
   const buckets = [
     { label: '0~5분',      val: rb['0~5분'] || 0,      cls: 'ok',   note: '즉시 해결' },

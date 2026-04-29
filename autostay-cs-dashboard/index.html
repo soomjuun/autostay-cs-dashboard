@@ -62,127 +62,42 @@
 <div class="app">
 
   <!-- ══════════════════════════════════════════════════════════════════════
-       HERO SECTION
+       DASH HEADER (compact)
   ═══════════════════════════════════════════════════════════════════════ -->
-  <header class="hero">
-    <div class="hero-top">
-      <div class="hero-copy">
-        <div class="eyebrow">AUTOSTAY CS INTELLIGENCE</div>
-        <h1>[OPS] 채널톡 CS 분석 대시보드</h1>
-        <p>채널톡 실 인입 데이터 기반 · 태그·담당자·해결시간·VOC 통합 분석</p>
-
-        <!-- Hero Quick Stats — JS가 채움 -->
-        <div class="hero-quick-stats" id="heroQuickStats" style="display:none">
-          <div class="hqs-item">
-            <div class="hqs-value" id="hqsTotal">—</div>
-            <div class="hqs-label">분석 채팅</div>
-          </div>
-          <div class="hqs-sep"></div>
-          <div class="hqs-item">
-            <div class="hqs-value" id="hqsOpen">—</div>
-            <div class="hqs-label">현재 오픈</div>
-          </div>
-          <div class="hqs-sep"></div>
-          <div class="hqs-item">
-            <div class="hqs-value" id="hqsComplaint">—</div>
-            <div class="hqs-label">컴플레인율</div>
-          </div>
-          <div class="hqs-sep"></div>
-          <div class="hqs-item">
-            <div class="hqs-value" id="hqsAvgRes">—</div>
-            <div class="hqs-label">평균해결</div>
-          </div>
-        </div>
+  <div class="dash-header">
+    <div class="dash-header-left">
+      <div class="dash-title">
+        <span class="dash-brand">AUTOSTAY</span>
+        <span class="dash-title-sep">·</span>
+        <span class="dash-title-text">CS 분석 대시보드</span>
       </div>
-
-      <div class="hero-focus" id="healthCard">
-        <div class="focus-header">
-          <div class="focus-label">CS 건강 점수</div>
-          <span class="health-grade-badge" id="healthGrade">—</span>
-        </div>
-        <div class="hero-gauge">
-          <svg class="health-svg" viewBox="0 0 120 96">
-            <path class="gauge-bg" d="M10,70 A60,60 0 0,1 110,70" fill="none" stroke="#e8e5dd" stroke-width="11" stroke-linecap="round"/>
-            <path class="gauge-fill" id="gaugeFill" d="M10,70 A60,60 0 0,1 110,70" fill="none" stroke="#0f766e" stroke-width="11" stroke-linecap="round" stroke-dasharray="188.5" stroke-dashoffset="188.5"/>
-            <text id="healthScore" x="60" y="66" text-anchor="middle" font-family="'Pretendard Variable',Pretendard,sans-serif" font-size="30" font-weight="900" fill="#1c1917">—</text>
-            <text x="60" y="82" text-anchor="middle" font-family="'Pretendard Variable',Pretendard,sans-serif" font-size="9" font-weight="600" fill="#a8a29e" id="gaugeScoreLabel">/ 100점</text>
-          </svg>
-          <div class="gauge-basis-note" id="gaugeBasisNote">분석 중…</div>
-        </div>
-        <div id="healthSub" class="health-factors">
-          <div class="hf-loading">분석 중…</div>
-        </div>
-      </div>
+      <div class="kpi-basis-header" id="kpiBasisHeader"></div>
     </div>
-
-    <!-- 분석 기준 헤더 (JS로 채움) -->
-    <div class="kpi-basis-header" id="kpiBasisHeader" style="display:none"></div>
-
-    <!-- Hero KPI Strip -->
-    <div class="hero-kpi-strip" id="kpiGrid">
-      <!-- JS로 채움 -->
-    </div>
-
-    <!-- Meta Pills -->
-    <div class="hero-meta">
-      <span class="meta-pill"><span class="mp-icon">⏱</span>마지막 갱신: <strong id="heroUpdatedAt">—</strong></span>
-      <span class="meta-pill"><span class="mp-icon">🔄</span>5분 자동 갱신</span>
-      <span class="meta-pill"><span class="mp-icon">🔌</span>Channel.io Open API v5</span>
-      <span class="meta-pill audit"><span class="mp-icon">✓</span>KST 기준 · Vercel Serverless</span>
-    </div>
-  </header>
-
-  <!-- ══════════════════════════════════════════════════════════════════════
-       TOOLBAR
-  ═══════════════════════════════════════════════════════════════════════ -->
-  <div class="toolbar">
-    <div class="toolbar-left">
-      <span class="toolbar-label">분석 기간</span>
+    <div class="dash-header-right">
       <div class="range-tabs" id="rangeTabs">
         <button class="range-tab" data-range="7">7일</button>
         <button class="range-tab active" data-range="30">30일</button>
         <button class="range-tab" data-range="all">최근 500건</button>
       </div>
-    </div>
-    <div class="toolbar-right">
-      <div class="sync-dot-wrap"><span class="sync-dot"></span><span>API 연결됨</span></div>
-      <button class="csv-btn" id="csvDownloadBtn">↓ CSV 내보내기</button>
-      <button class="refresh-btn" id="refreshBtn">↻ 새로고침</button>
+      <div class="sync-dot-wrap"><span class="sync-dot"></span><span>연결됨</span></div>
+      <button class="csv-btn" id="csvDownloadBtn">↓ CSV</button>
+      <button class="refresh-btn" id="refreshBtn">↻</button>
     </div>
   </div>
 
-  <!-- ── Alert Strip (risks) ───────────────────────────────────────────── -->
-  <div class="alert-strip" id="alertStrip" style="display:none"></div>
-
-  <!-- ── Insights Strip ───────────────────────────────────────────────── -->
-  <div class="insights-strip" id="insightsStrip" style="display:none"></div>
+  <!-- ══════════════════════════════════════════════════════════════════════
+       COMMAND STRIP — 5 KEY METRICS
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="command-strip" id="kpiGrid">
+    <!-- JS로 채움 (renderKPIs) -->
+  </div>
 
   <!-- ══════════════════════════════════════════════════════════════════════
        ACTION COMMAND CENTER
   ═══════════════════════════════════════════════════════════════════════ -->
   <section class="action-center">
 
-    <!-- ── Status Pulse Bar ────────────────────────────────────────────── -->
-    <div class="ac-pulse">
-      <div class="ac-pulse-left">
-        <span class="ac-pulse-label">⚡ 오늘 조치</span>
-        <span class="ac-health-pill" id="acHealthPill">–</span>
-      </div>
-      <div class="ac-pulse-metrics" id="acPulseMetrics">
-        <!-- JS rendered -->
-      </div>
-    </div>
-
-    <!-- ── 미배정 긴급 배너 (건수 있을 때만 표시) ────────────────────── -->
-    <div id="acUnassignedBanner" class="ac-urgent-banner" style="display:none">
-      <div class="aub-icon">🚨</div>
-      <div class="aub-content">
-        <div class="aub-title">미배정 채팅 <span class="aub-count" id="acUnassignedCount">0</span>건 — 즉시 배정 필요</div>
-        <div class="aub-desc" id="acUnassignedDesc">담당자가 지정되지 않은 채팅이 있습니다. 채널톡 관리자 화면에서 즉시 배정하세요.</div>
-      </div>
-    </div>
-
-    <!-- ── 3-column main panel ───────────────────────────────────────── -->
+    <!-- ── 2-column main panel ───────────────────────────────────────── -->
     <div class="ac-main">
 
       <!-- 조치 필요 항목 -->
@@ -190,18 +105,9 @@
         <div class="ac-col-hd">
           <span class="ac-col-title">📋 조치 필요 항목</span>
           <span class="ac-badge-count" id="acTodayCount" style="display:none">!</span>
+          <span class="ac-health-pill" id="acHealthPill">–</span>
         </div>
         <div class="ac-action-list" id="acTodayBody">
-          <div class="ac-loading">분석 중…</div>
-        </div>
-      </div>
-
-      <!-- 주요 리스크 -->
-      <div class="ac-col ac-col-risk">
-        <div class="ac-col-hd">
-          <span class="ac-col-title">🎯 주요 리스크</span>
-        </div>
-        <div class="ac-risk-list" id="acRiskBody">
           <div class="ac-loading">분석 중…</div>
         </div>
       </div>
@@ -209,7 +115,7 @@
       <!-- VOC 현황 바 차트 -->
       <div class="ac-col ac-col-voc">
         <div class="ac-col-hd">
-          <span class="ac-col-title">💬 VOC 현황</span>
+          <span class="ac-col-title">💬 VOC 현황 TOP 5</span>
           <span class="ac-voc-tag" id="acVocBadge"></span>
         </div>
         <div class="ac-voc-bars" id="acVocBody">
@@ -234,20 +140,20 @@
     <div class="collapsible-content" id="riskSection">
       <div class="chart-master-grid">
 
-        <article class="panel col-7">
-          <div class="panel-header">
-            <div><div class="panel-title">VOC 리스크 조치 현황</div><div class="panel-sub">비율 8% 이상 항목 · 즉시 대응 필요</div></div>
-            <span class="real-badge">✓ 실데이터</span>
-          </div>
-          <div id="vocRiskCards" class="voc-risk-cards-wrap"></div>
-        </article>
-
-        <article class="panel col-5">
+        <article class="panel col-6">
           <div class="panel-header">
             <div><div class="panel-title">담당자 편중 &amp; 미배정</div><div class="panel-sub">즉시 조치 필요 항목</div></div>
             <span class="data-badge badge-warn">실시간</span>
           </div>
           <div id="concRiskPanel"></div>
+        </article>
+
+        <article class="panel col-6">
+          <div class="panel-header">
+            <div><div class="panel-title">VOC 리스크 조치 현황</div><div class="panel-sub">비율 8% 이상 항목 · 즉시 대응 필요</div></div>
+            <span class="real-badge">✓ 실데이터</span>
+          </div>
+          <div id="vocRiskCards" class="voc-risk-cards-wrap"></div>
         </article>
 
       </div>
@@ -274,7 +180,6 @@
             <span class="real-badge">✓ 실데이터</span>
           </div>
           <div class="res-summary" id="resSummary"></div>
-          <div id="resAuxStats" class="res-aux-stats"></div>
           <div class="rt-list" id="resList"></div>
           <div class="res-note" id="avgResNote"></div>
         </article>

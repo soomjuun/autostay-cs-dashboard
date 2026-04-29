@@ -221,19 +221,7 @@ body {
   border-top: 1px dashed var(--border-soft); margin-top: 3px;
 }
 
-/* 분석 기준 헤더 (KPI 스트립 위) */
-.kpi-basis-header {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 14px; margin-bottom: 10px;
-  background: linear-gradient(135deg, #e6f9f7, #f0fdf9);
-  border: 1px solid #99f6e4; border-radius: 8px;
-  font-size: 12px; color: var(--teal); font-weight: 700;
-  letter-spacing: -.01em;
-}
-.kpi-basis-header .kbh-icon { font-size: 13px; }
-.kpi-basis-header .kbh-main { font-weight: 800; }
-.kpi-basis-header .kbh-sep { color: #99f6e4; }
-.kpi-basis-header .kbh-detail { color: #0d9488; font-weight: 500; font-size: 11px; }
+/* kpi-basis-header: defined below with .dash-header */
 
 /* Hero KPI Strip */
 .hero-kpi-strip {
@@ -257,6 +245,7 @@ body {
 /* ═══════════════════════════════════════════════════════════════════════════
    TOOLBAR
 ═══════════════════════════════════════════════════════════════════════════ */
+/* legacy toolbar — no longer in HTML but kept for safety */
 .toolbar {
   display: flex; justify-content: space-between; align-items: center;
   padding: 10px 16px; background: var(--surface); border: 1px solid var(--border);
@@ -269,6 +258,42 @@ body {
   font-size: 10px; font-weight: 700; text-transform: uppercase;
   letter-spacing: .1em; color: var(--subtle); white-space: nowrap;
 }
+
+/* ─── Dash Header (compact top bar) ─────────────────────────────────────── */
+.dash-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 16px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); margin-bottom: 10px;
+  gap: 14px; flex-wrap: wrap; box-shadow: var(--shadow);
+}
+.dash-header-left { display: flex; align-items: center; gap: 16px; flex: 1; min-width: 0; }
+.dash-header-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: wrap; }
+.dash-title { display: flex; align-items: center; gap: 7px; white-space: nowrap; flex-shrink: 0; }
+.dash-brand {
+  font-size: 12px; font-weight: 900; letter-spacing: .1em;
+  color: var(--teal); text-transform: uppercase;
+}
+.dash-title-sep { color: var(--border); font-size: 16px; }
+.dash-title-text { font-size: 13px; font-weight: 700; color: var(--ink); }
+
+/* ─── Kpi Basis Header (inside dash-header) ─────────────────────────────── */
+.kpi-basis-header {
+  display: none; /* JS shows it */
+  align-items: center; gap: 8px;
+  font-size: 11px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  padding: 3px 10px; background: var(--teal-s); border-radius: 6px;
+}
+
+/* ─── Command Strip (5 KPI cards full-width) ────────────────────────────── */
+.command-strip {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+@media (max-width: 900px) { .command-strip { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 600px) { .command-strip { grid-template-columns: repeat(2, 1fr); } }
 
 /* ─── Range Tabs ─────────────────────────────────────────────────────────── */
 .range-tabs { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; flex-shrink: 0; }
@@ -373,11 +398,12 @@ body {
 .ac-health-pill {
   font-size: 10.5px; font-weight: 700;
   padding: 2px 9px; border-radius: 20px;
-  background: rgba(255,255,255,.12); color: rgba(255,255,255,.8);
+  background: var(--gray-bg); color: var(--muted);
+  margin-left: auto;
 }
-.ac-health-pill.danger { background: rgba(220,38,38,.35); color: #fca5a5; }
-.ac-health-pill.warn   { background: rgba(217,119,6,.35);  color: #fcd34d; }
-.ac-health-pill.good   { background: rgba(16,185,129,.3);  color: #6ee7b7; }
+.ac-health-pill.danger { background: var(--rose-bg); color: var(--rose); }
+.ac-health-pill.warn   { background: var(--amber-bg); color: var(--amber); }
+.ac-health-pill.good   { background: var(--green-bg); color: var(--green); }
 
 .ac-pulse-metrics {
   display: flex; align-items: center; gap: 0; flex: 1; overflow: hidden;
@@ -429,10 +455,10 @@ body {
 }
 .aub-action:hover { background: var(--rose); color: #fff; }
 
-/* ─── 3-column main panel ─────────────────────────────────────────── */
+/* ─── 2-column main panel ─────────────────────────────────────────── */
 .ac-main {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 3fr 2fr;
   gap: 0;
 }
 .ac-col {
@@ -971,30 +997,18 @@ body {
   .col-4 { flex: 0 0 calc(40% - 6px); }
 }
 @media (max-width: 1080px) {
-  .hero-kpi-strip { grid-template-columns: repeat(3, 1fr) !important; }
-  .ac-main { grid-template-columns: 1fr 1fr; }
-  .ac-col:last-child { grid-column: span 2; border-right: none; border-top: 1px solid var(--border-soft); }
-  .col-8, .col-7, .col-6, .col-5, .col-4 { flex: 0 0 100%; }
-}
-@media (max-width: 960px) {
-  .hero-top { grid-template-columns: 1fr; }
-  .hero-focus { width: 100%; max-width: 340px; }
-  .hero-gauge { margin: 0 auto; }
-}
-@media (max-width: 900px) {
-  .hero-kpi-strip { grid-template-columns: repeat(2, 1fr); }
-}
-@media (max-width: 700px) {
-  .app { padding: 14px 14px 40px; }
-  .hero-kpi-strip { grid-template-columns: repeat(2, 1fr); }
-  .hero-copy h1 { font-size: 20px; }
+  .command-strip { grid-template-columns: repeat(3, 1fr); }
   .ac-main { grid-template-columns: 1fr; }
   .ac-col { border-right: none; border-top: 1px solid var(--border-soft); }
   .ac-col:first-child { border-top: none; }
-  .ac-pulse-metrics { display: none; }
-  .toolbar { flex-direction: column; align-items: stretch; }
-  .toolbar-left, .toolbar-right { justify-content: space-between; }
-  .alert-strip { flex-direction: column; }
+  .col-8, .col-7, .col-6, .col-5, .col-4 { flex: 0 0 100%; }
+}
+@media (max-width: 700px) {
+  .app { padding: 14px 14px 40px; }
+  .command-strip { grid-template-columns: repeat(2, 1fr); }
+  .ac-main { grid-template-columns: 1fr; }
+  .dash-header { flex-direction: column; align-items: stretch; }
+  .dash-header-right { justify-content: space-between; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
