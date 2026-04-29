@@ -502,7 +502,7 @@ function renderActionCenter(d, scoreObj, insights) {
     .map((lbl, i) => ({ lbl, cnt: tags.values[i] || 0, pct: Math.round((tags.values[i] || 0) / total * 100) }))
     .filter(t => t.cnt > 0)
     .sort((a, b) => b.cnt - a.cnt)
-    .slice(0, 6);
+    .slice(0, 5);
 
   const risingTags = allTags.filter(t => t.pct >= 10);
 
