@@ -161,14 +161,21 @@
        ACTION COMMAND CENTER
   ═══════════════════════════════════════════════════════════════════════ -->
   <section class="action-center">
-    <div class="section-header">
-      <span class="section-icon">⚡</span>
-      <span class="section-title">Action Command Center</span>
-      <span class="section-tag">실시간 조치 필요</span>
+
+    <!-- ── Status Pulse Bar ────────────────────────────────────────────── -->
+    <div class="ac-pulse">
+      <div class="ac-pulse-left">
+        <span class="ac-pulse-label">⚡ Action Center</span>
+        <span class="ac-health-pill" id="acHealthPill">–</span>
+      </div>
+      <div class="ac-pulse-metrics" id="acPulseMetrics">
+        <!-- JS rendered -->
+      </div>
     </div>
-    <!-- 미배정 채팅 즉시 조치 배너 (미배정 건수 있을 때만 표시) -->
+
+    <!-- ── 미배정 긴급 배너 (건수 있을 때만 표시) ────────────────────── -->
     <div id="acUnassignedBanner" class="ac-urgent-banner" style="display:none">
-      <div class="aub-icon">⚡</div>
+      <div class="aub-icon">🚨</div>
       <div class="aub-content">
         <div class="aub-title">미배정 채팅 <span class="aub-count" id="acUnassignedCount">0</span>건 — 즉시 배정 필요</div>
         <div class="aub-desc" id="acUnassignedDesc">담당자가 지정되지 않은 채팅이 있습니다. 채널톡 관리자 화면에서 즉시 배정하세요.</div>
@@ -176,37 +183,38 @@
       <a class="aub-action" href="https://app.channel.io" target="_blank" rel="noopener">채널톡에서 배정 →</a>
     </div>
 
-    <div class="ac-grid">
+    <!-- ── 3-column main panel ───────────────────────────────────────── -->
+    <div class="ac-main">
 
-      <div class="ac-card" id="acCard0">
-        <div class="ac-card-header">
-          <span class="ac-icon">📋</span>
-          <span class="ac-title">오늘 조치할 항목</span>
-          <span class="ac-count" id="acTodayCount" style="display:none">0</span>
+      <!-- 조치 필요 항목 -->
+      <div class="ac-col ac-col-actions">
+        <div class="ac-col-hd">
+          <span class="ac-col-title">📋 조치 필요 항목</span>
+          <span class="ac-badge-count" id="acTodayCount" style="display:none">!</span>
         </div>
-        <div class="ac-body" id="acTodayBody">
-          <div class="ac-empty">분석 중…</div>
+        <div class="ac-action-list" id="acTodayBody">
+          <div class="ac-loading">분석 중…</div>
         </div>
       </div>
 
-      <div class="ac-card" id="acCard1">
-        <div class="ac-card-header">
-          <span class="ac-icon">🎯</span>
-          <span class="ac-title">주요 리스크 TOP 3</span>
+      <!-- 주요 리스크 -->
+      <div class="ac-col ac-col-risk">
+        <div class="ac-col-hd">
+          <span class="ac-col-title">🎯 주요 리스크</span>
         </div>
-        <div class="ac-body" id="acRiskBody">
-          <div class="ac-empty">분석 중…</div>
+        <div class="ac-risk-list" id="acRiskBody">
+          <div class="ac-loading">분석 중…</div>
         </div>
       </div>
 
-      <div class="ac-card" id="acCard2">
-        <div class="ac-card-header">
-          <span class="ac-icon">💬</span>
-          <span class="ac-title">VOC 알림</span>
-          <span class="ac-badge" id="acVocBadge"></span>
+      <!-- VOC 현황 바 차트 -->
+      <div class="ac-col ac-col-voc">
+        <div class="ac-col-hd">
+          <span class="ac-col-title">💬 VOC 현황</span>
+          <span class="ac-voc-tag" id="acVocBadge"></span>
         </div>
-        <div class="ac-body" id="acVocBody">
-          <div class="ac-empty">분석 중…</div>
+        <div class="ac-voc-bars" id="acVocBody">
+          <div class="ac-loading">분석 중…</div>
         </div>
       </div>
 

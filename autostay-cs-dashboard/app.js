@@ -347,9 +347,10 @@ function renderAlertStrip(d, scoreObj) {
   `).join('');
 }
 
-/* ─── Render: Action Command Center ────────────────────────────────────── */
+/* ─── Render: Action Command Center (Redesigned) ──────────────────────── */
 function renderActionCenter(d, scoreObj, insights) {
-  // 미배정 채팅 즉시 조치 배너
+
+  // ── 미배정 배너 ──
   const unassignedCount = d.summary?.unassignedChats || 0;
   const banner = document.getElementById('acUnassignedBanner');
   if (banner) {
@@ -358,15 +359,15 @@ function renderActionCenter(d, scoreObj, insights) {
       const countEl = document.getElementById('acUnassignedCount');
       if (countEl) countEl.textContent = unassignedCount;
       const descEl = document.getElementById('acUnassignedDesc');
-      if (descEl) descEl.textContent = `담당자 미배정 채팅 ${unassignedCount}건 — 즉시 배정 필요. 채널톡 관리자 > 미배정 큐 확인.`;
+      if (descEl) descEl.textContent = `담당자 미배정 채팅 ${unassignedCount}건 — 채널톡 관리자 > 미배정 큐 즉시 확인 필요.`;
     } else {
       banner.style.display = 'none';
     }
   }
 
-  const score = scoreObj.score;
-  const total = d.summary.totalChats || 1;
-  const rb = d.resolutionBuckets || {};
+  const score  = scoreObj.score;
+  const total  = d.summary.totalChats || 1;
+  const rb     = d.resolutionBuckets || {};
   const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
   const managers = (d.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
 
@@ -375,135 +376,167 @@ function renderActionCenter(d, scoreObj, insights) {
     return acc;
   }, 0);
   const complaintPct = Math.round(complaints / total * 100);
-  const slowPct = Math.round((rb['8시간+'] || 0) / resTotal * 100);
+  const slowPct  = Math.round((rb['8시간+'] || 0) / resTotal * 100);
   const quickPct = Math.round(((rb['0~5분'] || 0) + (rb['5~30분'] || 0)) / resTotal * 100);
+  const openChats = d.summary?.openChats || 0;
+  const avgRes   = d.summary?.avgResolutionMin;
 
-  // ── 카드 1: 오늘 조치할 항목 ──
+  // ── Pulse Bar ──
+  const pillEl = document.getElementById('acHealthPill');
+  if (pillEl) {
+    const grade = score >= 80 ? { text: `${score}점 · 양호`, cls: 'good' }
+                : score >= 60 ? { text: `${score}점 · 주의`, cls: 'warn' }
+                              : { text: `${score}점 · 위험`, cls: 'danger' };
+    pillEl.textContent = grade.text;
+    pillEl.className = `ac-health-pill ${grade.cls}`;
+  }
+
+  const avgResStr = avgRes == null ? '–'
+    : avgRes < 60  ? `${Math.round(avgRes)}분`
+    : `${(avgRes / 60).toFixed(1)}h`;
+
+  const pulseMetrics = [
+    { label: '미해결',    value: `${openChats}건`,       color: openChats > 5 ? 'red' : openChats > 0 ? 'amber' : 'green' },
+    { label: '평균응답',  value: avgResStr,               color: avgRes == null ? 'blue' : avgRes > 120 ? 'amber' : 'green' },
+    { label: '컴플레인율', value: `${complaintPct}%`,    color: complaintPct >= 15 ? 'red' : complaintPct >= 8 ? 'amber' : 'green' },
+    { label: '30분↓해결', value: `${quickPct}%`,         color: quickPct >= 60 ? 'green' : quickPct >= 30 ? 'amber' : 'red' }
+  ];
+
+  const pulseEl = document.getElementById('acPulseMetrics');
+  if (pulseEl) {
+    pulseEl.innerHTML = pulseMetrics.map(m => `
+      <div class="ac-pulse-dot">
+        <span class="ac-dot-indicator ${m.color}"></span>
+        <span class="ac-dot-label">${m.label}</span>
+        <span class="ac-dot-value">${m.value}</span>
+      </div>
+    `).join('');
+  }
+
+  // ── Col 1: 조치 필요 항목 ──
   const todayItems = [];
 
-  if (d.summary.openChats > 0) {
-    todayItems.push({
-      type: 'danger', label: '즉시',
-      title: `미해결 오픈 채팅 ${d.summary.openChats}건`,
-      desc: '즉시 확인 및 응답 필요 — 고객 대기 중'
-    });
+  if (openChats > 0) {
+    todayItems.push({ type: 'danger', title: '미해결 오픈 채팅', desc: '즉시 확인 및 응답 — 고객 대기 중', metric: openChats + '건' });
+  }
+  if (unassignedCount > 0) {
+    todayItems.push({ type: 'danger', title: '미배정 채팅', desc: '담당자 즉시 배정 필요', metric: unassignedCount + '건' });
   }
   if (complaintPct >= 15) {
-    todayItems.push({
-      type: 'danger', label: '긴급',
-      title: `컴플레인 ${complaintPct}% (${complaints}건)`,
-      desc: '서비스 불만 급증 — 원인 파악 및 즉시 대응'
-    });
+    todayItems.push({ type: 'danger', title: '컴플레인 급증', desc: '서비스 불만 — 원인 파악 및 즉시 대응', metric: complaintPct + '%' });
   } else if (complaintPct >= 8) {
-    todayItems.push({
-      type: 'warn', label: '주의',
-      title: `컴플레인 ${complaintPct}% (${complaints}건)`,
-      desc: '지속 모니터링 — 추이 관찰 권장'
-    });
+    todayItems.push({ type: 'warn', title: '컴플레인 증가', desc: '지속 모니터링 — 추이 관찰 권장', metric: complaintPct + '%' });
   }
   if (managers.length > 0) {
-    const topPct2 = Math.round((managers[0].count || 0) / total * 100);
-    if (topPct2 > 70) {
-      todayItems.push({
-        type: 'danger', label: '분산필요',
-        title: `${managers[0].name} 집중도 ${topPct2}%`,
-        desc: '단독 처리 과부하 — 담당자 추가 배정 검토 · 재배정 큐 확인'
-      });
+    const topPct = Math.round((managers[0].count || 0) / total * 100);
+    if (topPct > 70) {
+      todayItems.push({ type: 'danger', title: `${managers[0].name} 과부하`, desc: '담당자 추가 배정 검토 필요', metric: topPct + '%' });
     }
   }
-  // 8시간+ 건이 많으면 drill-down 안내 (항목 #7 연계)
   if ((rb['8시간+'] || 0) > 0) {
     todayItems.push({
-      type: 'info', label: '확인',
-      title: `8시간+ 미해결 ${rb['8시간+'] || 0}건`,
-      desc: `<a class="ac-drill-link" href="#" onclick="openLongChatsPanel();return false;">▸ 상세 목록 보기 (날짜·태그·담당자)</a>`
+      type: 'warn', title: '8시간+ 미해결',
+      desc: `<a class="ac-drill-link" href="#" onclick="openLongChatsPanel();return false;">▸ 상세 목록 보기</a>`,
+      metric: (rb['8시간+'] || 0) + '건'
     });
   }
-
   if (todayItems.length === 0) {
-    todayItems.push({ type: 'good', label: '정상', title: '조치 필요 항목 없음', desc: 'CS 상태 양호 — 정기 모니터링 유지' });
+    todayItems.push({ type: 'good', title: '조치 필요 항목 없음', desc: 'CS 상태 양호 — 정기 모니터링 유지', metric: '✓' });
   }
 
-  const countEl = document.getElementById('acTodayCount');
   const urgentCount = todayItems.filter(i => i.type === 'danger').length;
+  const countEl = document.getElementById('acTodayCount');
   if (countEl) {
     if (urgentCount > 0) { countEl.textContent = urgentCount; countEl.style.display = 'inline-flex'; }
-    else                 { countEl.style.display = 'none'; }
+    else { countEl.style.display = 'none'; }
   }
 
   const todayBody = document.getElementById('acTodayBody');
   if (todayBody) {
-    todayBody.innerHTML = todayItems.map(item => `
-      <div class="ac-item ${item.type}">
-        <div class="ac-item-icon ac-label-badge">${item.label}</div>
-        <div class="ac-item-text">
-          <div class="ac-item-title">${item.title}</div>
-          <div class="ac-item-desc">${item.desc}</div>
+    todayBody.innerHTML = todayItems.map((item, idx) => `
+      <div class="ac-action-row ${item.type}">
+        <div class="ac-action-num">${idx + 1}</div>
+        <div class="ac-action-body">
+          <div class="ac-action-title">${item.title}</div>
+          <div class="ac-action-sub">${item.desc}</div>
         </div>
+        <div class="ac-action-metric">${item.metric}</div>
       </div>
     `).join('');
   }
 
-  // ── 카드 2: 주요 리스크 TOP 3 ──
+  // ── Col 2: 주요 리스크 ──
   const riskItems = [];
-  if (score < 50) riskItems.push({ type: 'danger', label: 'D등급', title: `CS 건강 D등급 (${score}점)`, desc: '복합 위험 상태 — 긴급 CS 운영 점검 필요' });
-  if (complaintPct >= 10) riskItems.push({ type: 'danger', label: '불만', title: `컴플레인율 ${complaintPct}%`, desc: '서비스 품질 하락 신호 — 즉시 대응' });
-  if (slowPct > 30) riskItems.push({ type: 'warn', label: '지연', title: `8시간+ 해결 ${slowPct}%`, desc: '비동기 채팅 관리 정책 점검 필요' });
+  if (score < 50) riskItems.push({ type: 'danger', chip: 'D등급', title: `CS 건강지수 ${score}점`, desc: '복합 위험 — 긴급 점검 필요' });
+  if (complaintPct >= 10) riskItems.push({ type: 'danger', chip: '불만', title: `컴플레인율 ${complaintPct}%`, desc: '서비스 품질 하락 신호' });
+  if (slowPct > 30) riskItems.push({ type: 'warn', chip: '지연', title: `8h+ 해결 ${slowPct}%`, desc: '비동기 채팅 관리 정책 점검' });
   if (managers.length > 0) {
     const topRisk = Math.round((managers[0].count || 0) / total * 100);
-    if (topRisk > 60) riskItems.push({ type: 'warn', label: '집중', title: `${managers[0].name} 집중 ${topRisk}%`, desc: '업무 분산 및 백업 담당자 지정 권장' });
+    if (topRisk > 60) riskItems.push({ type: 'warn', chip: '집중', title: `${managers[0].name} 집중 ${topRisk}%`, desc: '업무 분산 및 백업 담당자 지정' });
   }
-  if (d.summary.openChats > 5) riskItems.push({ type: 'warn', label: '대기', title: `미응답 오픈 ${d.summary.openChats}건`, desc: '고객 대기 장기화 — 우선 처리 필요' });
-  if (quickPct < 20) riskItems.push({ type: 'warn', label: '속도', title: `30분 내 해결 ${quickPct}%`, desc: '응답 속도 개선 필요 — SLA 기준 수립 권장' });
+  if (openChats > 5) riskItems.push({ type: 'warn', chip: '대기', title: `미응답 오픈 ${openChats}건`, desc: '고객 대기 장기화 — 우선 처리' });
+  if (quickPct < 20) riskItems.push({ type: 'warn', chip: '속도', title: `30분↓해결 ${quickPct}%`, desc: '응답 속도 개선 — SLA 기준 수립 권장' });
 
-  const topRisks = riskItems.slice(0, 3);
-  if (topRisks.length === 0) topRisks.push({ type: 'good', label: '정상', title: '주요 리스크 없음', desc: 'CS 지표 정상 범위 유지 중' });
+  const topRisks = riskItems.slice(0, 4);
+  if (topRisks.length === 0) topRisks.push({ type: 'good', chip: '정상', title: '주요 리스크 없음', desc: 'CS 지표 정상 범위 유지' });
 
   const riskBody = document.getElementById('acRiskBody');
   if (riskBody) {
     riskBody.innerHTML = topRisks.map(item => `
-      <div class="ac-item ${item.type}">
-        <div class="ac-item-icon ac-label-badge">${item.label}</div>
-        <div class="ac-item-text">
-          <div class="ac-item-title">${item.title}</div>
-          <div class="ac-item-desc">${item.desc}</div>
+      <div class="ac-risk-row ${item.type}">
+        <div class="ac-risk-chip">${item.chip}</div>
+        <div class="ac-risk-text">
+          <div class="ac-risk-title">${item.title}</div>
+          <div class="ac-risk-sub">${item.desc}</div>
         </div>
       </div>
     `).join('');
   }
 
-  // ── 카드 3: VOC 알림 ──
+  // ── Col 3: VOC 바 차트 ──
   const { tags } = d;
   const vocBadge = document.getElementById('acVocBadge');
   const vocBody  = document.getElementById('acVocBody');
 
-  const risingTags = (tags?.labels || [])
+  const allTags = (tags?.labels || [])
     .map((lbl, i) => ({ lbl, cnt: tags.values[i] || 0, pct: Math.round((tags.values[i] || 0) / total * 100) }))
-    .filter(t => t.pct >= 10)
+    .filter(t => t.cnt > 0)
     .sort((a, b) => b.cnt - a.cnt)
-    .slice(0, 4);
+    .slice(0, 6);
+
+  const risingTags = allTags.filter(t => t.pct >= 10);
 
   if (vocBadge) {
     const urgentVoc = risingTags.filter(t => t.pct >= 15).length;
-    vocBadge.textContent = urgentVoc > 0 ? `${urgentVoc}건 긴급` : `${risingTags.length}건 주목`;
-    vocBadge.className = urgentVoc > 0 ? 'ac-count' : 'ac-badge';
+    if (urgentVoc > 0) {
+      vocBadge.textContent = `🔴 ${urgentVoc}건 긴급`;
+      vocBadge.className = 'ac-voc-tag danger';
+    } else if (risingTags.length > 0) {
+      vocBadge.textContent = `${risingTags.length}건 주목`;
+      vocBadge.className = 'ac-voc-tag';
+    } else {
+      vocBadge.textContent = '분산 양호';
+      vocBadge.className = 'ac-voc-tag good';
+    }
   }
 
   if (vocBody) {
-    if (!risingTags.length) {
-      vocBody.innerHTML = '<div class="ac-empty">10% 이상 VOC 없음 — 분산 분포 양호</div>';
+    if (!allTags.length) {
+      vocBody.innerHTML = '<div class="ac-empty-row">태그 데이터 없음</div>';
     } else {
-      vocBody.innerHTML = risingTags.map(t => {
-        const ctx  = VOC_CONTEXTS[t.lbl] || '관련 문의';
-        const type = t.pct >= 15 ? 'danger' : 'warn';
-        const lbl  = t.lbl.includes('컴플레인') ? '불만' : t.lbl.includes('구독') ? '구독' : t.lbl.includes('탈퇴') ? '탈퇴' : '문의';
+      const maxCnt = allTags[0].cnt || 1;
+      vocBody.innerHTML = allTags.map(t => {
+        const type = t.pct >= 15 ? 'danger' : t.pct >= 10 ? 'warn' : 'good';
         return `
-          <div class="ac-item ${type}">
-            <div class="ac-item-icon ac-label-badge">${lbl}</div>
-            <div class="ac-item-text">
-              <div class="ac-item-title">#${t.lbl} · ${t.pct}% (${t.cnt}건)</div>
-              <div class="ac-item-desc">${ctx}</div>
+          <div class="ac-voc-bar-row">
+            <div class="ac-voc-bar-top">
+              <span class="ac-voc-bar-label">${t.lbl}</span>
+              <span class="ac-voc-bar-pct ${type}">${t.pct}%</span>
             </div>
+            <div class="ac-voc-track">
+              <div class="ac-voc-fill ${type}" style="width:${Math.round(t.cnt / maxCnt * 100)}%"></div>
+            </div>
+            <div class="ac-voc-count">${t.cnt}건</div>
           </div>
         `;
       }).join('');
@@ -1700,7 +1733,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const csvBtn = document.getElementById('csvDownloadBtn');
   if (csvBtn) csvBtn.addEventListener('click', downloadCSV);
 
-  // 롱챗 모달 배경 클릭 닫기
+  // 롤챗 모달 배경 클릭 닫기
   const modal = document.getElementById('longChatsModal');
   if (modal) modal.addEventListener('click', e => { if (e.target === modal) closeLongChatsPanel(); });
 
@@ -1722,5 +1755,4 @@ function triggerFullReload() {
   render();
 }
 
-/* ─── Boot ───────────────────────────────────────────────────────────────── */
 render();
