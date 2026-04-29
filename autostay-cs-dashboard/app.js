@@ -1351,6 +1351,7 @@ function renderResolution(d) {
 function renderVOC(d) {
   const { tags, summary } = d;
   const el = document.getElementById('vocList');
+  if (!el) return;
   if (!tags?.labels?.length) {
     el.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:12px">태그 데이터 없음</div>';
     return;
@@ -2017,6 +2018,95 @@ function scheduleRefresh() {
   refreshTimer = setTimeout(silentRefresh, 5 * 60 * 1000);
 }
 
+/* ─── Render: Gauge Grid (4 SVG 아크 게이지) ─────────────────────────────── */
+function renderGaugeGrid(d, scoreObj) {
+  const ARC_LEN = 131.9; // π * r = π * 42
+
+  function setGauge(id, pct, colorClass) {
+    const el = document.getElementById('gsvg-' + id);
+    if (!el) return;
+    const filled = Math.max(0, Math.min(1, pct / 100)) * ARC_LEN;
+    el.setAttribute('stroke-dasharray', `${filled.toFixed(1)} ${ARC_LEN}`);
+    // 색상 클래스 교체
+    el.className.baseVal = el.className.baseVal
+      .replace(/gauge-fill--(good|warn|danger)/g, '') + ' ' + colorClass;
+  }
+
+  function setBadge(id, text, cls) {
+    const el = document.getElementById('gbadge-' + id);
+    if (!el) return;
+    el.textContent = text;
+    el.className = 'gauge-panel-badge ' + cls;
+  }
+
+  const rb     = d.resolutionBuckets || {};
+  const total  = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
+  const quick  = ((rb['0~5분'] || 0) + (rb['5~30분'] || 0));
+  const slow8h = rb['8시간+'] || 0;
+  const quickPct = Math.round(quick / total * 100);
+  const slowPct  = Math.round(slow8h / total * 100);
+  const avgMin   = d.summary?.avgResolutionMin ?? null;
+
+  // 담당자 편중도: 상위 1인 비율
+  const mgrs = (d.managers || []).filter(m => m.count > 0);
+  const mgrTotal = mgrs.reduce((s, m) => s + m.count, 0) || 1;
+  const topMgr   = mgrs[0];
+  const topPct   = topMgr ? Math.round(topMgr.count / mgrTotal * 100) : 0;
+
+  /* ── 1. 30분↓ 해결율 ── */
+  const qColor = quickPct >= 70 ? 'gauge-fill--good' : quickPct >= 50 ? 'gauge-fill--warn' : 'gauge-fill--danger';
+  setGauge('quick', quickPct, qColor);
+  const qEl = document.getElementById('gval-quick'); if (qEl) qEl.textContent = quickPct + '%';
+  const qSub = document.getElementById('gsub-quick');
+  if (qSub) qSub.textContent = `${quick}건 / 전체 ${total}건`;
+  setBadge('quick',
+    quickPct >= 70 ? '양호' : quickPct >= 50 ? '주의' : '위험',
+    quickPct >= 70 ? 'good' : quickPct >= 50 ? 'warn' : 'danger');
+
+  /* ── 2. 8h+ 지연율 ── */
+  const sColor = slowPct <= 10 ? 'gauge-fill--good' : slowPct <= 25 ? 'gauge-fill--warn' : 'gauge-fill--danger';
+  setGauge('slow', slowPct, sColor);
+  const sEl = document.getElementById('gval-slow'); if (sEl) sEl.textContent = slowPct + '%';
+  const sSub = document.getElementById('gsub-slow');
+  if (sSub) sSub.textContent = `${slow8h}건 장기 지연`;
+  setBadge('slow',
+    slowPct <= 10 ? '양호' : slowPct <= 25 ? '주의' : '위험',
+    slowPct <= 10 ? 'good' : slowPct <= 25 ? 'warn' : 'danger');
+
+  /* ── 3. 평균 해결시간 ── */
+  let avgText = '—', avgPct = 0;
+  if (avgMin != null) {
+    avgText = avgMin >= 60
+      ? `${Math.floor(avgMin / 60)}h${avgMin % 60 > 0 ? Math.round(avgMin % 60) + 'm' : ''}`
+      : `${Math.round(avgMin)}분`;
+    // 기준: 30분=100점(최고), 480분=0점(최저) 역비례
+    avgPct = Math.max(0, Math.min(100, Math.round((1 - (avgMin - 30) / 450) * 100)));
+  }
+  const aColor = avgMin == null ? 'gauge-fill--good'
+    : avgMin <= 60 ? 'gauge-fill--good'
+    : avgMin <= 180 ? 'gauge-fill--warn' : 'gauge-fill--danger';
+  setGauge('avgres', avgMin != null ? avgPct : 0, aColor);
+  const aEl = document.getElementById('gval-avgres'); if (aEl) aEl.textContent = avgText;
+  const aSub = document.getElementById('gsub-avgres');
+  if (aSub) aSub.textContent = avgMin != null ? `기준 30분 목표` : '데이터 없음';
+  setBadge('avgres',
+    avgMin == null ? '—'
+    : avgMin <= 60 ? '양호' : avgMin <= 180 ? '주의' : '위험',
+    avgMin == null ? '' : avgMin <= 60 ? 'good' : avgMin <= 180 ? 'warn' : 'danger');
+
+  /* ── 4. 담당자 편중도 ── */
+  const cColor = topPct <= 40 ? 'gauge-fill--good' : topPct <= 60 ? 'gauge-fill--warn' : 'gauge-fill--danger';
+  setGauge('conc', topPct, cColor);
+  const cEl = document.getElementById('gval-conc'); if (cEl) cEl.textContent = topPct + '%';
+  const cSub = document.getElementById('gsub-conc');
+  if (cSub) cSub.textContent = topMgr
+    ? `${topMgr.name?.replace('오토스테이_', '') || topMgr.id} 담당`
+    : '담당자 없음';
+  setBadge('conc',
+    topPct <= 40 ? '양호' : topPct <= 60 ? '주의' : '위험',
+    topPct <= 40 ? 'good' : topPct <= 60 ? 'warn' : 'danger');
+}
+
 /* ─── Full Render ───────────────────────────────────────────────────────── */
 async function render() {
   try {
@@ -2036,6 +2126,7 @@ async function render() {
     renderAlertStrip(data, scoreObj);
     renderInsights(insights);
     renderActionCenter(data, scoreObj, insights);
+    renderGaugeGrid(data, scoreObj);
 
     setProgress(60);
 
@@ -2105,6 +2196,7 @@ async function silentRefresh() {
     renderAlertStrip(data, scoreObj);
     renderInsights(insights);
     renderActionCenter(data, scoreObj, insights);
+    renderGaugeGrid(data, scoreObj);
     renderTrend(data);
     renderHeatmap(data);
     renderTagBar(data);
@@ -2134,7 +2226,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.querySelectorAll('.range-tab').forEach(tabBtn => {
     tabBtn.addEventListener('click', () => {
-      const range = tabBtn.dataset.range;
+      const range = tabBtn.dataset.days || tabBtn.dataset.range;
       document.querySelectorAll('.range-tab').forEach(t => t.classList.remove('active'));
       tabBtn.classList.add('active');
       currentDays = range === 'all' ? 'all' : parseInt(range);

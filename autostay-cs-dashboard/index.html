@@ -1,413 +1,489 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>[OPS] 채널톡 CS 분석 대시보드</title>
-  <link rel="preconnect" href="https://cdn.jsdelivr.net">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/variable/pretendardvariable.css">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Autostay CS 대시보드</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
-  <link rel="stylesheet" href="./style.css">
-  <!-- 인증 가드: 경량 /api/check 엔드포인트로 빠른 인증 확인 -->
-  <script>
-    (function() {
-      fetch('/api/check?_t=' + Date.now(), { cache: 'no-store' })
-        .then(function(r) {
-          if (r.status === 401) {
-            // 로그인 페이지를 먼저 표시 (로딩 오버레이보다 먼저)
-            window.location.href = '/api/auth';
-          }
-        })
-        .catch(function() {});
-    })();
-  </script>
 </head>
 <body>
 
-<!-- ── Loading Overlay ───────────────────────────────────────────────────── -->
-<div id="loadingOverlay">
-  <div class="load-inner">
-    <div class="load-logo">AUTOSTAY</div>
-    <div class="spin-ring"></div>
-    <div class="load-label" id="loadText">채널톡 데이터 수집 중…</div>
-    <div class="load-steps">
-      <span class="load-step done" id="lstep-conn">● 연결</span>
-      <span class="load-step" id="lstep-api">● API</span>
-      <span class="load-step" id="lstep-charts">● 렌더링</span>
-      <span class="load-step" id="lstep-done">● 완료</span>
+<!-- ══════════════════════════════════════════════════════════════
+     로딩 오버레이
+══════════════════════════════════════════════════════════════ -->
+<div id="loadingOverlay" class="loading-overlay">
+  <div class="loading-inner">
+    <div class="loading-logo">
+      <span class="loading-logo-icon">🚗</span>
+      <span class="loading-logo-text">Autostay CS</span>
     </div>
-    <div class="load-progress"><div class="load-progress-bar" id="loadProgressBar" style="width:5%"></div></div>
+    <div class="loading-bar-wrap">
+      <div id="loadProgressBar" class="loading-bar-fill"></div>
+    </div>
+    <div id="loadText" class="loading-text">데이터 불러오는 중…</div>
+    <div class="loading-steps">
+      <span id="lstep-conn"  class="lstep">연결</span>
+      <span id="lstep-api"   class="lstep">API</span>
+      <span id="lstep-charts" class="lstep">차트</span>
+      <span id="lstep-done"  class="lstep">완료</span>
+    </div>
   </div>
 </div>
 
-<!-- ── Top Status Bar ────────────────────────────────────────────────────── -->
-<div class="topbar">
-  <div class="topbar-left">
-    <span class="tag-live"><span class="live-dot"></span>5분 갱신</span>
-    <span class="topbar-name" id="channelName">오토스테이 CS</span>
-    <span class="topbar-sep">|</span>
-    <span class="topbar-info">Channel.io Open API v5</span>
-  </div>
-  <div class="topbar-right">
-    마지막 동기화: <span id="updatedAt" class="topbar-time">—</span>
-    <span class="topbar-sep">·</span>
-    5분 자동 갱신
-  </div>
+<!-- ══════════════════════════════════════════════════════════════
+     오류·샘플 배너
+══════════════════════════════════════════════════════════════ -->
+<div id="errBanner" class="global-banner global-banner--error" style="display:none">
+  <span class="banner-icon">⚠️</span>
+  <span class="banner-msg">데이터를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</span>
+</div>
+<div id="sampleNoteBanner" class="global-banner global-banner--warn" style="display:none">
+  <span class="banner-icon">ℹ️</span>
+  <span class="banner-msg">샘플 데이터가 표시되고 있습니다. 실제 채널을 연결하면 실시간 데이터를 확인할 수 있습니다.</span>
 </div>
 
-<div id="errBanner"></div>
-<div id="sampleNoteBanner" style="display:none"></div>
-
+<!-- ══════════════════════════════════════════════════════════════
+     앱 래퍼
+══════════════════════════════════════════════════════════════ -->
 <div class="app">
 
-  <!-- ══════════════════════════════════════════════════════════════════════
-       DASH HEADER (compact)
-  ═══════════════════════════════════════════════════════════════════════ -->
-  <div class="dash-header">
-    <div class="dash-header-left">
-      <div class="dash-title">
-        <span class="dash-brand">AUTOSTAY</span>
-        <span class="dash-title-sep">·</span>
-        <span class="dash-title-text">CS 분석 대시보드</span>
+  <!-- ────────────────────────────────────────────────────────
+       HERO — dark navy gradient
+  ──────────────────────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="hero-container">
+
+      <!-- 상단: 카피 + 헬스 카드 -->
+      <div class="hero-top">
+        <!-- 왼쪽: 카피 + 퀵 스탯 -->
+        <div class="hero-copy">
+          <div class="hero-eyebrow">Autostay · CS Intelligence</div>
+          <h1 class="hero-title">고객 서비스 대시보드</h1>
+          <p class="hero-desc">실시간 채널 데이터 기반 CS 운영 현황 및 품질 분석</p>
+
+          <!-- 퀵 스탯 4개 -->
+          <div id="heroQuickStats" class="hero-quick-stats">
+            <div class="hqs-item">
+              <span class="hqs-label">총 채팅</span>
+              <span id="hqsTotal" class="hqs-value">—</span>
+            </div>
+            <div class="hqs-item">
+              <span class="hqs-label">미해결</span>
+              <span id="hqsOpen" class="hqs-value hqs-warn">—</span>
+            </div>
+            <div class="hqs-item">
+              <span class="hqs-label">컴플레인</span>
+              <span id="hqsComplaint" class="hqs-value hqs-danger">—</span>
+            </div>
+            <div class="hqs-item">
+              <span class="hqs-label">평균해결</span>
+              <span id="hqsAvgRes" class="hqs-value">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 오른쪽: 헬스 스코어 게이지 -->
+        <div class="hero-focus">
+          <div id="healthCard" class="health-gauge-card">
+            <div class="hgc-label">CS 건강 점수</div>
+            <!-- SVG 반원 게이지 -->
+            <div class="hgc-gauge-wrap">
+              <svg class="hgc-svg" viewBox="0 0 120 70" xmlns="http://www.w3.org/2000/svg">
+                <path class="hgc-track" d="M10,65 A50,50 0 0,1 110,65" fill="none" stroke-width="10"/>
+                <path id="gaugeFill" class="hgc-fill" d="M10,65 A50,50 0 0,1 110,65" fill="none" stroke-width="10"
+                      stroke-dasharray="188.5" stroke-dashoffset="188.5" stroke-linecap="round"/>
+              </svg>
+              <div class="hgc-center">
+                <div id="healthScore" class="hgc-score">—</div>
+                <div id="healthGrade" class="hgc-grade">—</div>
+              </div>
+            </div>
+            <div id="healthSub" class="hgc-sub"></div>
+            <div id="gaugeBasisNote" class="hgc-basis"></div>
+          </div>
+        </div>
       </div>
-      <div class="kpi-basis-header" id="kpiBasisHeader"></div>
+
+      <!-- KPI 스트립 -->
+      <div class="hero-kpi-strip">
+        <div id="kpiGrid" class="kpi-grid"></div>
+      </div>
+
+      <!-- 메타 정보 -->
+      <div class="hero-meta">
+        <span id="channelName" class="hero-channel-name">—</span>
+        <span class="hero-meta-sep">·</span>
+        <span id="updatedAt" class="hero-updated-at">업데이트 중…</span>
+      </div>
     </div>
-    <div class="dash-header-right">
-      <div class="range-tabs" id="rangeTabs">
-        <button class="range-tab" data-range="7">7일</button>
-        <button class="range-tab active" data-range="30">30일</button>
-        <button class="range-tab" data-range="all">최근 500건</button>
+  </section>
+
+  <!-- ────────────────────────────────────────────────────────
+       툴바
+  ──────────────────────────────────────────────────────────── -->
+  <div class="toolbar-strip">
+    <div class="toolbar-inner">
+      <div id="rangeTabs" class="range-tabs">
+        <button class="range-tab active" data-days="7">7일</button>
+        <button class="range-tab" data-days="14">14일</button>
+        <button class="range-tab" data-days="30">30일</button>
+        <button class="range-tab" data-days="all">전체</button>
       </div>
-      <div class="sync-dot-wrap"><span class="sync-dot"></span><span>연결됨</span></div>
-      <button class="csv-btn" id="csvDownloadBtn">↓ CSV</button>
-      <button class="refresh-btn" id="refreshBtn">↻</button>
+      <div class="toolbar-actions">
+        <button id="csvDownloadBtn" class="toolbar-btn toolbar-btn--ghost">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
+          CSV 다운로드
+        </button>
+        <button id="refreshBtn" class="toolbar-btn toolbar-btn--primary">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M13.65 2.35A8 8 0 1 0 14.94 8H13a6 6 0 1 1-1.25-3.72L9 7h5V2l-.35.35z"/></svg>
+          새로고침
+        </button>
+      </div>
     </div>
   </div>
 
-  <!-- ══════════════════════════════════════════════════════════════════════
-       COMMAND STRIP — 5 KEY METRICS
-  ═══════════════════════════════════════════════════════════════════════ -->
-  <div class="command-strip" id="kpiGrid">
-    <!-- JS로 채움 (renderKPIs) -->
+  <!-- KPI 기준 헤더 -->
+  <div class="basis-row">
+    <div id="kpiBasisHeader" class="kpi-basis-header"></div>
   </div>
 
-  <!-- ══════════════════════════════════════════════════════════════════════
-       ACTION COMMAND CENTER
-  ═══════════════════════════════════════════════════════════════════════ -->
-  <section class="action-center">
+  <!-- ────────────────────────────────────────────────────────
+       알림 스트립
+  ──────────────────────────────────────────────────────────── -->
+  <div id="alertStrip" class="alert-strip" style="display:none"></div>
 
-    <!-- ── 단일 컬럼: 조치 필요 항목 ──────────────────────────────────── -->
-    <div class="ac-main">
+  <!-- ────────────────────────────────────────────────────────
+       ACTION CENTER — 3 카드 수평 그리드
+  ──────────────────────────────────────────────────────────── -->
+  <section class="section-wrap">
+    <div class="section-header">
+      <span class="section-title">Action Center</span>
+      <span class="section-badge">실시간 조치 현황</span>
+    </div>
 
-      <!-- 조치 필요 항목 -->
-      <div class="ac-col ac-col-actions">
-        <div class="ac-col-hd">
-          <span class="ac-col-title">📋 조치 필요 항목</span>
-          <span class="ac-badge-count" id="acTodayCount" style="display:none">!</span>
-          <span class="ac-health-pill" id="acHealthPill">–</span>
+    <!-- 미배정 배너 (전체 너비) -->
+    <div id="acUnassignedBanner" class="unassigned-banner" style="display:none">
+      <span class="ub-icon">⚡</span>
+      <span class="ub-text">미배정 채팅 <strong id="acUnassignedCount">0</strong>건 —
+        <span id="acUnassignedDesc"></span></span>
+    </div>
+
+    <div class="ac-grid">
+      <!-- 카드 1: 오늘의 조치 -->
+      <div class="ac-card ac-card--actions">
+        <div class="ac-card-header">
+          <span class="ac-card-icon">✅</span>
+          <span class="ac-card-title">오늘의 조치</span>
+          <span id="acTodayCount" class="ac-card-count">0</span>
+          <span id="acHealthPill" class="ac-health-pill">—</span>
         </div>
-        <div class="ac-action-list" id="acTodayBody">
-          <div class="ac-loading">분석 중…</div>
+        <div id="acPulseMetrics" class="ac-pulse-metrics"></div>
+        <div id="acTodayBody" class="ac-card-body"></div>
+      </div>
+
+      <!-- 카드 2: 리스크 -->
+      <div class="ac-card ac-card--danger">
+        <div class="ac-card-header">
+          <span class="ac-card-icon">🚨</span>
+          <span class="ac-card-title">운영 리스크</span>
+        </div>
+        <div id="acRiskBody" class="ac-card-body"></div>
+      </div>
+
+      <!-- 카드 3: VOC -->
+      <div class="ac-card ac-card--voc">
+        <div class="ac-card-header">
+          <span class="ac-card-icon">💬</span>
+          <span class="ac-card-title">주요 VOC</span>
+          <span id="acVocBadge" class="ac-voc-badge"></span>
+        </div>
+        <div id="acVocBody" class="ac-card-body"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ────────────────────────────────────────────────────────
+       GAUGE GRID — 4 아크 게이지
+  ──────────────────────────────────────────────────────────── -->
+  <section class="section-wrap">
+    <div class="section-header">
+      <span class="section-title">핵심 지표</span>
+      <span class="section-badge">성과 게이지</span>
+    </div>
+    <div class="gauge-grid">
+      <!-- 게이지 1: 30분 내 해결율 -->
+      <div class="gauge-panel">
+        <div class="gauge-panel-badge" id="gbadge-quick"></div>
+        <div class="gauge-arc-wrap">
+          <svg class="gauge-arc-svg" viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
+            <path class="gauge-track" d="M8,56 A42,42 0 0,1 92,56" fill="none" stroke-width="8"/>
+            <path id="gsvg-quick" class="gauge-fill gauge-fill--good" d="M8,56 A42,42 0 0,1 92,56"
+                  fill="none" stroke-width="8" stroke-dasharray="0 131.9" stroke-linecap="round"/>
+          </svg>
+          <div class="gauge-center">
+            <div id="gval-quick" class="gauge-val">—</div>
+          </div>
+        </div>
+        <div class="gauge-label">30분↓ 해결율</div>
+        <div id="gsub-quick" class="gauge-sub"></div>
+      </div>
+
+      <!-- 게이지 2: 8시간+ 지연율 -->
+      <div class="gauge-panel">
+        <div class="gauge-panel-badge" id="gbadge-slow"></div>
+        <div class="gauge-arc-wrap">
+          <svg class="gauge-arc-svg" viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
+            <path class="gauge-track" d="M8,56 A42,42 0 0,1 92,56" fill="none" stroke-width="8"/>
+            <path id="gsvg-slow" class="gauge-fill gauge-fill--danger" d="M8,56 A42,42 0 0,1 92,56"
+                  fill="none" stroke-width="8" stroke-dasharray="0 131.9" stroke-linecap="round"/>
+          </svg>
+          <div class="gauge-center">
+            <div id="gval-slow" class="gauge-val">—</div>
+          </div>
+        </div>
+        <div class="gauge-label">8시간+ 지연율</div>
+        <div id="gsub-slow" class="gauge-sub"></div>
+      </div>
+
+      <!-- 게이지 3: 평균 해결시간 -->
+      <div class="gauge-panel">
+        <div class="gauge-panel-badge" id="gbadge-avgres"></div>
+        <div class="gauge-arc-wrap">
+          <svg class="gauge-arc-svg" viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
+            <path class="gauge-track" d="M8,56 A42,42 0 0,1 92,56" fill="none" stroke-width="8"/>
+            <path id="gsvg-avgres" class="gauge-fill gauge-fill--warn" d="M8,56 A42,42 0 0,1 92,56"
+                  fill="none" stroke-width="8" stroke-dasharray="0 131.9" stroke-linecap="round"/>
+          </svg>
+          <div class="gauge-center">
+            <div id="gval-avgres" class="gauge-val">—</div>
+          </div>
+        </div>
+        <div class="gauge-label">평균 해결시간</div>
+        <div id="gsub-avgres" class="gauge-sub"></div>
+      </div>
+
+      <!-- 게이지 4: 담당자 편중도 -->
+      <div class="gauge-panel">
+        <div class="gauge-panel-badge" id="gbadge-conc"></div>
+        <div class="gauge-arc-wrap">
+          <svg class="gauge-arc-svg" viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
+            <path class="gauge-track" d="M8,56 A42,42 0 0,1 92,56" fill="none" stroke-width="8"/>
+            <path id="gsvg-conc" class="gauge-fill gauge-fill--warn" d="M8,56 A42,42 0 0,1 92,56"
+                  fill="none" stroke-width="8" stroke-dasharray="0 131.9" stroke-linecap="round"/>
+          </svg>
+          <div class="gauge-center">
+            <div id="gval-conc" class="gauge-val">—</div>
+          </div>
+        </div>
+        <div class="gauge-label">담당자 편중도</div>
+        <div id="gsub-conc" class="gauge-sub"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ────────────────────────────────────────────────────────
+       인사이트 스트립
+  ──────────────────────────────────────────────────────────── -->
+  <div id="insightsStrip" class="insights-strip"></div>
+
+  <!-- ────────────────────────────────────────────────────────
+       CHART MASTER GRID — 12컬럼
+  ──────────────────────────────────────────────────────────── -->
+  <div class="chart-master-grid">
+
+    <!-- Row 1: 트렌드(col-8) + 히트맵(col-4) -->
+    <div class="cg-panel col-8">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">📈 일별 채팅 트렌드</span>
+        <span id="trendBadge" class="panel-badge"></span>
+        <div id="trendLegend" class="trend-legend"></div>
+      </div>
+      <div class="cg-panel-kv">
+        <div class="pkv-item">
+          <span class="pkv-lbl">총 채팅</span>
+          <span id="trendTotal" class="pkv-val">—</span>
+        </div>
+        <div class="pkv-item">
+          <span class="pkv-lbl">피크</span>
+          <span id="trendPeak" class="pkv-val">—</span>
+          <span id="trendPeakDay" class="pkv-sub"></span>
+        </div>
+        <div class="pkv-item">
+          <span class="pkv-lbl">활성일 평균</span>
+          <span id="trendAvg" class="pkv-val">—</span>
+        </div>
+        <div class="pkv-item">
+          <span class="pkv-lbl">미해결</span>
+          <span id="trendOpen" class="pkv-val pkv-warn">—</span>
         </div>
       </div>
-
-    </div>
-  </section>
-
-  <!-- ══════════════════════════════════════════════════════════════════════
-       SECTION: 핵심 리스크
-  ═══════════════════════════════════════════════════════════════════════ -->
-  <section class="dashboard-section">
-    <div class="section-header">
-      <span class="section-icon">🎯</span>
-      <span class="section-title">핵심 리스크</span>
-      <span class="section-tag">조치 필요</span>
-      <button class="csv-btn" onclick="downloadTagCSV()" title="VOC 리스크 CSV">⬇ CSV</button>
-      <button class="collapse-toggle" data-target="riskSection" aria-label="펼치기/접기">▾</button>
-    </div>
-    <div class="collapsible-content" id="riskSection">
-      <div class="chart-master-grid">
-
-        <article class="panel" style="flex:0 0 100%">
-          <div class="panel-header">
-            <div><div class="panel-title">담당자 편중 &amp; 미배정</div><div class="panel-sub">즉시 조치 필요 항목 · 실시간 기준</div></div>
-            <span class="data-badge badge-warn">실시간</span>
-          </div>
-          <div id="concRiskPanel"></div>
-        </article>
-
+      <div class="cg-chart-wrap" style="height:220px">
+        <canvas id="trendChart"></canvas>
       </div>
+      <div id="peakAnalysisPanel" class="peak-analysis-panel" style="display:none"></div>
     </div>
-  </section>
 
-  <!-- ══════════════════════════════════════════════════════════════════════
-       SECTION: 해결 지연 분석
-  ═══════════════════════════════════════════════════════════════════════ -->
-  <section class="dashboard-section">
-    <div class="section-header">
-      <span class="section-icon">⏱</span>
-      <span class="section-title">해결 지연 분석</span>
-      <span class="section-tag">해결시간 · 8h+</span>
-      <button class="csv-btn" onclick="downloadResolutionCSV()" title="해결시간 CSV">⬇ CSV</button>
-      <button class="collapse-toggle" data-target="resSection" aria-label="펼치기/접기">▾</button>
-    </div>
-    <div class="collapsible-content" id="resSection">
-      <div class="chart-master-grid">
-
-        <article class="panel col-6">
-          <div class="panel-header">
-            <div><div class="panel-title">해결 시간 분포</div><div class="panel-sub">resolutionTime 기준 · 비동기 포함</div></div>
-            <span class="real-badge">✓ 실데이터</span>
-          </div>
-          <div class="res-summary" id="resSummary"></div>
-          <div class="rt-list" id="resList"></div>
-          <div class="res-note" id="avgResNote"></div>
-        </article>
-
-        <article class="panel col-6">
-          <div class="panel-header">
-            <div><div class="panel-title">8시간+ 지연 상세 &amp; 원인 분류</div><div class="panel-sub">장기 미해결 채팅 현황 · 원인 추정</div></div>
-            <span class="data-badge badge-warn">요주의</span>
-          </div>
-          <div id="longDelayPanel"></div>
-        </article>
-
+    <div class="cg-panel col-4">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">🗓️ 요일·시간 히트맵</span>
       </div>
-    </div>
-  </section>
-
-  <!-- ══════════════════════════════════════════════════════════════════════
-       SECTION: VOC / 문의 유형
-  ═══════════════════════════════════════════════════════════════════════ -->
-  <section class="dashboard-section">
-    <div class="section-header">
-      <span class="section-icon">💬</span>
-      <span class="section-title">VOC / 문의 유형</span>
-      <span class="section-tag">태그 · VOC 리스크</span>
-      <button class="csv-btn" onclick="downloadTagCSV()" title="태그 CSV">⬇ CSV</button>
-      <button class="collapse-toggle" data-target="tagSection" aria-label="펼치기/접기">▾</button>
-    </div>
-    <div class="collapsible-content" id="tagSection">
-      <div class="chart-master-grid">
-
-        <article class="panel col-7">
-          <div class="panel-header">
-            <div><div class="panel-title">문의 태그 TOP 10</div><div class="panel-sub">건수 기준 가로 막대 · 비율 표시</div></div>
-            <span class="real-badge">✓ 실데이터</span>
-          </div>
-          <div class="ch-300 tag-bar-wrap"><canvas id="tagBarChart"></canvas></div>
-        </article>
-
-        <article class="panel col-5">
-          <div class="panel-header">
-            <div><div class="panel-title">VOC 리스크 조치 현황</div><div class="panel-sub">비율 8% 이상 항목 · 즉시 대응 필요</div></div>
-            <span class="real-badge">✓ 실데이터</span>
-          </div>
-          <div id="vocRiskCards" class="voc-risk-cards-wrap"></div>
-        </article>
-
+      <div id="heatmap" class="heatmap"></div>
+      <div class="hm-legend-row">
+        <span class="hm-legend-lbl">적음</span>
+        <div id="hmLegend" class="hm-legend"></div>
+        <span class="hm-legend-lbl">많음</span>
       </div>
+      <div id="hmPeakSummary" class="hm-peak-summary" style="display:none"></div>
+      <div id="hmStaffingGuide" class="hm-staffing-guide" style="display:none"></div>
     </div>
-  </section>
 
-  <!-- ══════════════════════════════════════════════════════════════════════
-       SECTION: 담당자 성과
-  ═══════════════════════════════════════════════════════════════════════ -->
-  <section class="dashboard-section">
-    <div class="section-header">
-      <span class="section-icon">👤</span>
-      <span class="section-title">담당자 성과</span>
-      <span class="section-tag">편중 · 배정 · 처리 현황</span>
-      <button class="csv-btn" onclick="downloadAgentCSV()" title="담당자 성과 CSV">⬇ CSV</button>
-      <button class="collapse-toggle" data-target="agentSection" aria-label="펼치기/접기">▾</button>
+    <!-- Row 2: 태그 바(col-7) + VOC 리스크(col-5) -->
+    <div class="cg-panel col-7">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">🏷️ 문의 태그 분포</span>
+      </div>
+      <div id="tagBarChart" class="tag-bar-chart"></div>
     </div>
-    <div class="collapsible-content" id="agentSection">
 
-      <!-- 담당자 리스크 요약 카드 (편중률·미배정·재배정권고) -->
+    <div class="cg-panel col-5">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">⚠️ VOC 리스크 카드</span>
+      </div>
+      <div id="vocRiskCards" class="voc-risk-cards-wrap"></div>
+    </div>
+
+    <!-- VOC 문의 현황 (col-12) -->
+    <div class="cg-panel col-12">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">🗂️ VOC 문의 현황 (태그 비율 기반)</span>
+      </div>
+      <div id="vocList" class="voc-list"></div>
+    </div>
+
+    <!-- Row 3: 담당자 집중도 (col-12) -->
+    <div class="cg-panel col-12">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">🎯 담당자 집중도 분석</span>
+      </div>
+      <div id="concRiskPanel" class="conc-risk-panel"></div>
+      <div id="concAlert" class="conc-alert" style="display:none"></div>
+    </div>
+
+    <!-- Row 4: 담당자 성과 (col-12) -->
+    <div class="cg-panel col-12">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">👤 담당자 성과</span>
+        <div id="agentSortTabs" class="tbl-sort-tabs"></div>
+      </div>
       <div id="mgrRiskStrip" class="mgr-risk-strip"></div>
-
-      <!-- 담당자 성과 테이블 -->
-      <article class="panel" style="margin-bottom:12px">
-        <div class="panel-header">
-          <div>
-            <div class="panel-title">담당자별 실 성과 현황</div>
-            <div class="panel-sub">managers API + assigneeId 집계 · 실데이터 기반</div>
-          </div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <div class="conc-alert" id="concAlert" style="display:none"></div>
-            <span class="real-badge">✓ 실데이터</span>
-          </div>
+      <div class="agent-content-grid">
+        <div class="agent-table-area">
+          <table class="agent-table">
+            <thead>
+              <tr>
+                <th style="width:36px">#</th>
+                <th>담당자</th>
+                <th style="width:70px;text-align:right">채팅수</th>
+                <th style="width:70px;text-align:right">컴플레인</th>
+                <th style="width:110px;text-align:right">평균해결</th>
+                <th style="width:160px;text-align:right">
+                  CS점수
+                  <span class="th-tip-icon" tabindex="0">?
+                    <span class="th-tip-text">해결시간·컴플레인·채팅수 기반 종합 점수</span>
+                  </span>
+                </th>
+                <th>코멘트</th>
+              </tr>
+            </thead>
+            <tbody id="managerTbody"></tbody>
+          </table>
+          <div id="agentTblNote"></div>
         </div>
-        <div class="tbl-sort-tabs" id="agentSortTabs">
-          <button class="tbl-sort-tab active" data-sort="risk">리스크 순</button>
-          <button class="tbl-sort-tab" data-sort="count">처리건수 순</button>
-          <button class="tbl-sort-tab" data-sort="avgResolution">평균해결시간 순</button>
-          <button class="tbl-sort-tab" data-sort="operatorScore">운영점수 순</button>
-          <button class="tbl-sort-tab" data-sort="touchScore">응대점수 순</button>
-        </div>
-        <div class="agent-content-grid">
-          <div class="agent-table-area">
-            <table class="agent-table">
-              <colgroup>
-                <col><col><col><col><col><col><col><col><col>
-              </colgroup>
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>담당자</th>
-                  <th>처리 건수</th>
-                  <th>비중</th>
-                  <th class="num-r">운영 점수 <span class="th-tip-icon">ⓘ<span class="th-tip-text">채널톡 API 제공 담당자 운영 효율 점수. 처리 건수·응대 품질·처리 속도 종합 산정.</span></span></th>
-                  <th class="num-r">응대 점수 <span class="th-tip-icon">ⓘ<span class="th-tip-text">고객 채팅에 직접 응답한 비율 점수. 높을수록 적극적 응대.</span></span></th>
-                  <th class="num-r">평균 해결시간</th>
-                  <th>상태</th>
-                  <th>코멘트</th>
-                </tr>
-              </thead>
-              <tbody id="managerTbody">
-                <tr><td colspan="9" class="tbl-loading">로딩 중…</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <div class="agent-cards-mobile" id="agentCards"></div>
-          <div class="agent-stats-sidebar" id="agentSidebar"></div>
-        </div>
-        <div class="tbl-note" id="agentTblNote">※ 운영 점수 · 응대 점수: 채널톡 API 실데이터 / 평균 해결시간: 해당 담당자 처리 건 실측값 / 리스크순: 집중도 + 해결시간 복합 산정</div>
-      </article>
-
-    </div>
-  </section>
-
-  <!-- ══════════════════════════════════════════════════════════════════════
-       SECTION: 인입 추이 & 패턴
-  ═══════════════════════════════════════════════════════════════════════ -->
-  <section class="dashboard-section">
-    <div class="section-header">
-      <span class="section-icon">📈</span>
-      <span class="section-title">인입 추이 &amp; 패턴</span>
-      <span class="section-tag">5분 주기 갱신</span>
-      <button class="collapse-toggle" data-target="trendSection" aria-label="펼치기/접기">▾</button>
-    </div>
-    <div class="collapsible-content" id="trendSection">
-      <div class="chart-master-grid">
-
-        <article class="panel col-7">
-          <div class="panel-header">
-            <div>
-              <div class="panel-title">일별 CS 인입 추이 <span class="panel-badge" id="trendBadge">30일</span></div>
-              <div class="panel-sub">채널톡 closed 채팅 기준 · 붉은 막대 = 피크 · KST</div>
-            </div>
-            <div class="trend-legend" id="trendLegend"></div>
-          </div>
-          <div class="trend-stats-row">
-            <div class="ts"><span class="ts-val teal" id="trendTotal">—</span><span class="ts-lbl">분석 채팅</span></div>
-            <div class="ts"><span class="ts-val rose" id="trendPeak">—</span><span class="ts-lbl">일 최고 <span class="ts-day" id="trendPeakDay"></span></span></div>
-            <div class="ts"><span class="ts-val blue" id="trendAvg">—</span><span class="ts-lbl">활성일 평균</span></div>
-            <div class="ts"><span class="ts-val green" id="trendOpen">—</span><span class="ts-lbl">현재 오픈</span></div>
-          </div>
-          <div class="ch-280"><canvas id="trendChart"></canvas></div>
-          <div class="peak-analysis-panel" id="peakAnalysisPanel" style="display:none"></div>
-        </article>
-
-        <article class="panel col-5">
-          <div class="panel-header">
-            <div>
-              <div class="panel-title">시간대 × 요일 히트맵 <span class="panel-badge">KST 0~23시</span></div>
-              <div class="panel-sub">문의 집중 시간대 시각화 (한국 표준시 기준)</div>
-            </div>
-            <span class="real-badge">✓ 실데이터</span>
-          </div>
-          <div class="heatmap-wrap">
-            <div class="heatmap" id="heatmap"></div>
-            <div class="hm-legend">
-              <span>적음</span>
-              <div class="hm-legend-scale" id="hmLegend"></div>
-              <span>많음</span>
-            </div>
-          </div>
-          <div id="hmPeakSummary" class="hm-peak-summary"></div>
-          <div id="hmStaffingGuide" class="hm-staffing-guide"></div>
-        </article>
-
+        <div id="agentSidebar" class="agent-stats-sidebar"></div>
       </div>
+      <div id="agentCards" class="agent-mobile-cards"></div>
     </div>
-  </section>
 
-  <!-- ══════════════════════════════════════════════════════════════════════
-       SECTION: 운영 현황
-  ═══════════════════════════════════════════════════════════════════════ -->
-  <section class="dashboard-section">
-    <div class="section-header">
-      <span class="section-icon">⚙️</span>
-      <span class="section-title">운영 현황</span>
-      <span class="section-tag">자동화 · 채널 · 그룹</span>
-      <button class="collapse-toggle" data-target="opsSection" aria-label="펼치기/접기">▾</button>
-    </div>
-    <div class="collapsible-content" id="opsSection">
-
-      <!-- 자동화 후보 분류 -->
-      <article class="panel" style="margin-bottom:12px">
-        <div class="panel-header">
-          <div><div class="panel-title">상위 분류 &amp; 자동화 후보</div><div class="panel-sub">구독·컴플레인·이용 유형 분류</div></div>
-          <span class="real-badge">✓ 분석</span>
-        </div>
-        <div class="category-bars" id="categoryBars"></div>
-      </article>
-
-      <!-- 자동화 추정 효과 & 채널 -->
-      <div class="chart-master-grid" id="botSection">
-        <div class="panel col-5" id="botPanel"></div>
-        <div class="panel col-4" id="groupPanel"></div>
-        <article class="panel col-3">
-          <div class="panel-header">
-            <div><div class="panel-title">인입 채널</div><div class="panel-sub">source.medium 기준</div></div>
-            <span class="real-badge">✓ 실데이터</span>
-          </div>
-          <div class="ch-140"><canvas id="channelChart"></canvas></div>
-          <div class="channel-stats" id="channelStats"></div>
-        </article>
+    <!-- Row 5: 해결시간(col-6) + 장기지연(col-6) -->
+    <div class="cg-panel col-6">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">⏱️ 해결시간 분포</span>
       </div>
-
+      <div id="resSummary" class="res-summary"></div>
+      <div id="resList" class="res-list"></div>
+      <div id="avgResNote" class="avg-res-note"></div>
     </div>
-  </section>
 
-  <!-- 8시간+ Drill-Down 모달 (항목 #6) -->
-  <div class="modal-overlay" id="longChatsModal" style="display:none">
+    <div class="cg-panel col-6">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">🐢 8시간+ 장기 지연</span>
+      </div>
+      <div id="longDelayPanel" class="long-delay-panel"></div>
+    </div>
+
+    <!-- Row 6: 카테고리 (col-12) -->
+    <div class="cg-panel col-12">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">📂 문의 카테고리 분석</span>
+      </div>
+      <div id="categoryBars" class="category-bars"></div>
+    </div>
+
+    <!-- Row 7: 자동화(col-5) + 운영현황(col-4) + 채널(col-3) -->
+    <div class="cg-panel col-5">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">🤖 자동화 효과</span>
+      </div>
+      <div id="botPanel" class="bot-panel"></div>
+    </div>
+
+    <div class="cg-panel col-4">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">🏢 CS 운영 현황</span>
+      </div>
+      <div id="groupPanel" class="group-panel"></div>
+    </div>
+
+    <div class="cg-panel col-3">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">📡 채널 분포</span>
+      </div>
+      <div class="cg-chart-wrap" style="height:160px">
+        <canvas id="channelChart"></canvas>
+      </div>
+      <div id="channelStats" class="channel-stats"></div>
+    </div>
+
+  </div><!-- /.chart-master-grid -->
+
+  <!-- ────────────────────────────────────────────────────────
+       장기채팅 모달
+  ──────────────────────────────────────────────────────────── -->
+  <div id="longChatsModal" class="modal-overlay" style="display:none"
+       role="dialog" aria-modal="true">
     <div class="modal-box">
       <div class="modal-header">
-        <div>
-          <div class="modal-title">8시간+ 해결 채팅 상세</div>
-          <div class="modal-sub">날짜 · 해결시간 · 태그 · 담당자 기준</div>
-        </div>
-        <button class="modal-close" onclick="closeLongChatsPanel()">✕</button>
+        <span>🐢 8시간 이상 미해결 채팅</span>
+        <button class="modal-close"
+          onclick="document.getElementById('longChatsModal').style.display='none'">✕</button>
       </div>
-      <div class="modal-body">
-        <table class="long-chats-table">
-          <thead>
-            <tr>
-              <th>날짜</th>
-              <th>해결 시간</th>
-              <th>태그</th>
-              <th>담당자</th>
-            </tr>
-          </thead>
-          <tbody id="longChatsBody">
-            <tr><td colspan="4" style="text-align:center;padding:20px;color:var(--muted)">로딩 중…</td></tr>
-          </tbody>
-        </table>
-      </div>
+      <div id="longChatsBody" class="modal-body"></div>
     </div>
   </div>
 
-  <!-- Footer -->
-  <div class="footer-note">
-    <span>✅ 채널톡 Open API v5 실데이터 · 오토스테이 CS Dashboard v3.3</span>
-    <span>api.channel.io/open/v5 · x-access-key 인증 · KST 기준 · Vercel Serverless</span>
-  </div>
+  <!-- ────────────────────────────────────────────────────────
+       푸터
+  ──────────────────────────────────────────────────────────── -->
+  <footer class="footer-note">
+    <span>Autostay CS Dashboard · 데이터 출처: Channel Talk API</span>
+    <span class="footer-sep">·</span>
+    <span>자동 새로고침 5분 간격</span>
+  </footer>
 
-</div><!-- .app -->
+</div><!-- /.app -->
 
-<script src="./app.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
