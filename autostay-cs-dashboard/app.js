@@ -1528,6 +1528,63 @@ function renderManagerRows(managers, total, _avgRes) {
   }).join('');
 }
 
+/* ─── Render: Manager Risk Strip (편중률·미배정·재배정권고 3카드) ────── */
+function renderMgrRiskStrip(d) {
+  const el = document.getElementById('mgrRiskStrip');
+  if (!el) return;
+
+  const managers = (d.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
+  const total = d.summary.totalChats || 1;
+  const unassigned = d.summary?.unassignedChats || 0;
+  const topMgr = managers[0];
+  const topPct = topMgr ? Math.round((topMgr.count / total) * 100) : 0;
+  const topName = topMgr ? topMgr.name.replace('오토스테이_', '') : '—';
+  const backup = managers[1] || null;
+
+  const concStatus = topPct > 80 ? { cls: 'danger', label: '과부하 — 즉시 분산 필요' }
+                   : topPct > 60 ? { cls: 'warn',   label: '주의 — 재배정 검토' }
+                   :               { cls: 'good',   label: '분산 양호' };
+  const concIcon = topPct > 80 ? '🔴' : topPct > 60 ? '🟡' : '🟢';
+
+  const unaStatus = unassigned > 0
+    ? { cls: 'danger', label: '즉시 배정 필요' }
+    : { cls: 'good',   label: '미배정 없음' };
+  const unaIcon = unassigned > 0 ? '🔴' : '🟢';
+
+  const redistNeeded = topPct > 70;
+  const redistStatus = redistNeeded
+    ? { cls: 'warn', label: backup ? `${backup.name.replace('오토스테이_', '')}에게 이관 검토` : '추가 인력 검토 필요' }
+    : { cls: 'good', label: '재배정 불필요' };
+  const redistIcon = redistNeeded ? '⚠️' : '✓';
+
+  el.innerHTML = `
+    <div class="mgr-risk-card mrc-${concStatus.cls}">
+      <div class="mrc-icon">${concIcon}</div>
+      <div class="mrc-body">
+        <div class="mrc-label">담당자 편중률</div>
+        <div class="mrc-value">${topName} · ${topPct}%</div>
+        <div class="mrc-status ${concStatus.cls}">${concStatus.label}</div>
+      </div>
+    </div>
+    <div class="mgr-risk-card mrc-${unaStatus.cls}">
+      <div class="mrc-icon">${unaIcon}</div>
+      <div class="mrc-body">
+        <div class="mrc-label">미배정 채팅</div>
+        <div class="mrc-value">${unassigned}건</div>
+        <div class="mrc-status ${unaStatus.cls}">${unaStatus.label}</div>
+      </div>
+    </div>
+    <div class="mgr-risk-card mrc-${redistStatus.cls}">
+      <div class="mrc-icon">${redistIcon}</div>
+      <div class="mrc-body">
+        <div class="mrc-label">재배정 권고</div>
+        <div class="mrc-value">${redistNeeded ? `편중 ${topPct}% — 기준 초과` : `${topPct}% — 기준 이하`}</div>
+        <div class="mrc-status ${redistStatus.cls}">${redistStatus.label}</div>
+      </div>
+    </div>
+  `;
+}
+
 /* ─── Render: Manager Table ─────────────────────────────────────────────── */
 function renderManagers(d) {
   const managers = (d.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
@@ -2002,6 +2059,7 @@ async function render() {
 
     setProgress(92);
 
+    renderMgrRiskStrip(data);
     renderManagers(data);
     renderBotsGroups(data);
 
@@ -2058,6 +2116,7 @@ async function silentRefresh() {
     renderResolution(data);
     renderLongDelayPanel(data);
     renderVOC(data);
+    renderMgrRiskStrip(data);
     renderManagers(data);
     renderBotsGroups(data);
     const eb = document.getElementById('errBanner');

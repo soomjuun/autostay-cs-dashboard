@@ -455,10 +455,10 @@ body {
 }
 .aub-action:hover { background: var(--rose); color: #fff; }
 
-/* ─── 2-column main panel ─────────────────────────────────────────── */
+/* ─── 단일 컬럼 main panel ────────────────────────────────────────── */
 .ac-main {
   display: grid;
-  grid-template-columns: 3fr 2fr;
+  grid-template-columns: 1fr;
   gap: 0;
 }
 .ac-col {
@@ -987,6 +987,44 @@ body {
   font-size: 10.5px; color: var(--subtle);
   display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
 }
+
+/* ─── Manager Risk Strip ─────────────────────────────────────────────────── */
+.mgr-risk-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.mgr-risk-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+}
+.mgr-risk-card.mrc-danger { border-left-color: var(--rose); }
+.mgr-risk-card.mrc-warn   { border-left-color: var(--amber); }
+.mgr-risk-card.mrc-good   { border-left-color: var(--teal); }
+.mrc-icon { font-size: 20px; flex-shrink: 0; line-height: 1; }
+.mrc-body { min-width: 0; flex: 1; }
+.mrc-label {
+  font-size: 10px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .06em; margin-bottom: 3px;
+}
+.mrc-value {
+  font-size: 13px; font-weight: 800; color: var(--ink);
+  margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mrc-status { font-size: 11px; font-weight: 700; }
+.mrc-status.danger { color: var(--rose); }
+.mrc-status.warn   { color: var(--amber); }
+.mrc-status.good   { color: var(--teal); }
+@media (max-width: 900px) { .mgr-risk-strip { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 600px) { .mgr-risk-strip { grid-template-columns: 1fr; } }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    RESPONSIVE
