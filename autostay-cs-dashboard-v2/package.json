@@ -1,0 +1,8 @@
+{
+  "name": "autostay-cs-dashboard",
+  "version": "3.0.0",
+  "description": "[OPS] 채널톡 CS 대시보드 — 채널톡 Open API v5 기반 CS 운영·SLA·VOC·담당자 성과 통합 분석",
+  "engines": {
+    "node": "22.x"
+  }
+}
