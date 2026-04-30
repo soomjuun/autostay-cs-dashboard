@@ -82,6 +82,34 @@ Vercel 대시보드 → **Storage → KV** → Create → 프로젝트에 연결
 - **탈퇴/해지**: 탈퇴, 해지
 - **기타**: 위 외의 컴플레인 태그
 
+## 보안 (v4.1 Package A)
+
+### Edge Middleware
+`middleware.js` — Vercel Edge에서 모든 요청 가로채기:
+- 정적 리소스(`index.html`, `style.css`, `app.js`)도 인증 후에만 제공
+- 인증 없이 접근 시 → HTML은 `/api/auth`로 redirect, 정적 리소스는 401 응답
+- `/api/auth`, `/api/check`, `favicon` 등은 우회 (인증 페이지 자체)
+
+### 쿠키 키 환경변수화
+- 기존: `ds_auth` 코드에 하드코딩 (소스 노출 시 위조 가능)
+- v4.1: `COOKIE_KEY` 환경변수로 관리 — 노출 의심 시 변경하면 모든 세션 무효화
+
+### 보안 헤더 (`vercel.json`)
+| 헤더 | 값 | 효과 |
+|---|---|---|
+| `X-Frame-Options` | `DENY` | iframe 임베드 차단 (clickjacking) |
+| `X-Content-Type-Options` | `nosniff` | MIME sniffing 방지 |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` | Referer 누출 최소화 |
+| `Permissions-Policy` | `camera=(), microphone=()...` | 권한 차단 |
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` | HTTPS 강제 |
+| `X-Robots-Tag` | `noindex, nofollow` | 검색엔진 인덱싱 차단 |
+| `Content-Security-Policy` | (개별 설정) | XSS / 외부 리소스 통제 |
+
+### 쿠키 보안 강화
+- `HttpOnly` (JS 접근 차단)
+- `Secure` (HTTPS 전용)
+- `SameSite=Lax` (CSRF 방지)
+
 ## 라이선스
 
 내부 운영용 — All Rights Reserved.

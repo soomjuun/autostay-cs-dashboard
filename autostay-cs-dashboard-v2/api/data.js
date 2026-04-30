@@ -83,8 +83,9 @@ module.exports = async function handler(req, res) {
   // ── 인증 게이트 ─────────────────────────────────────────────────────
   const DASHBOARD_TOKEN = process.env.DASHBOARD_TOKEN;
   if (DASHBOARD_TOKEN) {
+    const cookieKey = process.env.COOKIE_KEY || 'ds_auth';
     const cookie = parseCookie(req.headers.cookie);
-    if (cookie.ds_auth !== DASHBOARD_TOKEN) {
+    if (cookie[cookieKey] !== DASHBOARD_TOKEN) {
       res.setHeader('Content-Type', 'application/json');
       return res.status(401).json({ error: 'Unauthorized', redirect: '/api/auth' });
     }

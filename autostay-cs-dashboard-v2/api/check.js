@@ -21,8 +21,9 @@ module.exports = function handler(req, res) {
   // 토큰 미설정 시 개발 환경으로 간주 — 인증 통과
   if (!DASHBOARD_TOKEN) return res.status(200).json({ ok: true });
 
+  const cookieKey = process.env.COOKIE_KEY || 'ds_auth';
   const cookie = parseCookie(req.headers.cookie);
-  if (cookie.ds_auth === DASHBOARD_TOKEN) {
+  if (cookie[cookieKey] === DASHBOARD_TOKEN) {
     return res.status(200).json({ ok: true });
   }
   return res.status(401).json({ ok: false, redirect: '/api/auth' });

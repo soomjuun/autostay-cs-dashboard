@@ -39,8 +39,9 @@ module.exports = async function handler(req, res) {
       return;
     }
     // 이미 쿠키 보유 여부 확인
+    const cookieKey = process.env.COOKIE_KEY || 'ds_auth';
     const cookie = parseCookie(req.headers.cookie || '');
-    if (cookie.ds_auth === VALID_TOKEN) {
+    if (cookie[cookieKey] === VALID_TOKEN) {
       res.writeHead(302, { Location: '/' });
       return res.end();
     }
@@ -54,7 +55,8 @@ module.exports = async function handler(req, res) {
 // ── 쿠키 발급 + 리다이렉트 ────────────────────────────────────────────────────
 function setCookieAndRedirect(res, token) {
   const maxAge = 60 * 60 * 24 * 7; // 7일
-  res.setHeader('Set-Cookie', `ds_auth=${token}; Path=/; HttpOnly; Max-Age=${maxAge}; SameSite=Lax`);
+  const cookieKey = process.env.COOKIE_KEY || 'ds_auth';
+  res.setHeader('Set-Cookie', `${cookieKey}=${token}; Path=/; HttpOnly; Secure; Max-Age=${maxAge}; SameSite=Lax`);
   res.writeHead(302, { Location: '/' });
   res.end();
 }
