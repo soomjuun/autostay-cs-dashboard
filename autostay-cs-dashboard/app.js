@@ -1781,6 +1781,80 @@ function downloadResolutionCSV() {
   _triggerCSV(lines, `autostay-resolution-${new Date().toISOString().slice(0, 10)}.csv`);
 }
 
+/* 통합 CSV 다운로드 (담당자 · 해결시간 · 태그 통합) */
+function downloadCSV() {
+  if (!lastData) return;
+  const managers = (lastData.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
+  const total = lastData.summary.totalChats || 1;
+  const rb = lastData.resolutionBuckets || {};
+  const rbTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
+  const tags = lastData.tags || {};
+  const tagResStats = lastData.tagResolutionStats || [];
+  const sourceStats = lastData.sourceStats || [];
+  const aging = lastData.agingBuckets || {};
+  const slaStats = lastData.slaStats || {};
+
+  const mgrRows = managers.map(m => {
+    const topPct = Math.round(m.count / total * 100);
+    const comment = agentComment(m, managers.indexOf(m)).replace(/<[^>]*>/g, '');
+    return [m.name, m.count, `${topPct}%`, m.operatorScore, m.touchScore, m.avgResolutionMin ?? '', m.medianResolutionMin ?? '', m.p90ResolutionMin ?? '', m.complaintHandled ?? '', comment].join(',');
+  });
+
+  const rbRows = Object.entries(rb).map(([k, v]) => `${k},${v},${Math.round(v / rbTotal * 100)}%`);
+  const tagRows = (tags.labels || []).map((lbl, i) => {
+    const cnt = tags.values[i];
+    const pct = Math.round(cnt / total * 100);
+    const risk = pct >= 15 ? '위험' : pct >= 8 ? '주의' : '정상';
+    return `${lbl},${cnt},${pct}%,${risk}`;
+  });
+  const tagResRows = tagResStats.map(s => `${s.tag},${s.count},${s.avg},${s.median},${s.p90}`);
+  const srcRows = sourceStats.filter(s => s.count > 0).map(s => `${s.source},${s.count},${s.avgResolutionMin ?? ''},${s.medianResolutionMin ?? ''},${s.p90ResolutionMin ?? ''}`);
+  const agingRows = [
+    `<8h,${aging.lt8h || 0}`,
+    `8-24h,${aging.h8_24 || 0}`,
+    `1-3d,${aging.d1_3 || 0}`,
+    `3-7d,${aging.d3_7 || 0}`,
+    `7d+,${aging.d7plus || 0}`,
+  ];
+  const slaRows = [
+    `30분 SLA,${slaStats.sla30Min?.rate || 0}%,${slaStats.sla30Min?.count || 0}/${slaStats.sla30Min?.total || 0}`,
+    `2시간 SLA,${slaStats.sla2Hour?.rate || 0}%,${slaStats.sla2Hour?.count || 0}/${slaStats.sla2Hour?.total || 0}`,
+    `8시간 SLA,${slaStats.sla8Hour?.rate || 0}%,${slaStats.sla8Hour?.count || 0}/${slaStats.sla8Hour?.total || 0}`,
+  ];
+
+  const lines = [
+    ..._csvHeader(),
+    '=== SLA 준수율 ===',
+    'SLA,준수율,건수',
+    ...slaRows,
+    '',
+    '=== 담당자 성과 ===',
+    '담당자명,처리건수,비중,운영점수,응대점수,평균(분),중앙값(분),P90(분),컴플레인처리,코멘트',
+    ...mgrRows,
+    '',
+    '=== 해결시간 분포 ===',
+    '구간,건수,비율',
+    ...rbRows,
+    '',
+    '=== 에이징 파이프라인 ===',
+    '구간,건수',
+    ...agingRows,
+    '',
+    '=== VOC 태그 TOP ===',
+    '태그,건수,비율,리스크등급',
+    ...tagRows,
+    '',
+    '=== 태그별 해결시간 ===',
+    '태그,건수,평균(분),P50(분),P90(분)',
+    ...tagResRows,
+    '',
+    '=== 채널별 성능 ===',
+    '채널,건수,평균(분),P50(분),P90(분)',
+    ...srcRows,
+  ];
+  _triggerCSV(lines, `OPS-channeltalk-cs-${new Date().toISOString().slice(0, 10)}.csv`);
+}
+
 /* 태그 & VOC 리스크 CSV */
 function downloadTagCSV() {
   if (!lastData) return;
@@ -2107,6 +2181,663 @@ function renderGaugeGrid(d, scoreObj) {
     topPct <= 40 ? 'good' : topPct <= 60 ? 'warn' : 'danger');
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   ADVANCED INTELLIGENCE RENDERERS — v3.0
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ─── Format Helpers ────────────────────────────────────────────────────── */
+function fmtMin(min) {
+  if (min == null) return '—';
+  if (min < 60) return `${Math.round(min)}분`;
+  const h = Math.floor(min / 60);
+  const m = Math.round(min % 60);
+  if (h < 24) return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  const d = Math.floor(h / 24);
+  const remH = h % 24;
+  return `${d}일 ${remH}h`;
+}
+
+function deltaArrow(pct) {
+  if (pct == null || isNaN(pct)) return '<span class="delta-arrow flat">—</span>';
+  if (pct > 5)  return `<span class="delta-arrow up">▲ ${pct}%</span>`;
+  if (pct < -5) return `<span class="delta-arrow down">▼ ${Math.abs(pct)}%</span>`;
+  return `<span class="delta-arrow flat">→ ${pct}%</span>`;
+}
+
+/* ─── Render: WoW Strip ─────────────────────────────────────────────────── */
+function renderWow(d) {
+  const el = document.getElementById('wowStrip');
+  if (!el) return;
+  const w = d.wow;
+  const total = d.summary.totalChats || 0;
+
+  if (!w) {
+    el.innerHTML = `
+      <div class="wow-card">
+        <div class="wow-label">현 기간 처리</div>
+        <div class="wow-val">${total.toLocaleString()}건</div>
+        <div class="wow-sub">전체 모드 — 비교 기준 없음</div>
+      </div>`;
+    return;
+  }
+
+  const sign = w.delta > 0 ? '+' : '';
+  const cls = w.delta > 0 ? 'wow-up' : w.delta < 0 ? 'wow-down' : 'wow-flat';
+  el.innerHTML = `
+    <div class="wow-card">
+      <div class="wow-label">현 기간</div>
+      <div class="wow-val">${w.currentTotal.toLocaleString()}건</div>
+    </div>
+    <div class="wow-card">
+      <div class="wow-label">직전 동기간</div>
+      <div class="wow-val muted">${w.previousTotal.toLocaleString()}건</div>
+    </div>
+    <div class="wow-card ${cls}">
+      <div class="wow-label">증감</div>
+      <div class="wow-val">${sign}${w.delta}건</div>
+      <div class="wow-sub">${deltaArrow(w.deltaPct)}</div>
+    </div>
+  `;
+}
+
+/* ─── Render: SLA Tracker ───────────────────────────────────────────────── */
+function renderSLA(d) {
+  const el = document.getElementById('slaTracker');
+  if (!el) return;
+  const s = d.slaStats || {};
+  const items = [
+    { key: 'sla30Min', label: '30분 SLA', target: 50, icon: '⚡' },
+    { key: 'sla2Hour', label: '2시간 SLA', target: 80, icon: '✅' },
+    { key: 'sla8Hour', label: '8시간 SLA', target: 95, icon: '🎯' },
+  ];
+  el.innerHTML = items.map(it => {
+    const v = s[it.key] || { rate: 0, count: 0, total: 0 };
+    const cls = v.rate >= it.target ? 'good' : v.rate >= it.target * 0.7 ? 'warn' : 'danger';
+    const status = v.rate >= it.target ? '준수' : v.rate >= it.target * 0.7 ? '근접' : '미달';
+    return `
+      <div class="sla-row sla-${cls}">
+        <span class="sla-icon">${it.icon}</span>
+        <div class="sla-meta">
+          <div class="sla-label">${it.label}</div>
+          <div class="sla-target">목표 ${it.target}%</div>
+        </div>
+        <div class="sla-bar-wrap">
+          <div class="sla-bar-fill sla-${cls}" style="width:${Math.min(v.rate, 100)}%"></div>
+          <div class="sla-target-marker" style="left:${it.target}%"></div>
+        </div>
+        <div class="sla-val sla-${cls}">${v.rate}%</div>
+        <div class="sla-count">${v.count}/${v.total}건</div>
+        <span class="sla-status sla-${cls}">${status}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+/* ─── Render: Hour-of-Day Load Curve ────────────────────────────────────── */
+function renderHourLoad(d) {
+  const el = document.getElementById('hourLoadChart');
+  if (!el) return;
+  const data = d.hourLoad || Array(24).fill(0);
+  const labels = Array.from({length: 24}, (_, i) => `${i}시`);
+  const max = Math.max(...data, 1);
+
+  if (charts.hourLoad) charts.hourLoad.destroy();
+  charts.hourLoad = new Chart(el.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: data.map(v => v >= max * 0.8 ? '#be123c' : v >= max * 0.5 ? '#0f766e' : '#86b8b3'),
+        borderRadius: 3,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1c1917', padding: 10, cornerRadius: 7,
+          callbacks: { label: ctx => `${ctx.parsed.y}건` }
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+        y: { grid: { color: '#f1efe8' }, ticks: { font: { size: 11 }, callback: v => v + '건' }, beginAtZero: true }
+      }
+    }
+  });
+
+  // KV 정보
+  const peakHour = data.indexOf(max);
+  const total = data.reduce((a, b) => a + b, 0);
+  const morning = data.slice(6, 12).reduce((a, b) => a + b, 0);
+  const afternoon = data.slice(12, 18).reduce((a, b) => a + b, 0);
+  const evening = data.slice(18, 24).reduce((a, b) => a + b, 0);
+  const night = data.slice(0, 6).reduce((a, b) => a + b, 0);
+
+  const kvEl = document.getElementById('hourLoadKV');
+  if (kvEl) {
+    kvEl.innerHTML = `
+      <div class="hl-kv"><span class="hl-kv-lbl">피크 시간</span><span class="hl-kv-val">${peakHour}시 (${max}건)</span></div>
+      <div class="hl-kv"><span class="hl-kv-lbl">오전 06-12</span><span class="hl-kv-val">${morning}건 (${Math.round(morning/total*100||0)}%)</span></div>
+      <div class="hl-kv"><span class="hl-kv-lbl">오후 12-18</span><span class="hl-kv-val">${afternoon}건 (${Math.round(afternoon/total*100||0)}%)</span></div>
+      <div class="hl-kv"><span class="hl-kv-lbl">저녁 18-24</span><span class="hl-kv-val">${evening}건 (${Math.round(evening/total*100||0)}%)</span></div>
+      <div class="hl-kv"><span class="hl-kv-lbl">새벽 00-06</span><span class="hl-kv-val muted">${night}건 (${Math.round(night/total*100||0)}%)</span></div>
+    `;
+  }
+}
+
+/* ─── Render: Weekday Load ──────────────────────────────────────────────── */
+function renderWeekdayLoad(d) {
+  const el = document.getElementById('weekdayLoadPanel');
+  if (!el) return;
+  const data = d.weekdayLoad || Array(7).fill(0);
+  const labels = ['월', '화', '수', '목', '금', '토', '일'];
+  const max = Math.max(...data, 1);
+  const total = data.reduce((a, b) => a + b, 0) || 1;
+  const peakIdx = data.indexOf(max);
+
+  el.innerHTML = labels.map((lbl, i) => {
+    const v = data[i];
+    const pct = Math.round(v / total * 100);
+    const isPeak = i === peakIdx;
+    const isWeekend = i >= 5;
+    const color = isPeak ? '#be123c' : isWeekend ? '#a8a29e' : '#0f766e';
+    return `
+      <div class="wd-row${isPeak ? ' wd-peak' : ''}">
+        <span class="wd-label${isWeekend ? ' wd-weekend' : ''}">${lbl}</span>
+        <div class="wd-bar-wrap">
+          <div class="wd-bar" style="width:${Math.round(v/max*100)}%;background:${color}"></div>
+        </div>
+        <span class="wd-val">${v}건</span>
+        <span class="wd-pct">${pct}%</span>
+        ${isPeak ? '<span class="wd-peak-tag">최다</span>' : ''}
+      </div>
+    `;
+  }).join('');
+
+  // 영업/비영업 분포
+  const bizEl = document.getElementById('bizHoursSplit');
+  if (bizEl) {
+    const b = d.workingHoursStats || { businessIn: 0, businessOut: 0 };
+    const sum = b.businessIn + b.businessOut || 1;
+    const inPct = Math.round(b.businessIn / sum * 100);
+    const outPct = 100 - inPct;
+    bizEl.innerHTML = `
+      <div class="biz-split-title">영업시간 vs 비영업시간 분포 <span class="biz-help">(평일 09-19시 KST 기준)</span></div>
+      <div class="biz-bar-wrap">
+        <div class="biz-bar biz-in" style="width:${inPct}%">${inPct}% 영업</div>
+        <div class="biz-bar biz-out" style="width:${outPct}%">${outPct}% 비영업</div>
+      </div>
+      <div class="biz-stat-row">
+        <span>영업 ${b.businessIn}건</span>
+        <span>비영업 ${b.businessOut}건</span>
+      </div>
+    `;
+  }
+}
+
+/* ─── Render: Percentile Panel ──────────────────────────────────────────── */
+function renderPercentile(d) {
+  const el = document.getElementById('percentilePanel');
+  if (!el) return;
+  const r = d.resolutionStats || {};
+  const items = [
+    { key: 'avg',    label: '평균',  val: r.avg, color: '#0f766e' },
+    { key: 'median', label: 'P50 (중앙값)',  val: r.median, color: '#14b8a6' },
+    { key: 'p75',    label: 'P75',  val: r.p75, color: '#f59e0b' },
+    { key: 'p90',    label: 'P90',  val: r.p90, color: '#ea580c' },
+    { key: 'p95',    label: 'P95',  val: r.p95, color: '#be123c' },
+  ];
+  const max = Math.max(...items.map(i => i.val || 0), 1);
+  el.innerHTML = `
+    <div class="pct-grid">
+      ${items.map(it => {
+        const w = Math.round((it.val || 0) / max * 100);
+        return `
+          <div class="pct-row">
+            <span class="pct-lbl">${it.label}</span>
+            <div class="pct-bar-wrap"><div class="pct-bar" style="width:${w}%;background:${it.color}"></div></div>
+            <span class="pct-val" style="color:${it.color}">${fmtMin(it.val)}</span>
+          </div>
+        `;
+      }).join('')}
+    </div>
+    ${r.avgEx8h != null ? `<div class="pct-extra">8h+ 케이스 제외 평균: <strong>${fmtMin(r.avgEx8h)}</strong> · 비동기 대기 영향 차감 시</div>` : ''}
+    <div class="pct-note">P95 = 상위 5% 케이스의 해결시간 · SLA 설계 시 P90 또는 P95를 기준선으로 사용</div>
+  `;
+}
+
+/* ─── Render: Aging Pipeline ────────────────────────────────────────────── */
+function renderAging(d) {
+  const el = document.getElementById('agingPipeline');
+  if (!el) return;
+  const a = d.agingBuckets || {};
+  const total = (a.lt8h || 0) + (a.h8_24 || 0) + (a.d1_3 || 0) + (a.d3_7 || 0) + (a.d7plus || 0) || 1;
+  const items = [
+    { key: 'lt8h',   label: '< 8시간',  val: a.lt8h || 0,   icon: '✅', color: '#15803d' },
+    { key: 'h8_24',  label: '8h ~ 24h', val: a.h8_24 || 0,  icon: '⏰', color: '#f59e0b' },
+    { key: 'd1_3',   label: '1일 ~ 3일', val: a.d1_3 || 0,   icon: '⚠️', color: '#ea580c' },
+    { key: 'd3_7',   label: '3일 ~ 7일', val: a.d3_7 || 0,   icon: '🚨', color: '#dc2626' },
+    { key: 'd7plus', label: '7일+',     val: a.d7plus || 0, icon: '🔥', color: '#be123c' },
+  ];
+  el.innerHTML = items.map(it => {
+    const pct = Math.round(it.val / total * 100);
+    return `
+      <div class="aging-row">
+        <span class="aging-icon">${it.icon}</span>
+        <span class="aging-lbl">${it.label}</span>
+        <div class="aging-bar-wrap"><div class="aging-bar" style="width:${Math.max(pct, it.val > 0 ? 2 : 0)}%;background:${it.color}"></div></div>
+        <span class="aging-val" style="color:${it.color}">${it.val}건</span>
+        <span class="aging-pct">${pct}%</span>
+      </div>
+    `;
+  }).join('') + `<div class="aging-note">에이징 = 해결까지 걸린 누적 시간 · 1일 이상 케이스는 비동기 응답 또는 고객 미응답이 주 원인</div>`;
+}
+
+/* ─── Render: Tag Resolution Table ──────────────────────────────────────── */
+function renderTagRes(d) {
+  const el = document.getElementById('tagResTable');
+  if (!el) return;
+  const stats = d.tagResolutionStats || [];
+  if (!stats.length) { el.innerHTML = '<div class="adv-empty">태그별 해결시간 데이터 없음</div>'; return; }
+
+  const maxAvg = Math.max(...stats.map(s => s.avg), 1);
+  el.innerHTML = `
+    <table class="tag-res-tbl">
+      <thead>
+        <tr>
+          <th style="width:32px">#</th>
+          <th>태그</th>
+          <th style="width:60px;text-align:right">건수</th>
+          <th style="width:90px;text-align:right">평균</th>
+          <th>평균 해결시간 (분포)</th>
+          <th style="width:80px;text-align:right">P50</th>
+          <th style="width:80px;text-align:right">P90</th>
+          <th style="width:60px">평가</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${stats.map((s, i) => {
+          const w = Math.round(s.avg / maxAvg * 100);
+          const cls = s.avg <= 60 ? 'good' : s.avg <= 240 ? 'warn' : 'danger';
+          const evalLbl = s.avg <= 60 ? '신속' : s.avg <= 240 ? '보통' : '지연';
+          return `
+            <tr>
+              <td class="tr-idx">${i + 1}</td>
+              <td class="tr-tag">#${s.tag}</td>
+              <td class="num-r">${s.count}</td>
+              <td class="num-r tr-avg-${cls}">${fmtMin(s.avg)}</td>
+              <td><div class="tr-dist-bar-wrap"><div class="tr-dist-bar tr-dist-${cls}" style="width:${w}%"></div></div></td>
+              <td class="num-r">${fmtMin(s.median)}</td>
+              <td class="num-r">${fmtMin(s.p90)}</td>
+              <td><span class="tr-eval tr-eval-${cls}">${evalLbl}</span></td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+/* ─── Render: Tag Co-occurrence ─────────────────────────────────────────── */
+function renderTagCooccur(d) {
+  const el = document.getElementById('tagCooccurPanel');
+  if (!el) return;
+  const co = d.tagCooccurrence || [];
+  if (!co.length) { el.innerHTML = '<div class="adv-empty">공출현 패턴 없음 (태그가 1개씩만 부여됨)</div>'; return; }
+  const max = co[0].cnt || 1;
+  el.innerHTML = co.map((c, i) => {
+    const isComplaint = c.pair.some(p => p.includes('컴플레인'));
+    return `
+      <div class="cooccur-row${isComplaint ? ' cooccur-complaint' : ''}">
+        <span class="cooccur-rank">${i + 1}</span>
+        <span class="cooccur-pair">
+          <span class="cooccur-tag">#${c.pair[0]}</span>
+          <span class="cooccur-arrow">↔</span>
+          <span class="cooccur-tag">#${c.pair[1]}</span>
+        </span>
+        <div class="cooccur-bar-wrap"><div class="cooccur-bar" style="width:${Math.round(c.cnt/max*100)}%"></div></div>
+        <span class="cooccur-cnt">${c.cnt}건</span>
+      </div>
+    `;
+  }).join('') + `<div class="cooccur-note">동일 채팅에 두 태그가 함께 부여된 빈도 · 컴플레인+카테고리 조합은 우선 처리 대상</div>`;
+}
+
+/* ─── Render: Source (Channel) Performance ─────────────────────────────── */
+function renderSourcePerf(d) {
+  const el = document.getElementById('sourcePerfPanel');
+  if (!el) return;
+  const stats = (d.sourceStats || []).filter(s => s.count > 0);
+  if (!stats.length) { el.innerHTML = '<div class="adv-empty">채널 데이터 없음</div>'; return; }
+  const labelMap = { native: '인앱 (Web/App)', phone: '전화', other: '기타' };
+  const colorMap = { native: '#0f766e', phone: '#1d4ed8', other: '#a8a29e' };
+  el.innerHTML = stats.map(s => {
+    const tagsHtml = (s.topTags || []).map(t => `<span class="sp-tag">#${t.tag} ${t.cnt}</span>`).join(' ');
+    return `
+      <div class="src-perf-card" style="border-left-color:${colorMap[s.source]}">
+        <div class="sp-header">
+          <span class="sp-name">${labelMap[s.source] || s.source}</span>
+          <span class="sp-count">${s.count.toLocaleString()}건</span>
+        </div>
+        <div class="sp-metrics">
+          <div class="sp-metric">
+            <span class="sp-m-lbl">평균</span>
+            <span class="sp-m-val">${fmtMin(s.avgResolutionMin)}</span>
+          </div>
+          <div class="sp-metric">
+            <span class="sp-m-lbl">P50</span>
+            <span class="sp-m-val">${fmtMin(s.medianResolutionMin)}</span>
+          </div>
+          <div class="sp-metric">
+            <span class="sp-m-lbl">P90</span>
+            <span class="sp-m-val">${fmtMin(s.p90ResolutionMin)}</span>
+          </div>
+        </div>
+        ${tagsHtml ? `<div class="sp-tags">${tagsHtml}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+/* ─── Render: Anomaly Panel ─────────────────────────────────────────────── */
+function renderAnomaly(d) {
+  const el = document.getElementById('anomalyPanel');
+  if (!el) return;
+  const anom = d.anomalies || [];
+  if (!anom.length) {
+    el.innerHTML = `
+      <div class="anom-ok">
+        <div class="anom-ok-icon">✓</div>
+        <div class="anom-ok-text">유의미한 이상치 없음</div>
+        <div class="anom-ok-sub">기간 내 일별 트래픽이 ±1.8σ 범위 내 정상 분포</div>
+      </div>
+    `;
+    return;
+  }
+  el.innerHTML = anom.map(a => {
+    const cls = a.isHigh ? 'anom-high' : 'anom-low';
+    const icon = a.isHigh ? '📈' : '📉';
+    const dir = a.isHigh ? '급증' : '급감';
+    const z = a.z.toFixed(1);
+    return `
+      <div class="anom-row ${cls}">
+        <span class="anom-icon">${icon}</span>
+        <div class="anom-body">
+          <div class="anom-date">${a.label}</div>
+          <div class="anom-detail">${a.val}건 · ${dir} (Z=${z}σ)</div>
+        </div>
+        <span class="anom-tag ${cls}">${dir}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+/* ─── Render: Forecast Panel ────────────────────────────────────────────── */
+function renderForecast(d) {
+  const el = document.getElementById('forecastPanel');
+  if (!el) return;
+  const f = d.forecast || {};
+  const momentum = f.momentum || 0;
+  const cls = momentum > 10 ? 'fc-up' : momentum < -10 ? 'fc-down' : 'fc-flat';
+  const icon = momentum > 10 ? '🔥' : momentum < -10 ? '❄️' : '➡️';
+  const trendLabel = momentum > 10 ? '상승 모멘텀' : momentum < -10 ? '하락 모멘텀' : '평탄';
+
+  el.innerHTML = `
+    <div class="fc-header">
+      <span class="fc-icon">${icon}</span>
+      <div class="fc-title-block">
+        <div class="fc-title">${trendLabel}</div>
+        <div class="fc-sub">7일 평균 대비 14일 전 7일 평균</div>
+      </div>
+    </div>
+    <div class="fc-grid">
+      <div class="fc-cell">
+        <div class="fc-cell-lbl">최근 7일 평균</div>
+        <div class="fc-cell-val">${f.last7Avg}건/일</div>
+      </div>
+      <div class="fc-cell">
+        <div class="fc-cell-lbl">직전 7일 평균</div>
+        <div class="fc-cell-val muted">${f.last14Avg}건/일</div>
+      </div>
+      <div class="fc-cell ${cls}">
+        <div class="fc-cell-lbl">모멘텀</div>
+        <div class="fc-cell-val">${momentum > 0 ? '+' : ''}${momentum}%</div>
+      </div>
+      <div class="fc-cell fc-projection">
+        <div class="fc-cell-lbl">다음 영업일 투영</div>
+        <div class="fc-cell-val">≈ ${f.nextDayProjection}건</div>
+      </div>
+    </div>
+    <div class="fc-note">간단 7일 평균 기반 투영 · 캠페인/이벤트가 있을 때는 별도 보정 필요</div>
+  `;
+}
+
+/* ─── Render: Complaint Trend Chart ─────────────────────────────────────── */
+function renderComplaintTrend(d) {
+  const el = document.getElementById('complaintTrendChart');
+  if (!el) return;
+  const t = d.complaintTrend || { labels: [], total: [], complaints: [] };
+  const rates = t.labels.map((_, i) => {
+    const tot = t.total[i] || 0;
+    const com = t.complaints[i] || 0;
+    return tot > 0 ? Math.round(com / tot * 100) : 0;
+  });
+
+  if (charts.complaintTrend) charts.complaintTrend.destroy();
+  charts.complaintTrend = new Chart(el.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: t.labels,
+      datasets: [
+        {
+          label: '컴플레인 건수',
+          data: t.complaints,
+          backgroundColor: '#fecaca',
+          borderColor: '#be123c',
+          borderWidth: 1,
+          yAxisID: 'y',
+          order: 2,
+        },
+        {
+          label: '컴플레인율 (%)',
+          data: rates,
+          type: 'line',
+          borderColor: '#be123c',
+          backgroundColor: 'rgba(190,18,60,0.1)',
+          borderWidth: 2,
+          tension: 0.3,
+          pointRadius: 2,
+          fill: false,
+          yAxisID: 'y1',
+          order: 1,
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'top', labels: { font: { size: 10 }, boxWidth: 10 } },
+        tooltip: {
+          backgroundColor: '#1c1917', padding: 10, cornerRadius: 7,
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 9 }, maxTicksLimit: 12, maxRotation: 0 } },
+        y: { position: 'left', grid: { color: '#f1efe8' }, ticks: { font: { size: 10 }, callback: v => v + '건' }, beginAtZero: true },
+        y1: { position: 'right', grid: { display: false }, ticks: { font: { size: 10 }, callback: v => v + '%' }, beginAtZero: true, max: 100 }
+      }
+    }
+  });
+
+  // KV
+  const totalCom = t.complaints.reduce((a, b) => a + b, 0);
+  const totalAll = t.total.reduce((a, b) => a + b, 0) || 1;
+  const overallRate = Math.round(totalCom / totalAll * 100);
+  const peakRateIdx = rates.indexOf(Math.max(...rates));
+  const peakDate = t.labels[peakRateIdx] || '—';
+  const peakRate = rates[peakRateIdx] || 0;
+
+  const kvEl = document.getElementById('complaintTrendKV');
+  if (kvEl) {
+    kvEl.innerHTML = `
+      <div class="ct-kv"><span class="ct-lbl">총 컴플레인</span><span class="ct-val">${totalCom}건</span></div>
+      <div class="ct-kv"><span class="ct-lbl">전체 비율</span><span class="ct-val ${overallRate >= 15 ? 'danger' : overallRate >= 8 ? 'warn' : 'good'}">${overallRate}%</span></div>
+      <div class="ct-kv"><span class="ct-lbl">최고 비율일</span><span class="ct-val">${peakDate} (${peakRate}%)</span></div>
+    `;
+  }
+}
+
+/* ─── Render: Manager Quadrant ──────────────────────────────────────────── */
+function renderMgrQuadrant(d) {
+  const el = document.getElementById('mgrQuadrantChart');
+  if (!el) return;
+  const managers = (d.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name) && m.count > 0 && m.avgResolutionMin != null);
+  if (!managers.length) { el.parentElement.style.display = 'none'; return; }
+  el.parentElement.style.display = '';
+
+  const points = managers.map((m, i) => ({
+    x: m.avgResolutionMin,
+    y: m.count,
+    label: m.name.replace('오토스테이_', ''),
+    backgroundColor: AVATAR_COLORS[i % AVATAR_COLORS.length].split(',')[1],
+  }));
+
+  const avgX = points.reduce((a, p) => a + p.x, 0) / points.length;
+  const avgY = points.reduce((a, p) => a + p.y, 0) / points.length;
+
+  if (charts.mgrQuad) charts.mgrQuad.destroy();
+  charts.mgrQuad = new Chart(el.getContext('2d'), {
+    type: 'scatter',
+    data: {
+      datasets: points.map(p => ({
+        label: p.label,
+        data: [{ x: p.x, y: p.y }],
+        backgroundColor: p.backgroundColor,
+        borderColor: '#fff',
+        borderWidth: 2,
+        pointRadius: 12,
+        pointHoverRadius: 14,
+      }))
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'right', labels: { font: { size: 10 }, boxWidth: 10, usePointStyle: true } },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.dataset.label}: 평균 ${fmtMin(ctx.parsed.x)} · ${ctx.parsed.y}건`
+          }
+        },
+        annotation: {
+          annotations: {
+            xAvg: {
+              type: 'line', xMin: avgX, xMax: avgX,
+              borderColor: '#a8a29e', borderWidth: 1, borderDash: [4, 4],
+              label: { content: '평균', display: true, position: 'start', font: { size: 9 } }
+            },
+            yAvg: {
+              type: 'line', yMin: avgY, yMax: avgY,
+              borderColor: '#a8a29e', borderWidth: 1, borderDash: [4, 4],
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          title: { display: true, text: '← 빠름  ·  평균 해결시간(분)  ·  느림 →', font: { size: 11 } },
+          grid: { color: '#f1efe8' },
+          beginAtZero: true,
+        },
+        y: {
+          title: { display: true, text: '↓ 적음  ·  처리 건수  ·  많음 ↑', font: { size: 11 } },
+          grid: { color: '#f1efe8' },
+          beginAtZero: true,
+        }
+      }
+    }
+  });
+
+  const legend = document.getElementById('mgrQuadrantLegend');
+  if (legend) {
+    legend.innerHTML = `
+      <div class="mq-legend-item"><span class="mq-quad mq-q1">Q1: 처리량高 / 빠름</span> <span>스타 퍼포머</span></div>
+      <div class="mq-legend-item"><span class="mq-quad mq-q2">Q2: 처리량高 / 느림</span> <span>과부하 — 분산 검토</span></div>
+      <div class="mq-legend-item"><span class="mq-quad mq-q3">Q3: 처리량低 / 빠름</span> <span>경량 처리 또는 보조</span></div>
+      <div class="mq-legend-item"><span class="mq-quad mq-q4">Q4: 처리량低 / 느림</span> <span>코칭 권장</span></div>
+    `;
+  }
+}
+
+/* ─── Render: Diagnostics Panel & Footer ────────────────────────────────── */
+function renderDiagnostics(d) {
+  const el = document.getElementById('diagPanel');
+  const footerEl = document.getElementById('footerDiag');
+  const diag = d.diagnostics || {};
+  const calls = diag.callTiming || [];
+  const warns = diag.warnings || [];
+
+  // Footer
+  if (footerEl) {
+    const okCount = calls.filter(c => c.ok).length;
+    const totalCount = calls.length;
+    const ms = diag.totalMs || 0;
+    const status = warns.length === 0 ? '✓ 정상' : `⚠ 부분실패 (${warns.length})`;
+    footerEl.innerHTML = `API 호출 ${okCount}/${totalCount} · ${ms}ms · ${status}`;
+  }
+
+  if (!el) return;
+  const totalMs = diag.totalMs || 0;
+  const pages = diag.pages || 0;
+  const paginationMs = diag.paginationMs || 0;
+  const totalRows = calls.map(c => `
+    <tr>
+      <td>${c.label}</td>
+      <td><span class="diag-status ${c.ok ? 'ok' : 'fail'}">${c.ok ? 'OK' : 'FAIL'}</span></td>
+      <td class="num-r">${c.status}</td>
+      <td class="num-r">${c.ms}ms</td>
+    </tr>
+  `).join('');
+
+  const warnHtml = warns.length
+    ? `<div class="diag-warns">${warns.map(w => `<span class="diag-warn-tag">⚠ ${w}</span>`).join('')}</div>`
+    : `<div class="diag-ok">✓ 모든 호출 성공</div>`;
+
+  el.innerHTML = `
+    <div class="diag-summary">
+      <div class="diag-stat"><span class="diag-stat-lbl">총 응답시간</span><span class="diag-stat-val">${totalMs}ms</span></div>
+      <div class="diag-stat"><span class="diag-stat-lbl">페이지네이션</span><span class="diag-stat-val">${pages}p · ${paginationMs}ms</span></div>
+      <div class="diag-stat"><span class="diag-stat-lbl">호출 횟수</span><span class="diag-stat-val">${calls.length}회</span></div>
+      <div class="diag-stat"><span class="diag-stat-lbl">실패 호출</span><span class="diag-stat-val ${warns.length > 0 ? 'danger' : 'good'}">${warns.length}건</span></div>
+    </div>
+    ${warnHtml}
+    <table class="diag-tbl">
+      <thead><tr><th>API 엔드포인트</th><th>상태</th><th class="num-r">HTTP</th><th class="num-r">응답시간</th></tr></thead>
+      <tbody>${totalRows || '<tr><td colspan="4" class="diag-empty">호출 정보 없음</td></tr>'}</tbody>
+    </table>
+    <div class="diag-note">v3.0 — 부분 실패 허용 모드 · 개별 endpoint 실패해도 나머지 데이터는 정상 반환</div>
+  `;
+}
+
+/* ─── Render: All Advanced Sections ─────────────────────────────────────── */
+function renderAdvanced(d) {
+  try { renderWow(d); } catch (e) { console.warn('[adv] wow', e); }
+  try { renderSLA(d); } catch (e) { console.warn('[adv] sla', e); }
+  try { renderHourLoad(d); } catch (e) { console.warn('[adv] hourLoad', e); }
+  try { renderWeekdayLoad(d); } catch (e) { console.warn('[adv] weekdayLoad', e); }
+  try { renderPercentile(d); } catch (e) { console.warn('[adv] percentile', e); }
+  try { renderAging(d); } catch (e) { console.warn('[adv] aging', e); }
+  try { renderTagRes(d); } catch (e) { console.warn('[adv] tagRes', e); }
+  try { renderTagCooccur(d); } catch (e) { console.warn('[adv] tagCooccur', e); }
+  try { renderSourcePerf(d); } catch (e) { console.warn('[adv] sourcePerf', e); }
+  try { renderAnomaly(d); } catch (e) { console.warn('[adv] anomaly', e); }
+  try { renderForecast(d); } catch (e) { console.warn('[adv] forecast', e); }
+  try { renderComplaintTrend(d); } catch (e) { console.warn('[adv] complaintTrend', e); }
+  try { renderMgrQuadrant(d); } catch (e) { console.warn('[adv] mgrQuad', e); }
+  try { renderDiagnostics(d); } catch (e) { console.warn('[adv] diag', e); }
+}
+
 /* ─── Full Render ───────────────────────────────────────────────────────── */
 async function render() {
   try {
@@ -2153,6 +2884,9 @@ async function render() {
     renderMgrRiskStrip(data);
     renderManagers(data);
     renderBotsGroups(data);
+
+    // ── 고도화 분석 렌더링 (v3.0) ──
+    renderAdvanced(data);
 
     setStep('lstep-charts', true); setStep('lstep-done', true); setProgress(100);
     setTimeout(() => {
@@ -2211,6 +2945,7 @@ async function silentRefresh() {
     renderMgrRiskStrip(data);
     renderManagers(data);
     renderBotsGroups(data);
+    renderAdvanced(data);
     const eb = document.getElementById('errBanner');
     if (eb) eb.style.display = 'none';
   } catch (e) {

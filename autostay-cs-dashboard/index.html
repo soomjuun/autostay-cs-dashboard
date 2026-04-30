@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Autostay CS 대시보드</title>
+  <title>[OPS] 채널톡 CS 대시보드</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
@@ -16,8 +16,8 @@
 <div id="loadingOverlay" class="loading-overlay">
   <div class="loading-inner">
     <div class="loading-logo">
-      <span class="loading-logo-icon">🚗</span>
-      <span class="loading-logo-text">Autostay CS</span>
+      <span class="loading-logo-icon">📊</span>
+      <span class="loading-logo-text">[OPS] 채널톡 CS</span>
     </div>
     <div class="loading-bar-wrap">
       <div id="loadProgressBar" class="loading-bar-fill"></div>
@@ -59,9 +59,9 @@
       <div class="hero-top">
         <!-- 왼쪽: 카피 + 퀵 스탯 -->
         <div class="hero-copy">
-          <div class="hero-eyebrow">Autostay · CS Intelligence</div>
-          <h1 class="hero-title">고객 서비스 대시보드</h1>
-          <p class="hero-desc">실시간 채널 데이터 기반 CS 운영 현황 및 품질 분석</p>
+          <div class="hero-eyebrow">[OPS] · CHANNEL TALK INTELLIGENCE</div>
+          <h1 class="hero-title">[OPS] 채널톡 CS 대시보드</h1>
+          <p class="hero-desc">채널톡 실데이터 기반 · CS 운영 · SLA · VOC · 담당자 성과 통합 분석</p>
 
           <!-- 퀵 스탯 4개 -->
           <div id="heroQuickStats" class="hero-quick-stats">
@@ -458,6 +458,146 @@
 
   </div><!-- /.chart-master-grid -->
 
+  <!-- ════════════════════════════════════════════════════════════════════
+       ADVANCED INTELLIGENCE — v3.0 고도화 분석 레이어
+  ════════════════════════════════════════════════════════════════════ -->
+  <section class="adv-section-wrap">
+    <div class="adv-section-banner">
+      <span class="adv-banner-icon">⚡</span>
+      <div class="adv-banner-text">
+        <div class="adv-banner-title">고도화 분석 (Advanced Intelligence)</div>
+        <div class="adv-banner-sub">SLA · 시간대 부하 · 태그 상관 · 채널 성능 · 에이징 · 이상치 탐지</div>
+      </div>
+      <span class="adv-banner-version">v3.0</span>
+    </div>
+
+    <!-- Row A1: WoW + SLA Tracker (col-12) -->
+    <div class="cg-panel col-12 adv-panel">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">📊 기간 비교 & SLA 준수율</span>
+        <span class="panel-badge adv-pb">Period-over-Period</span>
+      </div>
+      <div class="adv-grid-12">
+        <div id="wowStrip" class="wow-strip"></div>
+        <div id="slaTracker" class="sla-tracker"></div>
+      </div>
+    </div>
+
+    <!-- Row A2: 시간대 부하 곡선(col-7) + 요일 패턴(col-5) -->
+    <div class="cg-panel col-7 adv-panel">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">⏱️ 시간대 부하 곡선 (24h)</span>
+        <span class="panel-badge adv-pb">Hour-of-Day</span>
+      </div>
+      <div class="cg-chart-wrap" style="height:200px">
+        <canvas id="hourLoadChart"></canvas>
+      </div>
+      <div id="hourLoadKV" class="hour-load-kv"></div>
+    </div>
+
+    <div class="cg-panel col-5 adv-panel">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">📅 요일별 부하 분포</span>
+        <span class="panel-badge adv-pb">Weekday</span>
+      </div>
+      <div id="weekdayLoadPanel" class="weekday-load-panel"></div>
+      <div id="bizHoursSplit" class="biz-hours-split"></div>
+    </div>
+
+    <!-- Row A3: Resolution Percentiles + Aging Pipeline -->
+    <div class="cg-panel col-6 adv-panel">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">📐 해결시간 백분위수 (P50/P75/P90/P95)</span>
+        <span class="panel-badge adv-pb">Percentile</span>
+      </div>
+      <div id="percentilePanel" class="percentile-panel"></div>
+    </div>
+
+    <div class="cg-panel col-6 adv-panel">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">🐢 에이징 파이프라인 (8h+ 세분화)</span>
+        <span class="panel-badge adv-pb">Aging</span>
+      </div>
+      <div id="agingPipeline" class="aging-pipeline"></div>
+    </div>
+
+    <!-- Row A4: 태그별 해결시간 (col-12) -->
+    <div class="cg-panel col-12 adv-panel">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">🏷️ 태그별 해결시간 분석 (TOP 10)</span>
+        <span class="panel-badge adv-pb">Resolution × Tag</span>
+      </div>
+      <div id="tagResTable" class="tag-res-table"></div>
+    </div>
+
+    <!-- Row A5: 태그 공출현 + 채널 성능 -->
+    <div class="cg-panel col-6 adv-panel">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">🔗 태그 공출현 패턴 (TOP 8)</span>
+        <span class="panel-badge adv-pb">Co-occurrence</span>
+      </div>
+      <div id="tagCooccurPanel" class="tag-cooccur-panel"></div>
+    </div>
+
+    <div class="cg-panel col-6 adv-panel">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">📡 채널별 성능 비교</span>
+        <span class="panel-badge adv-pb">Channel × Resolution</span>
+      </div>
+      <div id="sourcePerfPanel" class="source-perf-panel"></div>
+    </div>
+
+    <!-- Row A6: 이상치 탐지 + Volume Forecast -->
+    <div class="cg-panel col-6 adv-panel">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">🚨 이상치 탐지 (Z-score ≥ 1.8σ)</span>
+        <span class="panel-badge adv-pb">Anomaly</span>
+      </div>
+      <div id="anomalyPanel" class="anomaly-panel"></div>
+    </div>
+
+    <div class="cg-panel col-6 adv-panel">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">🔮 볼륨 모멘텀 & 다음날 투영</span>
+        <span class="panel-badge adv-pb">Forecast</span>
+      </div>
+      <div id="forecastPanel" class="forecast-panel"></div>
+    </div>
+
+    <!-- Row A7: 컴플레인 트렌드 (col-12) -->
+    <div class="cg-panel col-12 adv-panel">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">⚠️ 일별 컴플레인 비율 추이</span>
+        <span class="panel-badge adv-pb">Complaint Rate Trend</span>
+      </div>
+      <div class="cg-chart-wrap" style="height:200px">
+        <canvas id="complaintTrendChart"></canvas>
+      </div>
+      <div id="complaintTrendKV" class="complaint-trend-kv"></div>
+    </div>
+
+    <!-- Row A8: 담당자 성과 매트릭스 (col-12) -->
+    <div class="cg-panel col-12 adv-panel">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">🎯 담당자 성과 매트릭스 (속도 × 처리량)</span>
+        <span class="panel-badge adv-pb">Quadrant</span>
+      </div>
+      <div class="cg-chart-wrap" style="height:320px">
+        <canvas id="mgrQuadrantChart"></canvas>
+      </div>
+      <div id="mgrQuadrantLegend" class="mgr-quadrant-legend"></div>
+    </div>
+
+    <!-- Row A9: 진단 정보 (col-12) -->
+    <div class="cg-panel col-12 adv-panel">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">🩺 API 진단 (Channel Talk Open API v5)</span>
+        <span class="panel-badge adv-pb">Diagnostics</span>
+      </div>
+      <div id="diagPanel" class="diag-panel"></div>
+    </div>
+  </section>
+
   <!-- ────────────────────────────────────────────────────────
        장기채팅 모달
   ──────────────────────────────────────────────────────────── -->
@@ -477,9 +617,11 @@
        푸터
   ──────────────────────────────────────────────────────────── -->
   <footer class="footer-note">
-    <span>Autostay CS Dashboard · 데이터 출처: Channel Talk API</span>
+    <span>[OPS] 채널톡 CS 대시보드 · 데이터 출처: Channel Talk Open API v5</span>
     <span class="footer-sep">·</span>
     <span>자동 새로고침 5분 간격</span>
+    <span class="footer-sep">·</span>
+    <span id="footerDiag">진단 정보 로딩 중…</span>
   </footer>
 
 </div><!-- /.app -->

@@ -76,7 +76,7 @@ function loginPage(failed) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Autostay CS 대시보드 — 인증</title>
+  <title>[OPS] 채널톡 CS 대시보드 — 인증</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -173,8 +173,8 @@ function loginPage(failed) {
 <body>
   <div class="card">
     <div class="logo">
-      <span class="logo-icon">🚗</span>
-      <div class="logo-title">Autostay CS Dashboard</div>
+      <span class="logo-icon">📊</span>
+      <div class="logo-title">[OPS] 채널톡 CS 대시보드</div>
       <div class="logo-sub">내부 전용 · 인증이 필요합니다</div>
     </div>
     <form method="POST" action="/api/auth">
@@ -190,7 +190,7 @@ function loginPage(failed) {
       <div class="error-msg">⚠ 토큰이 올바르지 않습니다. 다시 확인해주세요.</div>
       <button type="submit">입장하기 →</button>
     </form>
-    <p class="hint">이 대시보드는 Autostay 팀 내부 전용입니다.<br>토큰이 없다면 팀 관리자에게 문의하세요.</p>
+    <p class="hint">이 대시보드는 OPS 팀 내부 전용입니다.<br>토큰이 없다면 팀 관리자에게 문의하세요.</p>
   </div>
 </body>
 </html>`;
