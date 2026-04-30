@@ -10,9 +10,7 @@
 </head>
 <body>
 
-<!-- ══════════════════════════════════════════════════════════════
-     로딩 오버레이
-══════════════════════════════════════════════════════════════ -->
+<!-- 로딩 오버레이 -->
 <div id="loadingOverlay" class="loading-overlay">
   <div class="loading-inner">
     <div class="loading-logo">
@@ -32,38 +30,29 @@
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════════════
-     오류·샘플 배너
-══════════════════════════════════════════════════════════════ -->
+<!-- 배너 -->
 <div id="errBanner" class="global-banner global-banner--error" style="display:none">
   <span class="banner-icon">⚠️</span>
   <span class="banner-msg">데이터를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</span>
 </div>
 <div id="sampleNoteBanner" class="global-banner global-banner--warn" style="display:none">
   <span class="banner-icon">ℹ️</span>
-  <span class="banner-msg">샘플 데이터가 표시되고 있습니다. 실제 채널을 연결하면 실시간 데이터를 확인할 수 있습니다.</span>
+  <span class="banner-msg"></span>
 </div>
 
-<!-- ══════════════════════════════════════════════════════════════
-     앱 래퍼
-══════════════════════════════════════════════════════════════ -->
 <div class="app">
 
   <!-- ────────────────────────────────────────────────────────
-       HERO — dark navy gradient
+       HERO — v4.0: 좌측 카피, 우측 "오늘 즉시 처리" 액션 박스
   ──────────────────────────────────────────────────────────── -->
   <section class="hero">
     <div class="hero-container">
-
-      <!-- 상단: 카피 + 헬스 카드 -->
       <div class="hero-top">
-        <!-- 왼쪽: 카피 + 퀵 스탯 -->
         <div class="hero-copy">
           <div class="hero-eyebrow">[OPS] · CHANNEL TALK INTELLIGENCE</div>
           <h1 class="hero-title">[OPS] 채널톡 CS 대시보드</h1>
-          <p class="hero-desc">채널톡 실데이터 기반 · CS 운영 · SLA · VOC · 담당자 성과 통합 분석</p>
+          <p class="hero-desc">채널톡 실데이터 기반 · CS 운영 · SLA · VOC · 담당자 성과 통합 분석 <span class="hero-version">v4.0</span></p>
 
-          <!-- 퀵 스탯 4개 -->
           <div id="heroQuickStats" class="hero-quick-stats">
             <div class="hqs-item">
               <span class="hqs-label">총 채팅</span>
@@ -78,50 +67,44 @@
               <span id="hqsComplaint" class="hqs-value hqs-danger">—</span>
             </div>
             <div class="hqs-item">
-              <span class="hqs-label">평균해결</span>
-              <span id="hqsAvgRes" class="hqs-value">—</span>
+              <span class="hqs-label">FRT (P50)</span>
+              <span id="hqsFrt" class="hqs-value">—</span>
             </div>
           </div>
         </div>
 
-        <!-- 오른쪽: 헬스 스코어 게이지 -->
+        <!-- A-2: Hero 우측 — "오늘 즉시 처리" 액션 박스 -->
         <div class="hero-focus">
-          <div id="healthCard" class="health-gauge-card">
-            <div class="hgc-label">CS 건강 점수</div>
-            <!-- SVG 반원 게이지 -->
-            <div class="hgc-gauge-wrap">
-              <svg class="hgc-svg" viewBox="0 0 120 70" xmlns="http://www.w3.org/2000/svg">
-                <path class="hgc-track" d="M10,65 A50,50 0 0,1 110,65" fill="none" stroke-width="10"/>
-                <path id="gaugeFill" class="hgc-fill" d="M10,65 A50,50 0 0,1 110,65" fill="none" stroke-width="10"
-                      stroke-dasharray="188.5" stroke-dashoffset="188.5" stroke-linecap="round"/>
-              </svg>
-              <div class="hgc-center">
-                <div id="healthScore" class="hgc-score">—</div>
-                <div id="healthGrade" class="hgc-grade">—</div>
-              </div>
+          <div id="heroActionCard" class="hero-action-card">
+            <div class="hac-header">
+              <span class="hac-icon">🎯</span>
+              <span class="hac-title">지금 즉시 처리</span>
+              <span id="hacGrade" class="hac-grade">—</span>
             </div>
-            <div id="healthSub" class="hgc-sub"></div>
-            <div id="gaugeBasisNote" class="hgc-basis"></div>
+            <div id="hacBody" class="hac-body">
+              <div class="hac-loading">분석 중…</div>
+            </div>
+            <div id="hacFooter" class="hac-footer"></div>
           </div>
         </div>
       </div>
 
-      <!-- KPI 스트립 -->
       <div class="hero-kpi-strip">
         <div id="kpiGrid" class="kpi-grid"></div>
       </div>
 
-      <!-- 메타 정보 -->
       <div class="hero-meta">
         <span id="channelName" class="hero-channel-name">—</span>
         <span class="hero-meta-sep">·</span>
         <span id="updatedAt" class="hero-updated-at">업데이트 중…</span>
+        <span class="hero-meta-sep">·</span>
+        <span id="cacheBadge" class="hero-cache-badge"></span>
       </div>
     </div>
   </section>
 
   <!-- ────────────────────────────────────────────────────────
-       툴바
+       툴바 — 기간탭 + 필터 + CSV/새로고침
   ──────────────────────────────────────────────────────────── -->
   <div class="toolbar-strip">
     <div class="toolbar-inner">
@@ -132,9 +115,14 @@
         <button class="range-tab" data-days="all">전체</button>
       </div>
       <div class="toolbar-actions">
+        <!-- C-2: 필터 버튼 -->
+        <button id="filterBtn" class="toolbar-btn toolbar-btn--ghost">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12l-4.5 6V14L7 12.5V9L2 3z"/></svg>
+          필터 <span id="filterCount" class="filter-count" style="display:none">0</span>
+        </button>
         <button id="csvDownloadBtn" class="toolbar-btn toolbar-btn--ghost">
           <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
-          CSV 다운로드
+          CSV
         </button>
         <button id="refreshBtn" class="toolbar-btn toolbar-btn--primary">
           <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M13.65 2.35A8 8 0 1 0 14.94 8H13a6 6 0 1 1-1.25-3.72L9 7h5V2l-.35.35z"/></svg>
@@ -142,154 +130,130 @@
         </button>
       </div>
     </div>
+
+    <!-- C-2: 필터 드로워 -->
+    <div id="filterDrawer" class="filter-drawer" style="display:none">
+      <div class="filter-drawer-inner">
+        <div class="filter-group">
+          <label class="filter-label">담당자</label>
+          <div id="filterMgrList" class="filter-chip-list"></div>
+        </div>
+        <div class="filter-group">
+          <label class="filter-label">태그</label>
+          <div id="filterTagList" class="filter-chip-list"></div>
+        </div>
+        <div class="filter-group">
+          <label class="filter-label">채널</label>
+          <div id="filterSrcList" class="filter-chip-list"></div>
+        </div>
+        <div class="filter-actions">
+          <button id="filterClearBtn" class="filter-btn-ghost">전체 해제</button>
+          <button id="filterCloseBtn" class="filter-btn-primary">완료</button>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <!-- KPI 기준 헤더 -->
   <div class="basis-row">
     <div id="kpiBasisHeader" class="kpi-basis-header"></div>
+    <div id="filterBadgeRow" class="filter-badge-row" style="display:none"></div>
   </div>
 
-  <!-- ────────────────────────────────────────────────────────
-       알림 스트립
-  ──────────────────────────────────────────────────────────── -->
   <div id="alertStrip" class="alert-strip" style="display:none"></div>
 
   <!-- ────────────────────────────────────────────────────────
-       ACTION CENTER — 3 카드 수평 그리드
-  ──────────────────────────────────────────────────────────── -->
-  <section class="section-wrap">
-    <div class="section-header">
-      <span class="section-title">Action Center</span>
-      <span class="section-badge">실시간 조치 현황</span>
-    </div>
-
-    <!-- 미배정 배너 (전체 너비) -->
-    <div id="acUnassignedBanner" class="unassigned-banner" style="display:none">
-      <span class="ub-icon">⚡</span>
-      <span class="ub-text">미배정 채팅 <strong id="acUnassignedCount">0</strong>건 —
-        <span id="acUnassignedDesc"></span></span>
-    </div>
-
-    <div class="ac-grid">
-      <!-- 카드 1: 오늘의 조치 -->
-      <div class="ac-card ac-card--actions">
-        <div class="ac-card-header">
-          <span class="ac-card-icon">✅</span>
-          <span class="ac-card-title">오늘의 조치</span>
-          <span id="acTodayCount" class="ac-card-count">0</span>
-          <span id="acHealthPill" class="ac-health-pill">—</span>
-        </div>
-        <div id="acPulseMetrics" class="ac-pulse-metrics"></div>
-        <div id="acTodayBody" class="ac-card-body"></div>
-      </div>
-
-      <!-- 카드 2: 리스크 -->
-      <div class="ac-card ac-card--danger">
-        <div class="ac-card-header">
-          <span class="ac-card-icon">🚨</span>
-          <span class="ac-card-title">운영 리스크</span>
-        </div>
-        <div id="acRiskBody" class="ac-card-body"></div>
-      </div>
-
-      <!-- 카드 3: VOC -->
-      <div class="ac-card ac-card--voc">
-        <div class="ac-card-header">
-          <span class="ac-card-icon">💬</span>
-          <span class="ac-card-title">주요 VOC</span>
-          <span id="acVocBadge" class="ac-voc-badge"></span>
-        </div>
-        <div id="acVocBody" class="ac-card-body"></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ────────────────────────────────────────────────────────
-       GAUGE GRID — 4 아크 게이지
+       건강 점수 + 게이지 4종 (1줄)
   ──────────────────────────────────────────────────────────── -->
   <section class="section-wrap">
     <div class="section-header">
       <span class="section-title">핵심 지표</span>
       <span class="section-badge">성과 게이지</span>
     </div>
-    <div class="gauge-grid">
-      <!-- 게이지 1: 30분 내 해결율 -->
-      <div class="gauge-panel">
-        <div class="gauge-panel-badge" id="gbadge-quick"></div>
-        <div class="gauge-arc-wrap">
-          <svg class="gauge-arc-svg" viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
-            <path class="gauge-track" d="M8,56 A42,42 0 0,1 92,56" fill="none" stroke-width="8"/>
-            <path id="gsvg-quick" class="gauge-fill gauge-fill--good" d="M8,56 A42,42 0 0,1 92,56"
-                  fill="none" stroke-width="8" stroke-dasharray="0 131.9" stroke-linecap="round"/>
+    <div class="health-gauge-row">
+      <div id="healthCard" class="health-gauge-card-inline">
+        <div class="hgc-label">CS 건강 점수</div>
+        <div class="hgc-gauge-wrap">
+          <svg class="hgc-svg" viewBox="0 0 120 70" xmlns="http://www.w3.org/2000/svg">
+            <path class="hgc-track" d="M10,65 A50,50 0 0,1 110,65" fill="none" stroke-width="10"/>
+            <path id="gaugeFill" class="hgc-fill" d="M10,65 A50,50 0 0,1 110,65" fill="none" stroke-width="10"
+                  stroke-dasharray="188.5" stroke-dashoffset="188.5" stroke-linecap="round"/>
           </svg>
-          <div class="gauge-center">
-            <div id="gval-quick" class="gauge-val">—</div>
+          <div class="hgc-center">
+            <div id="healthScore" class="hgc-score">—</div>
+            <div id="healthGrade" class="hgc-grade">—</div>
           </div>
         </div>
-        <div class="gauge-label">30분↓ 해결율</div>
-        <div id="gsub-quick" class="gauge-sub"></div>
+        <div id="healthSub" class="hgc-sub"></div>
       </div>
-
-      <!-- 게이지 2: 8시간+ 지연율 -->
-      <div class="gauge-panel">
-        <div class="gauge-panel-badge" id="gbadge-slow"></div>
-        <div class="gauge-arc-wrap">
-          <svg class="gauge-arc-svg" viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
-            <path class="gauge-track" d="M8,56 A42,42 0 0,1 92,56" fill="none" stroke-width="8"/>
-            <path id="gsvg-slow" class="gauge-fill gauge-fill--danger" d="M8,56 A42,42 0 0,1 92,56"
-                  fill="none" stroke-width="8" stroke-dasharray="0 131.9" stroke-linecap="round"/>
-          </svg>
-          <div class="gauge-center">
-            <div id="gval-slow" class="gauge-val">—</div>
+      <div class="gauge-grid-inline">
+        <div class="gauge-panel">
+          <div class="gauge-panel-badge" id="gbadge-quick"></div>
+          <div class="gauge-arc-wrap">
+            <svg class="gauge-arc-svg" viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
+              <path class="gauge-track" d="M8,56 A42,42 0 0,1 92,56" fill="none" stroke-width="8"/>
+              <path id="gsvg-quick" class="gauge-fill gauge-fill--good" d="M8,56 A42,42 0 0,1 92,56" fill="none" stroke-width="8" stroke-dasharray="0 131.9" stroke-linecap="round"/>
+            </svg>
+            <div class="gauge-center"><div id="gval-quick" class="gauge-val">—</div></div>
           </div>
+          <div class="gauge-label">30분↓ 해결율</div>
+          <div id="gsub-quick" class="gauge-sub"></div>
         </div>
-        <div class="gauge-label">8시간+ 지연율</div>
-        <div id="gsub-slow" class="gauge-sub"></div>
-      </div>
-
-      <!-- 게이지 3: 평균 해결시간 -->
-      <div class="gauge-panel">
-        <div class="gauge-panel-badge" id="gbadge-avgres"></div>
-        <div class="gauge-arc-wrap">
-          <svg class="gauge-arc-svg" viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
-            <path class="gauge-track" d="M8,56 A42,42 0 0,1 92,56" fill="none" stroke-width="8"/>
-            <path id="gsvg-avgres" class="gauge-fill gauge-fill--warn" d="M8,56 A42,42 0 0,1 92,56"
-                  fill="none" stroke-width="8" stroke-dasharray="0 131.9" stroke-linecap="round"/>
-          </svg>
-          <div class="gauge-center">
-            <div id="gval-avgres" class="gauge-val">—</div>
+        <div class="gauge-panel">
+          <div class="gauge-panel-badge" id="gbadge-slow"></div>
+          <div class="gauge-arc-wrap">
+            <svg class="gauge-arc-svg" viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
+              <path class="gauge-track" d="M8,56 A42,42 0 0,1 92,56" fill="none" stroke-width="8"/>
+              <path id="gsvg-slow" class="gauge-fill gauge-fill--danger" d="M8,56 A42,42 0 0,1 92,56" fill="none" stroke-width="8" stroke-dasharray="0 131.9" stroke-linecap="round"/>
+            </svg>
+            <div class="gauge-center"><div id="gval-slow" class="gauge-val">—</div></div>
           </div>
+          <div class="gauge-label">8시간+ 지연율</div>
+          <div id="gsub-slow" class="gauge-sub"></div>
         </div>
-        <div class="gauge-label">평균 해결시간</div>
-        <div id="gsub-avgres" class="gauge-sub"></div>
-      </div>
-
-      <!-- 게이지 4: 담당자 편중도 -->
-      <div class="gauge-panel">
-        <div class="gauge-panel-badge" id="gbadge-conc"></div>
-        <div class="gauge-arc-wrap">
-          <svg class="gauge-arc-svg" viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
-            <path class="gauge-track" d="M8,56 A42,42 0 0,1 92,56" fill="none" stroke-width="8"/>
-            <path id="gsvg-conc" class="gauge-fill gauge-fill--warn" d="M8,56 A42,42 0 0,1 92,56"
-                  fill="none" stroke-width="8" stroke-dasharray="0 131.9" stroke-linecap="round"/>
-          </svg>
-          <div class="gauge-center">
-            <div id="gval-conc" class="gauge-val">—</div>
+        <div class="gauge-panel">
+          <div class="gauge-panel-badge" id="gbadge-frt"></div>
+          <div class="gauge-arc-wrap">
+            <svg class="gauge-arc-svg" viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
+              <path class="gauge-track" d="M8,56 A42,42 0 0,1 92,56" fill="none" stroke-width="8"/>
+              <path id="gsvg-frt" class="gauge-fill gauge-fill--warn" d="M8,56 A42,42 0 0,1 92,56" fill="none" stroke-width="8" stroke-dasharray="0 131.9" stroke-linecap="round"/>
+            </svg>
+            <div class="gauge-center"><div id="gval-frt" class="gauge-val">—</div></div>
           </div>
+          <div class="gauge-label">FRT (첫 응답)</div>
+          <div id="gsub-frt" class="gauge-sub"></div>
         </div>
-        <div class="gauge-label">담당자 편중도</div>
-        <div id="gsub-conc" class="gauge-sub"></div>
+        <div class="gauge-panel">
+          <div class="gauge-panel-badge" id="gbadge-fcr"></div>
+          <div class="gauge-arc-wrap">
+            <svg class="gauge-arc-svg" viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
+              <path class="gauge-track" d="M8,56 A42,42 0 0,1 92,56" fill="none" stroke-width="8"/>
+              <path id="gsvg-fcr" class="gauge-fill gauge-fill--good" d="M8,56 A42,42 0 0,1 92,56" fill="none" stroke-width="8" stroke-dasharray="0 131.9" stroke-linecap="round"/>
+            </svg>
+            <div class="gauge-center"><div id="gval-fcr" class="gauge-val">—</div></div>
+          </div>
+          <div class="gauge-label">FCR (1차 해결률)</div>
+          <div id="gsub-fcr" class="gauge-sub"></div>
+        </div>
+        <div class="gauge-panel">
+          <div class="gauge-panel-badge" id="gbadge-conc"></div>
+          <div class="gauge-arc-wrap">
+            <svg class="gauge-arc-svg" viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
+              <path class="gauge-track" d="M8,56 A42,42 0 0,1 92,56" fill="none" stroke-width="8"/>
+              <path id="gsvg-conc" class="gauge-fill gauge-fill--warn" d="M8,56 A42,42 0 0,1 92,56" fill="none" stroke-width="8" stroke-dasharray="0 131.9" stroke-linecap="round"/>
+            </svg>
+            <div class="gauge-center"><div id="gval-conc" class="gauge-val">—</div></div>
+          </div>
+          <div class="gauge-label">담당자 편중도</div>
+          <div id="gsub-conc" class="gauge-sub"></div>
+        </div>
       </div>
     </div>
   </section>
 
-  <!-- ────────────────────────────────────────────────────────
-       인사이트 스트립
-  ──────────────────────────────────────────────────────────── -->
   <div id="insightsStrip" class="insights-strip"></div>
 
   <!-- ────────────────────────────────────────────────────────
-       CHART MASTER GRID — 12컬럼
+       MASTER GRID
   ──────────────────────────────────────────────────────────── -->
   <div class="chart-master-grid">
 
@@ -301,34 +265,17 @@
         <div id="trendLegend" class="trend-legend"></div>
       </div>
       <div class="cg-panel-kv">
-        <div class="pkv-item">
-          <span class="pkv-lbl">총 채팅</span>
-          <span id="trendTotal" class="pkv-val">—</span>
-        </div>
-        <div class="pkv-item">
-          <span class="pkv-lbl">피크</span>
-          <span id="trendPeak" class="pkv-val">—</span>
-          <span id="trendPeakDay" class="pkv-sub"></span>
-        </div>
-        <div class="pkv-item">
-          <span class="pkv-lbl">활성일 평균</span>
-          <span id="trendAvg" class="pkv-val">—</span>
-        </div>
-        <div class="pkv-item">
-          <span class="pkv-lbl">미해결</span>
-          <span id="trendOpen" class="pkv-val pkv-warn">—</span>
-        </div>
+        <div class="pkv-item"><span class="pkv-lbl">총 채팅</span><span id="trendTotal" class="pkv-val">—</span></div>
+        <div class="pkv-item"><span class="pkv-lbl">피크</span><span id="trendPeak" class="pkv-val">—</span><span id="trendPeakDay" class="pkv-sub"></span></div>
+        <div class="pkv-item"><span class="pkv-lbl">활성일 평균</span><span id="trendAvg" class="pkv-val">—</span></div>
+        <div class="pkv-item"><span class="pkv-lbl">미해결</span><span id="trendOpen" class="pkv-val pkv-warn">—</span></div>
       </div>
-      <div class="cg-chart-wrap" style="height:220px">
-        <canvas id="trendChart"></canvas>
-      </div>
+      <div class="cg-chart-wrap" style="height:220px"><canvas id="trendChart"></canvas></div>
       <div id="peakAnalysisPanel" class="peak-analysis-panel" style="display:none"></div>
     </div>
 
     <div class="cg-panel col-4">
-      <div class="cg-panel-header">
-        <span class="cg-panel-title">🗓️ 요일·시간 히트맵</span>
-      </div>
+      <div class="cg-panel-header"><span class="cg-panel-title">🗓️ 요일·시간 히트맵</span></div>
       <div id="heatmap" class="heatmap"></div>
       <div class="hm-legend-row">
         <span class="hm-legend-lbl">적음</span>
@@ -339,141 +286,145 @@
       <div id="hmStaffingGuide" class="hm-staffing-guide" style="display:none"></div>
     </div>
 
-    <!-- Row 2: 태그 바(col-7) + VOC 리스크(col-5) -->
-    <div class="cg-panel col-7">
-      <div class="cg-panel-header">
-        <span class="cg-panel-title">🏷️ 문의 태그 분포</span>
-      </div>
-      <div class="cg-chart-wrap" style="height:280px">
-        <canvas id="tagBarChart"></canvas>
-      </div>
-    </div>
-
-    <div class="cg-panel col-5">
-      <div class="cg-panel-header">
-        <span class="cg-panel-title">⚠️ VOC 리스크 카드</span>
-      </div>
-      <div id="vocRiskCards" class="voc-risk-cards-wrap"></div>
-    </div>
-
-    <!-- VOC 문의 현황 (col-12) -->
+    <!-- A-1: VOC 통합 탭 (col-12) -->
     <div class="cg-panel col-12">
       <div class="cg-panel-header">
-        <span class="cg-panel-title">🗂️ VOC 문의 현황 (태그 비율 기반)</span>
-      </div>
-      <div id="vocList" class="voc-list"></div>
-    </div>
-
-    <!-- Row 3: 담당자 집중도 (col-12) -->
-    <div class="cg-panel col-12">
-      <div class="cg-panel-header">
-        <span class="cg-panel-title">🎯 담당자 집중도 분석</span>
-      </div>
-      <div id="concRiskPanel" class="conc-risk-panel"></div>
-      <div id="concAlert" class="conc-alert" style="display:none"></div>
-    </div>
-
-    <!-- Row 4: 담당자 성과 (col-12) -->
-    <div class="cg-panel col-12">
-      <div class="cg-panel-header">
-        <span class="cg-panel-title">👤 담당자 성과</span>
-        <div id="agentSortTabs" class="tbl-sort-tabs"></div>
-      </div>
-      <div id="mgrRiskStrip" class="mgr-risk-strip"></div>
-      <div class="agent-content-grid">
-        <div class="agent-table-area">
-          <table class="agent-table">
-            <thead>
-              <tr>
-                <th style="width:36px">#</th>
-                <th>담당자</th>
-                <th style="width:70px;text-align:right">채팅수</th>
-                <th style="width:70px;text-align:right">컴플레인</th>
-                <th style="width:110px;text-align:right">평균해결</th>
-                <th style="width:160px;text-align:right">
-                  CS점수
-                  <span class="th-tip-icon" tabindex="0">?
-                    <span class="th-tip-text">해결시간·컴플레인·채팅수 기반 종합 점수</span>
-                  </span>
-                </th>
-                <th>코멘트</th>
-              </tr>
-            </thead>
-            <tbody id="managerTbody"></tbody>
-          </table>
-          <div id="agentTblNote"></div>
+        <span class="cg-panel-title">🗂️ VOC 분석 (통합)</span>
+        <div id="vocTabs" class="cg-tabs">
+          <button class="cg-tab active" data-tab="voc-distribution">분포</button>
+          <button class="cg-tab" data-tab="voc-risk">리스크</button>
+          <button class="cg-tab" data-tab="voc-resolution">해결시간</button>
+          <button class="cg-tab" data-tab="voc-cooccur">공출현</button>
+          <button class="cg-tab" data-tab="voc-complaint">컴플레인 세분화</button>
         </div>
-        <div id="agentSidebar" class="agent-stats-sidebar"></div>
       </div>
-      <div id="agentCards" class="agent-mobile-cards"></div>
+      <div id="voc-distribution" class="cg-tab-pane active">
+        <div class="voc-tab-grid">
+          <div class="voc-tab-chart">
+            <div class="cg-chart-wrap" style="height:280px"><canvas id="tagBarChart"></canvas></div>
+          </div>
+          <div id="vocList" class="voc-list"></div>
+        </div>
+      </div>
+      <div id="voc-risk" class="cg-tab-pane">
+        <div id="vocRiskCards" class="voc-risk-cards-wrap"></div>
+      </div>
+      <div id="voc-resolution" class="cg-tab-pane">
+        <div id="tagResTable" class="tag-res-table"></div>
+      </div>
+      <div id="voc-cooccur" class="cg-tab-pane">
+        <div id="tagCooccurPanel" class="tag-cooccur-panel"></div>
+      </div>
+      <!-- B-3: 컴플레인 세분화 -->
+      <div id="voc-complaint" class="cg-tab-pane">
+        <div class="complaint-cat-grid">
+          <div class="complaint-cat-summary" id="complaintCatSummary"></div>
+          <div class="cg-chart-wrap" style="height:240px"><canvas id="complaintCatChart"></canvas></div>
+        </div>
+        <div id="complaintCatNote" class="complaint-cat-note"></div>
+      </div>
     </div>
 
-    <!-- Row 5: 해결시간(col-6) + 장기지연(col-6) -->
-    <div class="cg-panel col-6">
+    <!-- 카테고리 (col-12) -->
+    <div class="cg-panel col-12">
+      <div class="cg-panel-header"><span class="cg-panel-title">📂 문의 카테고리 분석</span></div>
+      <div id="categoryBars" class="category-bars"></div>
+    </div>
+
+    <!-- A-1: Manager 통합 탭 (col-12) -->
+    <div class="cg-panel col-12">
       <div class="cg-panel-header">
-        <span class="cg-panel-title">⏱️ 해결시간 분포</span>
+        <span class="cg-panel-title">👤 담당자 통합 분석</span>
+        <div id="mgrTabs" class="cg-tabs">
+          <button class="cg-tab active" data-tab="mgr-table">성과 테이블</button>
+          <button class="cg-tab" data-tab="mgr-quadrant">분면도</button>
+          <button class="cg-tab" data-tab="mgr-conc">집중도</button>
+          <button class="cg-tab" data-tab="mgr-frt">FRT 비교</button>
+        </div>
       </div>
+      <div id="mgr-table" class="cg-tab-pane active">
+        <div id="mgrRiskStrip" class="mgr-risk-strip"></div>
+        <div class="agent-content-grid">
+          <div class="agent-table-area">
+            <table class="agent-table">
+              <thead>
+                <tr>
+                  <th style="width:36px">#</th>
+                  <th>담당자</th>
+                  <th style="width:70px;text-align:right">채팅수</th>
+                  <th style="width:90px;text-align:right">FRT (P50)</th>
+                  <th style="width:90px;text-align:right">평균해결</th>
+                  <th style="width:160px;text-align:right">CS점수</th>
+                  <th>코멘트</th>
+                </tr>
+              </thead>
+              <tbody id="managerTbody"></tbody>
+            </table>
+            <div id="agentTblNote"></div>
+          </div>
+          <div id="agentSidebar" class="agent-stats-sidebar"></div>
+        </div>
+        <div id="agentCards" class="agent-mobile-cards"></div>
+      </div>
+      <div id="mgr-quadrant" class="cg-tab-pane">
+        <div class="cg-chart-wrap" style="height:340px"><canvas id="mgrQuadrantChart"></canvas></div>
+        <div id="mgrQuadrantLegend" class="mgr-quadrant-legend"></div>
+      </div>
+      <div id="mgr-conc" class="cg-tab-pane">
+        <div id="concRiskPanel" class="conc-risk-panel"></div>
+        <div id="concAlert" class="conc-alert" style="display:none"></div>
+      </div>
+      <div id="mgr-frt" class="cg-tab-pane">
+        <div id="mgrFrtTable" class="mgr-frt-table"></div>
+      </div>
+    </div>
+
+    <!-- Row: 해결시간(col-6) + 장기지연(col-6) -->
+    <div class="cg-panel col-6">
+      <div class="cg-panel-header"><span class="cg-panel-title">⏱️ 해결시간 분포</span></div>
       <div id="resSummary" class="res-summary"></div>
       <div id="resList" class="res-list"></div>
       <div id="avgResNote" class="avg-res-note"></div>
     </div>
 
     <div class="cg-panel col-6">
-      <div class="cg-panel-header">
-        <span class="cg-panel-title">🐢 8시간+ 장기 지연</span>
-      </div>
+      <div class="cg-panel-header"><span class="cg-panel-title">🐢 8시간+ 장기 지연</span></div>
       <div id="longDelayPanel" class="long-delay-panel"></div>
     </div>
 
-    <!-- Row 6: 카테고리 (col-12) -->
-    <div class="cg-panel col-12">
-      <div class="cg-panel-header">
-        <span class="cg-panel-title">📂 문의 카테고리 분석</span>
-      </div>
-      <div id="categoryBars" class="category-bars"></div>
-    </div>
-
-    <!-- Row 7: 자동화(col-5) + 운영현황(col-4) + 채널(col-3) -->
+    <!-- Row: 자동화(col-5) + 운영(col-4) + 채널(col-3) -->
     <div class="cg-panel col-5">
-      <div class="cg-panel-header">
-        <span class="cg-panel-title">🤖 자동화 효과</span>
-      </div>
+      <div class="cg-panel-header"><span class="cg-panel-title">🤖 자동화 효과</span></div>
       <div id="botPanel" class="bot-panel"></div>
     </div>
 
     <div class="cg-panel col-4">
-      <div class="cg-panel-header">
-        <span class="cg-panel-title">🏢 CS 운영 현황</span>
-      </div>
+      <div class="cg-panel-header"><span class="cg-panel-title">🏢 CS 운영 현황</span></div>
       <div id="groupPanel" class="group-panel"></div>
     </div>
 
     <div class="cg-panel col-3">
-      <div class="cg-panel-header">
-        <span class="cg-panel-title">📡 채널 분포</span>
-      </div>
-      <div class="cg-chart-wrap" style="height:160px">
-        <canvas id="channelChart"></canvas>
-      </div>
+      <div class="cg-panel-header"><span class="cg-panel-title">📡 채널 분포</span></div>
+      <div class="cg-chart-wrap" style="height:160px"><canvas id="channelChart"></canvas></div>
       <div id="channelStats" class="channel-stats"></div>
     </div>
 
   </div><!-- /.chart-master-grid -->
 
-  <!-- ════════════════════════════════════════════════════════════════════
-       ADVANCED INTELLIGENCE — v3.0 고도화 분석 레이어
-  ════════════════════════════════════════════════════════════════════ -->
+  <!-- ════════════════════════════════════════════════════════
+       ADVANCED INTELLIGENCE
+  ════════════════════════════════════════════════════════ -->
   <section class="adv-section-wrap">
     <div class="adv-section-banner">
       <span class="adv-banner-icon">⚡</span>
       <div class="adv-banner-text">
         <div class="adv-banner-title">고도화 분석 (Advanced Intelligence)</div>
-        <div class="adv-banner-sub">SLA · 시간대 부하 · 태그 상관 · 채널 성능 · 에이징 · 이상치 탐지</div>
+        <div class="adv-banner-sub">SLA · FRT · FCR · 시간대 부하 · 채널 성능 · 에이징 · 이상치 · 반복 문의</div>
       </div>
-      <span class="adv-banner-version">v3.0</span>
+      <span class="adv-banner-version">v4.0</span>
     </div>
 
-    <!-- Row A1: WoW + SLA Tracker (col-12) -->
+    <!-- WoW + SLA -->
     <div class="cg-panel col-12 adv-panel">
       <div class="cg-panel-header">
         <span class="cg-panel-title">📊 기간 비교 & SLA 준수율</span>
@@ -485,15 +436,22 @@
       </div>
     </div>
 
-    <!-- Row A2: 시간대 부하 곡선(col-7) + 요일 패턴(col-5) -->
+    <!-- B-2: FCR + 반복 문의 + FRT 카드 -->
+    <div class="cg-panel col-12 adv-panel">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">🔁 첫응답 / 재오픈 / 반복문의</span>
+        <span class="panel-badge adv-pb">FRT · FCR · Repeat</span>
+      </div>
+      <div id="fcrPanel" class="fcr-panel"></div>
+    </div>
+
+    <!-- 시간대(col-7) + 요일(col-5) -->
     <div class="cg-panel col-7 adv-panel">
       <div class="cg-panel-header">
         <span class="cg-panel-title">⏱️ 시간대 부하 곡선 (24h)</span>
         <span class="panel-badge adv-pb">Hour-of-Day</span>
       </div>
-      <div class="cg-chart-wrap" style="height:200px">
-        <canvas id="hourLoadChart"></canvas>
-      </div>
+      <div class="cg-chart-wrap" style="height:200px"><canvas id="hourLoadChart"></canvas></div>
       <div id="hourLoadKV" class="hour-load-kv"></div>
     </div>
 
@@ -506,7 +464,7 @@
       <div id="bizHoursSplit" class="biz-hours-split"></div>
     </div>
 
-    <!-- Row A3: Resolution Percentiles + Aging Pipeline -->
+    <!-- 백분위(col-6) + 에이징(col-6) -->
     <div class="cg-panel col-6 adv-panel">
       <div class="cg-panel-header">
         <span class="cg-panel-title">📐 해결시간 백분위수 (P50/P75/P90/P95)</span>
@@ -523,24 +481,7 @@
       <div id="agingPipeline" class="aging-pipeline"></div>
     </div>
 
-    <!-- Row A4: 태그별 해결시간 (col-12) -->
-    <div class="cg-panel col-12 adv-panel">
-      <div class="cg-panel-header">
-        <span class="cg-panel-title">🏷️ 태그별 해결시간 분석 (TOP 10)</span>
-        <span class="panel-badge adv-pb">Resolution × Tag</span>
-      </div>
-      <div id="tagResTable" class="tag-res-table"></div>
-    </div>
-
-    <!-- Row A5: 태그 공출현 + 채널 성능 -->
-    <div class="cg-panel col-6 adv-panel">
-      <div class="cg-panel-header">
-        <span class="cg-panel-title">🔗 태그 공출현 패턴 (TOP 8)</span>
-        <span class="panel-badge adv-pb">Co-occurrence</span>
-      </div>
-      <div id="tagCooccurPanel" class="tag-cooccur-panel"></div>
-    </div>
-
+    <!-- 채널성능(col-6) + 이상치(col-6) -->
     <div class="cg-panel col-6 adv-panel">
       <div class="cg-panel-header">
         <span class="cg-panel-title">📡 채널별 성능 비교</span>
@@ -549,7 +490,6 @@
       <div id="sourcePerfPanel" class="source-perf-panel"></div>
     </div>
 
-    <!-- Row A6: 이상치 탐지 + Volume Forecast -->
     <div class="cg-panel col-6 adv-panel">
       <div class="cg-panel-header">
         <span class="cg-panel-title">🚨 이상치 탐지 (Z-score ≥ 1.8σ)</span>
@@ -558,6 +498,7 @@
       <div id="anomalyPanel" class="anomaly-panel"></div>
     </div>
 
+    <!-- Forecast(col-6) + Comp Trend(col-6) -->
     <div class="cg-panel col-6 adv-panel">
       <div class="cg-panel-header">
         <span class="cg-panel-title">🔮 볼륨 모멘텀 & 다음날 투영</span>
@@ -566,67 +507,45 @@
       <div id="forecastPanel" class="forecast-panel"></div>
     </div>
 
-    <!-- Row A7: 컴플레인 트렌드 (col-12) -->
-    <div class="cg-panel col-12 adv-panel">
+    <div class="cg-panel col-6 adv-panel">
       <div class="cg-panel-header">
         <span class="cg-panel-title">⚠️ 일별 컴플레인 비율 추이</span>
-        <span class="panel-badge adv-pb">Complaint Rate Trend</span>
+        <span class="panel-badge adv-pb">Complaint Rate</span>
       </div>
-      <div class="cg-chart-wrap" style="height:200px">
-        <canvas id="complaintTrendChart"></canvas>
-      </div>
+      <div class="cg-chart-wrap" style="height:200px"><canvas id="complaintTrendChart"></canvas></div>
       <div id="complaintTrendKV" class="complaint-trend-kv"></div>
     </div>
 
-    <!-- Row A8: 담당자 성과 매트릭스 (col-12) -->
+    <!-- 진단 (col-12) -->
     <div class="cg-panel col-12 adv-panel">
       <div class="cg-panel-header">
-        <span class="cg-panel-title">🎯 담당자 성과 매트릭스 (속도 × 처리량)</span>
-        <span class="panel-badge adv-pb">Quadrant</span>
-      </div>
-      <div class="cg-chart-wrap" style="height:320px">
-        <canvas id="mgrQuadrantChart"></canvas>
-      </div>
-      <div id="mgrQuadrantLegend" class="mgr-quadrant-legend"></div>
-    </div>
-
-    <!-- Row A9: 진단 정보 (col-12) -->
-    <div class="cg-panel col-12 adv-panel">
-      <div class="cg-panel-header">
-        <span class="cg-panel-title">🩺 API 진단 (Channel Talk Open API v5)</span>
+        <span class="cg-panel-title">🩺 API 진단 (Channel Talk Open API v5 + KV 캐싱)</span>
         <span class="panel-badge adv-pb">Diagnostics</span>
       </div>
       <div id="diagPanel" class="diag-panel"></div>
     </div>
   </section>
 
-  <!-- ────────────────────────────────────────────────────────
-       장기채팅 모달
-  ──────────────────────────────────────────────────────────── -->
-  <div id="longChatsModal" class="modal-overlay" style="display:none"
-       role="dialog" aria-modal="true">
+  <!-- 장기 채팅 모달 -->
+  <div id="longChatsModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true">
     <div class="modal-box">
       <div class="modal-header">
         <span>🐢 8시간 이상 미해결 채팅</span>
-        <button class="modal-close"
-          onclick="document.getElementById('longChatsModal').style.display='none'">✕</button>
+        <button class="modal-close" onclick="document.getElementById('longChatsModal').style.display='none'">✕</button>
       </div>
       <div id="longChatsBody" class="modal-body"></div>
     </div>
   </div>
 
-  <!-- ────────────────────────────────────────────────────────
-       푸터
-  ──────────────────────────────────────────────────────────── -->
   <footer class="footer-note">
-    <span>[OPS] 채널톡 CS 대시보드 · 데이터 출처: Channel Talk Open API v5</span>
+    <span>[OPS] 채널톡 CS 대시보드 v4.0 · 데이터 출처: Channel Talk Open API v5</span>
     <span class="footer-sep">·</span>
-    <span>자동 새로고침 5분 간격</span>
+    <span>자동 새로고침 5분 · KV 캐시</span>
     <span class="footer-sep">·</span>
     <span id="footerDiag">진단 정보 로딩 중…</span>
   </footer>
 
-</div><!-- /.app -->
+</div>
 
 <script src="app.js"></script>
 </body>

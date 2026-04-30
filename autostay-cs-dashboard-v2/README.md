@@ -1,96 +1,86 @@
-# [OPS] 채널톡 CS 대시보드
+# [OPS] 채널톡 CS 대시보드 v4.0
 
 채널톡 Open API v5 실데이터 기반 CS 운영 · SLA · VOC · 담당자 성과 통합 분석 대시보드.
 
-## 주요 기능
+## v4.0 주요 변경사항 (2026-04-30)
 
-### 기본 분석
-- CS 건강 점수 (4단계 등급)
-- 핵심 KPI 5종 (미배정 / 오픈 / 8시간+ / 컴플레인율 / 담당자 편중)
-- 일별 트렌드 + 7일 이동평균 + 피크 분석
-- 요일·시간 히트맵
-- 태그 분포 + VOC 리스크 카드
-- 담당자 성과 (운영점수 / 응대점수 / 평균해결시간)
-- 8시간+ 장기 지연 drill-down
+### 효율화
+- **A-2** Hero 우측 → "지금 즉시 처리" 액션 박스 (헬스 게이지 → 인라인 이동)
+- **A-1** VOC/Manager 영역을 **탭 구조**로 통합 (분포·리스크·해결시간·공출현·컴플레인 5탭 / 성과·분면도·집중도·FRT 4탭)
 
-### 고도화 분석 (v3.0 — Advanced Intelligence)
-- **기간 비교 (WoW)** — 직전 동일 기간 대비 증감
-- **SLA 트래커** — 30분 / 2시간 / 8시간 SLA 준수율
-- **시간대 부하 곡선** — 24시간 분포 + 4분 시간대 집계
-- **요일별 부하 + 영업/비영업시간 분리** — 평일 09-19 KST 기준
-- **해결시간 백분위수** — P50 / P75 / P90 / P95
-- **에이징 파이프라인** — <8h, 8-24h, 1-3d, 3-7d, 7d+
-- **태그별 해결시간 분석** (TOP 10)
-- **태그 공출현 패턴** (TOP 8)
-- **채널별 성능 비교** — native / phone / other
-- **이상치 탐지** — Z-score ±1.8σ 기준
-- **볼륨 모멘텀 & 다음날 투영**
-- **일별 컴플레인 비율 추이 차트**
-- **담당자 성과 매트릭스** — 속도 × 처리량 4분면도
-- **API 진단 패널** — 호출별 응답시간, 부분실패 추적
+### 고도화
+- **B-1** **FRT (First Response Time)** 측정 — `operationWaitingTime` 활용 + 담당자별 비교 테이블
+- **B-2** **FCR (1차 해결률) / 재오픈율 / 반복 문의 고객** 통합 패널
+- **B-3** **컴플레인 세분화** (서비스/시스템/가격/탈퇴/기타) — 누적 막대 추이 차트
+- **B-7** 수집 한도 **300 → 1000건** (10페이지 × 100)
+
+### 실용성
+- **C-1** 채널톡 **딥링크** — 미배정 KPI / 8h+ 케이스 / 모달 클릭 시 채널톡 직접 이동
+- **C-2** **필터 시스템** — 담당자/태그/채널 다중 필터, 활성 필터 배지
+
+### 안정성
+- **D-1** **Vercel KV 캐싱** — 5분 TTL, 매 호출마다 채널톡 API 호출 폭격 방지
+- 메모리 fallback (KV 미설정 시) — Lambda 동안 유효
+- 캐시 HIT/MISS 진단 패널 표시
 
 ## 기술 스택
 
 - **Frontend**: Vanilla JS + Chart.js 4.4
 - **Backend**: Vercel Serverless Functions (Node 22.x)
-- **Data Source**: Channel Talk Open API v5
-- **Auth**: 쿠키 기반 토큰 인증
-- **Deploy**: Vercel
+- **Data**: Channel Talk Open API v5
+- **Cache**: Vercel KV (REST API) + in-memory fallback
+- **Auth**: 쿠키 토큰 (`ds_auth`, 7일 유효)
 
 ## 폴더 구조
 
 ```
 autostay-cs-dashboard/
-├─ index.html         # 대시보드 메인 페이지
-├─ style.css          # v3.0 스타일 (1900+ 라인)
-├─ app.js             # 렌더링 로직 (3000+ 라인)
+├─ index.html         # 대시보드 메인
+├─ style.css          # v4.0 스타일
+├─ app.js             # 렌더링 + 필터 + 탭 + 딥링크
 ├─ api/
 │  ├─ auth.js         # 토큰 인증 게이트
-│  ├─ check.js        # 빠른 인증 체크 endpoint
-│  └─ data.js         # 채널톡 API 프록시 + 데이터 가공
-├─ vercel.json        # Vercel 배포 설정 (maxDuration 30s)
+│  ├─ check.js        # 빠른 인증 체크
+│  ├─ data.js         # 채널톡 API 프록시 + 캐싱 + FRT/FCR/세분화
+│  └─ _cache.js       # Vercel KV / 메모리 캐시 헬퍼
+├─ vercel.json        # maxDuration 30s
 ├─ package.json       # Node 22.x
 ├─ .env.example       # 환경변수 템플릿
 └─ .gitignore
 ```
 
-## 환경변수 설정
+## 환경변수 (Vercel)
 
-Vercel 프로젝트 설정 → Environment Variables 에 다음 3개 등록:
+### 필수
+| 변수명 | 설명 |
+|---|---|
+| `CHANNEL_ACCESS_KEY` | 채널톡 Open API Access Key |
+| `CHANNEL_ACCESS_SECRET` | 채널톡 Open API Access Secret |
+| `DASHBOARD_TOKEN` | 대시보드 접근 토큰 |
 
-| 변수명 | 설명 | 필수 |
-|---|---|---|
-| `CHANNEL_ACCESS_KEY` | 채널톡 Open API Access Key | ✅ |
-| `CHANNEL_ACCESS_SECRET` | 채널톡 Open API Access Secret | ✅ |
-| `DASHBOARD_TOKEN` | 대시보드 접근 토큰 (비워두면 인증 없음) | ⚠️ 운영 권장 |
+### 선택 (KV 캐싱)
+Vercel 대시보드 → **Storage → KV** → Create → 프로젝트에 연결하면 자동 주입:
+- `KV_REST_API_URL`
+- `KV_REST_API_TOKEN`
 
-### 채널톡 API 키 발급
-1. 채널톡 데스크 → 설정 → 보안 → 통합 → **공개 API**
-2. **새 앱 만들기** → Access Key / Access Secret 발급
-3. 권한: `userChat`, `manager`, `bot`, `group`, `channel` 읽기 권한 부여
+## 새 메트릭
 
-## 로컬 개발
+### FRT (First Response Time)
+- `operationWaitingTime` (채널톡 제공) → 첫 응답까지 걸린 시간
+- 5분 SLA / 30분 SLA 계산
+- 담당자별 평균 / P50 / P90 비교
 
-```bash
-npm i -g vercel
-cp .env.example .env.local
-# .env.local 에 실제 키 입력
-vercel dev
-# → http://localhost:3000
-```
+### FCR (1차 해결률)
+- `openedAt`이 `createdAt` + 1시간 이상 차이 → 재오픈으로 간주
+- 재오픈율, 1차 해결률, 반복 문의 고객 수
 
-## 배포
-
-```bash
-git push origin main
-```
-Vercel 자동 재배포 (1-2분).
-
-## 보안 주의사항
-
-- ⚠️ **API 키는 절대 코드에 하드코딩하지 마세요.** 모든 시크릿은 Vercel 환경변수로만 관리합니다.
-- ⚠️ Public 저장소를 사용한다면 `DASHBOARD_TOKEN` 을 반드시 설정해 무단 접근을 차단하세요.
-- 🔒 인증 쿠키는 `HttpOnly` + `SameSite=Lax` 로 발급되며 7일 유효기간을 가집니다.
+### 컴플레인 세분화
+태그 패턴 매칭으로 자동 분류:
+- **시스템 오류**: 이용불가, 시스템, 오류, 버그, 결제, 앱, 로그인, 접속
+- **서비스 품질**: 응대, 직원, 매장, 세차, 품질, 불친절 (+ 컴플레인)
+- **가격/환불**: 요금, 가격, 환불, 취소, 할인 (+ 컴플레인)
+- **탈퇴/해지**: 탈퇴, 해지
+- **기타**: 위 외의 컴플레인 태그
 
 ## 라이선스
 
