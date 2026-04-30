@@ -49,31 +49,26 @@
     <div class="hero-container">
       <div class="hero-top">
         <div class="hero-copy">
-          <div class="hero-eyebrow">[OPS] · CHANNEL TALK INTELLIGENCE</div>
+          <div class="hero-eyebrow">
+            <span>[OPS] · CHANNEL TALK INTELLIGENCE</span>
+            <span class="hero-version-pill">v4.0</span>
+          </div>
           <h1 class="hero-title">[OPS] 채널톡 CS 대시보드</h1>
-          <p class="hero-desc">채널톡 실데이터 기반 · CS 운영 · SLA · VOC · 담당자 성과 통합 분석 <span class="hero-version">v4.0</span></p>
+          <p class="hero-desc">채널톡 실데이터 · CS 운영 · SLA · VOC · 담당자 성과 통합 분석</p>
 
-          <div id="heroQuickStats" class="hero-quick-stats">
-            <div class="hqs-item">
-              <span class="hqs-label">총 채팅</span>
-              <span id="hqsTotal" class="hqs-value">—</span>
-            </div>
-            <div class="hqs-item">
-              <span class="hqs-label">미해결</span>
-              <span id="hqsOpen" class="hqs-value hqs-warn">—</span>
-            </div>
-            <div class="hqs-item">
-              <span class="hqs-label">컴플레인</span>
-              <span id="hqsComplaint" class="hqs-value hqs-danger">—</span>
-            </div>
-            <div class="hqs-item">
-              <span class="hqs-label">FRT (P50)</span>
-              <span id="hqsFrt" class="hqs-value">—</span>
-            </div>
+          <!-- 인라인 메타: 컴팩트 1줄 -->
+          <div id="heroInlineMeta" class="hero-inline-meta">
+            <span class="him-item"><span class="him-lbl">총 채팅</span><span id="himTotal" class="him-val">—</span></span>
+            <span class="him-divider">·</span>
+            <span class="him-item"><span class="him-lbl">FRT</span><span id="himFrt" class="him-val">—</span></span>
+            <span class="him-divider">·</span>
+            <span class="him-item"><span class="him-lbl">FCR</span><span id="himFcr" class="him-val">—</span></span>
+            <span class="him-divider">·</span>
+            <span class="him-item"><span class="him-lbl">기간</span><span id="himRange" class="him-val">—</span></span>
           </div>
         </div>
 
-        <!-- A-2: Hero 우측 — "오늘 즉시 처리" 액션 박스 -->
+        <!-- A-2: Hero 우측 — "지금 즉시 처리" 액션 박스 -->
         <div class="hero-focus">
           <div id="heroActionCard" class="hero-action-card">
             <div class="hac-header">

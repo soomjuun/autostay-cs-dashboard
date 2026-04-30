@@ -498,20 +498,27 @@ function renderAlertStrip(d, scoreObj) {
     </div>`).join('');
 }
 
-/* ─── Hero Quick Stats — FRT 추가 ───────────────────────────────────── */
+/* ─── Hero Inline Meta (v4.1) — 퀵스탯 박스 → 인라인 1줄 ─────────────── */
 function renderHeroQuickStats(d, scoreObj) {
   const totalChats = d.summary?.totalChats || 0;
-  const openChats = d.summary?.openChats ?? '—';
-  const complaintPct = scoreObj?.complaintPct || 0;
   const frtMedian = d.frtStats?.median;
-  const complaintColor = complaintPct >= 15 ? 'var(--rose)' : complaintPct >= 8 ? 'var(--amber)' : 'var(--teal)';
-  const frtText = frtMedian != null ? fmtMin(frtMedian) : '—';
+  const fcrRate = d.fcrStats?.fcrRate;
+  const rangeLabel = currentDays === 'all' ? '전체' : `최근 ${currentDays}일`;
 
-  const elT = document.getElementById('hqsTotal'); if (elT) elT.textContent = fmt(totalChats) + '건';
-  const elO = document.getElementById('hqsOpen'); if (elO) elO.textContent = openChats + '건';
-  const elC = document.getElementById('hqsComplaint');
-  if (elC) { elC.textContent = complaintPct + '%'; elC.style.color = complaintColor; }
-  const elF = document.getElementById('hqsFrt'); if (elF) elF.textContent = frtText;
+  const elT = document.getElementById('himTotal');
+  if (elT) elT.textContent = fmt(totalChats) + '건';
+
+  const elFrt = document.getElementById('himFrt');
+  if (elFrt) elFrt.textContent = frtMedian != null ? fmtMin(frtMedian) : '—';
+
+  const elFcr = document.getElementById('himFcr');
+  if (elFcr) {
+    elFcr.textContent = fcrRate != null ? fcrRate + '%' : '—';
+    elFcr.style.color = fcrRate >= 90 ? '#5eead4' : fcrRate >= 75 ? '#fcd34d' : '#fca5a5';
+  }
+
+  const elRange = document.getElementById('himRange');
+  if (elRange) elRange.textContent = rangeLabel;
 }
 
 /* ─── KPI Grid ──────────────────────────────────────────────────────── */
@@ -534,7 +541,11 @@ function renderKPIs(d, scoreObj) {
   const cacheText = d.diagnostics?.cacheHit ? `<span class="hero-cache-badge cache-hit">⚡ 캐시</span>` : `<span class="hero-cache-badge cache-miss">🔄 새로고침</span>`;
 
   const cacheBadge = document.getElementById('cacheBadge');
-  if (cacheBadge) cacheBadge.innerHTML = d.diagnostics?.cacheHit ? '⚡ KV 캐시' : '🔄 fresh';
+  if (cacheBadge) {
+    const isHit = d.diagnostics?.cacheHit;
+    cacheBadge.innerHTML = isHit ? '⚡ KV 캐시' : '🔄 fresh';
+    cacheBadge.className = isHit ? 'hero-cache-badge cache-hit' : 'hero-cache-badge cache-miss';
+  }
 
   const kpiBasisHeaderEl = document.getElementById('kpiBasisHeader');
   if (kpiBasisHeaderEl) {
