@@ -286,7 +286,7 @@ function renderHeroAction(d, scoreObj) {
   if (slow8h > 0) {
     actions.push({
       type: slow8h > 10 ? 'danger' : 'warn',
-      title: '8시간+ 미해결',
+      title: '8시간+ 해결시간 초과',
       sub: '장기 지연 케이스 확인',
       metric: slow8h + '건',
       onclick: 'openLongChatsPanel(); return false;',
@@ -335,7 +335,12 @@ function renderHeroAction(d, scoreObj) {
   }
 
   if (hacBody) {
-    hacBody.innerHTML = top3.map((a, i) => {
+    const urgentCount = actions.filter(a => a.type === 'danger').length;
+    const warnCount   = actions.filter(a => a.type === 'warn').length;
+    const queueHeader = urgentCount + warnCount > 0
+      ? `<div class="aq-header">🎯 오늘 처리할 일 <span class="aq-urgent">${urgentCount > 0 ? urgentCount + '건 즉시' : ''}</span><span class="aq-warn">${warnCount > 0 ? warnCount + '건 확인' : ''}</span></div>`
+      : `<div class="aq-header aq-ok">✅ 오늘 즉시 조치 필요 없음</div>`;
+    hacBody.innerHTML = queueHeader + top3.map((a, i) => {
       const inner = `
         <div class="hac-row-num">${i + 1}</div>
         <div class="hac-row-body">
@@ -613,8 +618,8 @@ function renderKPIs(d, scoreObj) {
     kpiBasisHeaderEl.style.display = 'flex';
     const sampledWarn = isSampled ? ` <span style="color:var(--amber);font-weight:700">⚠ 수집 상한(${limitVal}건) 도달 — 최근 ${limitVal}건 기준 집계</span>` : '';
     const cacheInfo = (d.diagnostics?.cacheHit)
-      ? `<span title="Vercel KV 5분 캐시 응답 · 강제 갱신: 새로고침 버튼" style="color:var(--amber);margin-left:6px;cursor:help">⚡ 캐시 응답</span>`
-      : `<span title="Channel Talk API 직접 조회 결과" style="color:var(--teal);margin-left:6px;cursor:help">🔄 fresh</span>`;
+      ? `<span title="Vercel KV 캐시 응답 (최대 5분 지연) · 강제 갱신: 새로고침 버튼" style="color:var(--amber);margin-left:6px;cursor:help">⚡ 캐시 응답</span>`
+      : (d.diagnostics ? `<span title="Channel Talk API 직접 조회 결과 — 지연 없음" style="color:var(--teal);margin-left:6px;cursor:help">🔄 최신 조회</span>` : `<span style="color:var(--muted);margin-left:6px">캐시 없음</span>`);
     kpiBasisHeaderEl.innerHTML = `
       <span>📊 분석 기준</span>
       <span style="font-weight:400;color:#0d9488">
@@ -633,7 +638,7 @@ function renderKPIs(d, scoreObj) {
   if (!grid) return;
   grid.innerHTML = `
     <div class="kpi-card a-${unassigned > 0 ? 'rose' : 'green'}" style="cursor:pointer" onclick="window.open('${chatTalkUnassignedUrl()}','_blank')" title="채널톡 미배정 채팅 큐로 이동합니다&#10;※ desk.channel.io 로그인 세션이 필요합니다&#10;출처: Channel Talk API (실시간 조회)">
-      <div class="kpi-label">미배정 <span class="kpi-src-icon" title="채널톡 실데이터 · API 실시간 조회">ℹ</span></div>
+      <div class="kpi-label">미배정 <span class="kpi-src-icon" data-tip="채널톡 실데이터 · API 실시간 조회" tabindex="0" style="cursor:help">ⓘ</span></div>
       <div class="kpi-value">${fmt(unassigned)}<span class="unit">건</span></div>
       <div class="kpi-meta">
         <span class="data-badge badge-real">실데이터</span>
@@ -1147,7 +1152,7 @@ function openLongChatsPanel() {
   const titleEl = modal.querySelector('.modal-header span');
   if (titleEl) {
     const filterNote = activeFilterCount() > 0 ? ` (필터 적용 중 · ${src.longChats.length}건)` : ` (${src.longChats.length}건)`;
-    titleEl.textContent = `🐢 8시간 이상 미해결 채팅${filterNote}`;
+    titleEl.textContent = `🐢 8시간+ 해결시간 초과 채팅${filterNote}`;
   }
   const rows = src.longChats.map((c) => {
     const tagsHtml = c.tags.length ? c.tags.map((t) => `<span class="long-tag">#${t}</span>`).join(' ') : '<span style="color:var(--muted)">태그 없음</span>';
@@ -1208,7 +1213,14 @@ function renderConcRisk(d) {
     <div class="conc-risk-row ${activeMgrs.length < 2 ? 'crr-warn' : 'crr-ok'}">
       <div class="crr-left"><div class="crr-label">활성 담당자</div><div class="crr-sub">처리건수 1건 이상</div></div>
       <div class="crr-right"><div class="crr-value">${activeMgrs.length}명</div><div class="crr-action-tag ${activeMgrs.length < 2 ? 'action-check' : 'action-ok'}">${activeMgrs.length < 2 ? '백업' : '정상'}</div></div>
-    </div>`;
+    </div>
+    ${topPct >= 75 ? `<div class="conc-redistrib-tip">
+      <span class="crt-icon">💡</span>
+      <div class="crt-body">
+        <div class="crt-title">${topName} 담당 비중 ${topPct}% — 재배분 검토 권장</div>
+        <div class="crt-sub">상위 담당자 1인 집중 완화를 위해 ${activeMgrs.slice(1, 3).map(m => m.name.replace('오토스테이_','')).join('·') || '다른 담당자'}에게 신규 채팅 우선 배정하세요.</div>
+      </div>
+    </div>` : ''}`;
 }
 
 function renderMgrRiskStrip(d) {
@@ -1479,7 +1491,7 @@ function renderGaugeGrid(d) {
   const topPct = topMgr ? Math.round(topMgr.count / mgrTotal * 100) : 0;
   setG('conc', topPct, topPct <= 40 ? 'gauge-fill--good' : topPct <= 60 ? 'gauge-fill--warn' : 'gauge-fill--danger');
   document.getElementById('gval-conc').textContent = topPct + '%';
-  document.getElementById('gsub-conc').textContent = topMgr ? topMgr.name?.replace('오토스테이_','') : '—';
+  document.getElementById('gsub-conc').textContent = topMgr ? (topMgr.name?.replace('오토스테이_','') + ' · ' + topMgr.count + '건 · 전체 ' + topPct + '%') : '—';
   setB('conc', topPct <= 40 ? '양호' : topPct <= 60 ? '주의' : '위험', topPct <= 40 ? 'good' : topPct <= 60 ? 'warn' : 'danger');
 }
 
@@ -1492,10 +1504,13 @@ function renderWow(d) {
   if (!w) { el.innerHTML = `<div class="wow-card"><div class="wow-label">현 기간</div><div class="wow-val">${total}건</div><div class="wow-sub">비교 기준 없음</div></div>`; return; }
   const sign = w.delta > 0 ? '+' : '';
   const cls = w.delta > 0 ? 'wow-up' : w.delta < 0 ? 'wow-down' : 'wow-flat';
+  const deltaCard = w.previousTotal === 0
+    ? `<div class="wow-card wow-flat"><div class="wow-label">증감</div><div class="wow-val" style="color:var(--muted);font-size:16px">비교 불가</div><div class="wow-sub" style="font-size:9px;color:var(--muted)">직전 기간 데이터 없음</div></div>`
+    : `<div class="wow-card ${cls}"><div class="wow-label">증감</div><div class="wow-val">${sign}${w.delta}건</div><div class="wow-sub">${deltaArrow(w.deltaPct)}</div></div>`;
   el.innerHTML = `
     <div class="wow-card"><div class="wow-label">현 기간</div><div class="wow-val">${w.currentTotal}건</div></div>
-    <div class="wow-card"><div class="wow-label">직전 동기간</div><div class="wow-val muted">${w.previousTotal}건</div>${w.previousTotal === 0 ? '<div class="wow-sub" style="color:var(--amber);font-size:9.5px">⚠ 직전 데이터 없음</div>' : ''}</div>
-    <div class="wow-card ${cls}"><div class="wow-label">증감</div><div class="wow-val">${sign}${w.delta}건</div><div class="wow-sub">${deltaArrow(w.deltaPct)}</div></div>`;
+    <div class="wow-card"><div class="wow-label">직전 동기간</div><div class="wow-val muted">${w.previousTotal === 0 ? '—' : w.previousTotal + '건'}</div>${w.previousTotal === 0 ? '<div class="wow-sub" style="color:var(--amber);font-size:9.5px">⚠ 직전 데이터 없음</div>' : ''}</div>
+    ${deltaCard}`;
 }
 
 function renderSLA(d) {
@@ -1515,7 +1530,7 @@ function renderSLA(d) {
       <div class="sla-meta"><div class="sla-label">${it.label}</div><div class="sla-target">목표 ${it.target}%</div></div>
       <div class="sla-bar-wrap"><div class="sla-bar-fill sla-${cls}" style="width:${Math.min(v.rate, 100)}%"></div><div class="sla-target-marker" style="left:${it.target}%"></div></div>
       <div class="sla-val sla-${cls}">${v.rate}%</div>
-      <div class="sla-count" title="분모: 종결(closed) 채팅 ${v.total}건 기준 · 진행 중(open) 제외 · ${it.label} 내 완료 ${v.count}건" style="cursor:help">${v.count}/${v.total} ⓘ</div>
+      <div class="sla-count" tabindex="0" data-tip="분모: 종결(closed) 채팅 ${v.total}건 기준 · 진행 중(open) 제외 · ${it.label} 내 완료 ${v.count}건" style="cursor:help">${v.count}/${v.total} ⓘ</div>
       <span class="sla-status sla-${cls}">${v.rate >= it.target ? '준수' : v.rate >= it.target * 0.7 ? '근접' : '미달'}</span>
     </div>`;
   }).join('');
@@ -1925,7 +1940,7 @@ function render() {
   } catch (e) {
     console.error('Render error:', e);
     const eb2 = document.getElementById('errBanner');
-    if (eb2) { eb2.style.display = 'flex'; eb2.textContent = `데이터 로드 실패: ${e.message}`; }
+    if (eb2) { eb2.style.display = 'flex'; eb2.innerHTML = `<span class="banner-icon">⚠️</span><span class="banner-msg">데이터 로드 실패: ${e.message}</span><button onclick="triggerFullReload()" style="margin-left:auto;background:#fff;border:1px solid #be123c;border-radius:4px;padding:3px 10px;font-size:12px;cursor:pointer;color:#be123c;font-weight:700;flex-shrink:0">재시도</button>`; }
     const ov2 = document.getElementById('loadingOverlay');
     if (ov2) { ov2.style.opacity = '0'; setTimeout(() => { ov2.style.display = 'none'; }, 350); }
   }})();
@@ -2087,9 +2102,10 @@ function downloadCSV() {
   ];
 
   const rangeStr = currentDays === 'all' ? 'all' : `${currentDays}d`;
-  const filterSuffix = filterState?.size > 0 ? `-filtered` : '';
-  _triggerCSV(lines, `OPS-channeltalk-${rangeStr}${filterSuffix}-${new Date().toISOString().slice(0,10)}.csv`);
-  showToast('CSV 다운로드 완료', 'success');
+  const filterSuffix = activeFilterCount() > 0 ? `-filtered` : '';
+  const csvFilename = `OPS-channeltalk-${rangeStr}${filterSuffix}-${new Date().toISOString().slice(0,10)}.csv`;
+  _triggerCSV(lines, csvFilename);
+  showToast(`📥 ${csvFilename} 저장됨`, 'success', 4500);
 }
 
 /* ─── Collapsibles ──────────────────────────────────────────────────── */
@@ -2140,7 +2156,64 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   initCollapsibles();
+  initFilterDrawer();
+  initTooltips();
 });
+
+/* ─── Custom Tooltip System (data-tip) ───────────────────────────────── */
+function initTooltips() {
+  let tipEl = document.getElementById('__ctip');
+  if (!tipEl) {
+    tipEl = document.createElement('div');
+    tipEl.id = '__ctip';
+    tipEl.setAttribute('role', 'tooltip');
+    tipEl.setAttribute('aria-live', 'polite');
+    tipEl.style.cssText = 'position:fixed;z-index:99990;background:#1e293b;color:#f8fafc;font-size:11.5px;line-height:1.45;padding:6px 10px;border-radius:6px;max-width:280px;pointer-events:none;opacity:0;transition:opacity .15s;box-shadow:0 4px 14px rgba(0,0,0,.3);white-space:pre-wrap;display:none';
+    document.body.appendChild(tipEl);
+  }
+  let activeTarget = null;
+  function showTip(el) {
+    const msg = el.getAttribute('data-tip');
+    if (!msg) return;
+    activeTarget = el;
+    tipEl.textContent = msg;
+    tipEl.style.display = 'block';
+    setTimeout(() => { tipEl.style.opacity = '1'; }, 10);
+    posTip(el);
+  }
+  function hideTip() {
+    tipEl.style.opacity = '0';
+    setTimeout(() => { if (tipEl.style.opacity === '0') tipEl.style.display = 'none'; }, 160);
+    activeTarget = null;
+  }
+  function posTip(el) {
+    const r = el.getBoundingClientRect();
+    const tw = tipEl.offsetWidth || 200, th = tipEl.offsetHeight || 30;
+    let top = r.top - th - 8, left = r.left + r.width / 2 - tw / 2;
+    if (top < 8) top = r.bottom + 8;
+    if (left < 8) left = 8;
+    if (left + tw > window.innerWidth - 8) left = window.innerWidth - tw - 8;
+    tipEl.style.top = top + 'px';
+    tipEl.style.left = left + 'px';
+  }
+  document.addEventListener('mouseover', (e) => {
+    const el = e.target.closest('[data-tip]');
+    if (el) showTip(el);
+  });
+  document.addEventListener('mouseout', (e) => {
+    if (!e.relatedTarget || !e.relatedTarget.closest('[data-tip]')) hideTip();
+  });
+  document.addEventListener('focusin', (e) => {
+    const el = e.target.closest('[data-tip]');
+    if (el) showTip(el);
+  });
+  document.addEventListener('focusout', hideTip);
+  document.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-tip]');
+    if (el && el !== activeTarget) { showTip(el); return; }
+    if (!el) hideTip();
+  });
+}
 
 /* ─── Full Reload ───────────────────────────────────────────────────── */
 function triggerFullReload() {
