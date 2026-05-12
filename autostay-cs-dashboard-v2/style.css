@@ -746,20 +746,20 @@ canvas { display: block; }
 .hm-row-label {
   font-size: 10px; font-weight: 700; color: var(--muted);
   display: flex; align-items: center; justify-content: center;
-  min-height: 26px;
+  min-height: 32px;
 }
 .hm-cell {
-  height: 26px; border-radius: 4px; font-size: 9px;
+  height: 32px; border-radius: 5px; font-size: 10px;
   display: flex; align-items: center; justify-content: center;
   color: rgba(0,0,0,.45); cursor: default;
   transition: transform .12s, box-shadow .12s;
-  min-width: 22px;
+  min-width: 28px;
 }
 .hm-cell:hover { transform: scale(1.25); z-index: 2; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
 @media (max-width: 700px) {
-  .heatmap { grid-template-columns: 20px repeat(24, 18px); gap: 2px; width: max-content; }
-  .hm-cell { height: 20px; min-width: 18px; font-size: 0; }
-  .hm-head { font-size: 8px; line-height: 20px; }
+  .heatmap { grid-template-columns: 20px repeat(24, 22px); gap: 2px; width: max-content; }
+  .hm-cell { height: 24px; min-width: 22px; font-size: 0; }
+  .hm-head { font-size: 8px; line-height: 24px; }
 }
 .hm-0 { background: var(--bg2); }
 .hm-1 { background: #a7f3d0; }
@@ -1930,7 +1930,14 @@ canvas { display: block; }
 .filter-drawer {
   background: var(--surface); border-bottom: 1px solid var(--border);
   position: sticky; top: 50px; z-index: 600;
-  box-shadow: 0 2px 8px rgba(0,0,0,.06);
+  box-shadow: 0 4px 16px rgba(0,0,0,.1);
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height .28s cubic-bezier(.4,0,.2,1), box-shadow .2s;
+}
+.filter-drawer.is-open {
+  max-height: 400px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.1);
 }
 .filter-drawer-inner {
   max-width: 1400px; margin: 0 auto; padding: 16px 24px;
@@ -2001,7 +2008,7 @@ canvas { display: block; }
 .cg-tab:hover { background: var(--surface); color: var(--text); }
 .cg-tab.active { background: var(--navy); color: #fff; }
 .cg-tab-pane { display: none; }
-.cg-tab-pane.active { display: block; animation: fadeInPane .25s; }
+.cg-tab-pane.active { display: block; animation: fadeInPane .25s; min-height: 320px; }
 @keyframes fadeInPane {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -2510,7 +2517,7 @@ ion: none;
   border-bottom: 1px solid var(--border-soft);
   margin-bottom: 6px;
 }
-.aq-header.aq-ok { color: var(--teal); }
+.aq-header.aq-ok { color: #14b8a6; }
 .aq-urgent {
   background: #fecaca; color: #be123c;
   border-radius: 10px; padding: 1px 7px; font-size: 10px;

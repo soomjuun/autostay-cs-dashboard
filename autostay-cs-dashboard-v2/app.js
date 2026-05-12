@@ -54,6 +54,11 @@ function fmt(n, unit = '') {
 function initials(name) {
   return (name || '?').replace(/오토스테이_/, '').replace(/[^A-Za-z가-힣]/g, '').slice(0, 2).toUpperCase() || '?';
 }
+/* 담당자 표시명: 'D'처럼 단일 문자인 경우 '담당자' 접미사 추가 */
+function dispMgrName(name) {
+  const d = (name || '').replace('오토스테이_', '');
+  return d.length <= 2 ? d + ' 담당자' : d;
+}
 function avatarStyle(idx) {
   const [a, b] = AVATAR_COLORS[idx % AVATAR_COLORS.length].split(',');
   return `background:linear-gradient(135deg,${a},${b})`;
@@ -309,8 +314,8 @@ function renderHeroAction(d, scoreObj) {
   }
   if (topPct > 70) {
     actions.push({
-      type: 'warn', title: `${topMgr.name.replace('오토스테이_','')} 편중`,
-      sub: '재배정 검토 필요',
+      type: 'warn', title: `${dispMgrName(topMgr.name)} 편중`,
+      sub: `재배정 검토 — ${topMgr.count}건 처리`,
       metric: topPct + '%',
       onclick: `_gotoTab('[data-tab="mgr-conc"]'); return false;`,
     });
@@ -1142,19 +1147,22 @@ function renderLongDelayPanel(d) {
 }
 
 function openLongChatsPanel() {
-  const src = lastFilteredData || lastData;
-  if (!src || !src.longChats) { showToast('표시할 장기 지연 데이터가 없습니다.', 'info'); return; }
   const modal = document.getElementById('longChatsModal');
   if (!modal) return;
+  // 필터 데이터에 longChats가 없거나 비어 있으면 원본 데이터로 폴백
+  const src = (lastFilteredData && lastFilteredData.longChats && lastFilteredData.longChats.length)
+    ? lastFilteredData
+    : lastData;
+  const longChatsList = (src && src.longChats) ? src.longChats : [];
   const mgrMap = {};
-  (src.managers || []).forEach((m) => { mgrMap[m.id] = m.name; });
+  ((src && src.managers) || []).forEach((m) => { mgrMap[m.id] = m.name; });
   // 모달 제목에 필터 적용 여부 표시
   const titleEl = modal.querySelector('.modal-header span');
   if (titleEl) {
-    const filterNote = activeFilterCount() > 0 ? ` (필터 적용 중 · ${src.longChats.length}건)` : ` (${src.longChats.length}건)`;
+    const filterNote = activeFilterCount() > 0 ? ` (필터 적용 중 · ${longChatsList.length}건)` : ` (${longChatsList.length}건)`;
     titleEl.textContent = `🐢 8시간+ 해결시간 초과 채팅${filterNote}`;
   }
-  const rows = src.longChats.map((c) => {
+  const rows = longChatsList.map((c) => {
     const tagsHtml = c.tags.length ? c.tags.map((t) => `<span class="long-tag">#${t}</span>`).join(' ') : '<span style="color:var(--muted)">태그 없음</span>';
     const mgrName = c.assigneeId ? (mgrMap[c.assigneeId] || c.assigneeId) : '미배정';
     const totalMins = c.resolutionMin;
@@ -1195,7 +1203,7 @@ function renderConcRisk(d) {
   const activeMgrs = managers.filter((m) => m.count > 0);
   const topMgr = activeMgrs[0];
   const topPct = topMgr ? Math.round(topMgr.count / total * 100) : 0;
-  const topName = topMgr ? topMgr.name.replace('오토스테이_','') : '—';
+  const topName = topMgr ? dispMgrName(topMgr.name) : '—';
   const uaCls = unassigned > 0 ? 'crr-danger' : 'crr-ok';
   const concCls = topPct > 70 ? 'crr-danger' : topPct > 50 ? 'crr-warn' : 'crr-ok';
   el.innerHTML = `
@@ -1218,7 +1226,7 @@ function renderConcRisk(d) {
       <span class="crt-icon">💡</span>
       <div class="crt-body">
         <div class="crt-title">${topName} 담당 비중 ${topPct}% — 재배분 검토 권장</div>
-        <div class="crt-sub">상위 담당자 1인 집중 완화를 위해 ${activeMgrs.slice(1, 3).map(m => m.name.replace('오토스테이_','')).join('·') || '다른 담당자'}에게 신규 채팅 우선 배정하세요.</div>
+        <div class="crt-sub">상위 담당자 1인 집중 완화를 위해 ${activeMgrs.slice(1, 3).map(m => dispMgrName(m.name)).join('·') || '다른 담당자'}에게 신규 채팅 우선 배정하세요.</div>
       </div>
     </div>` : ''}`;
 }
@@ -1231,11 +1239,11 @@ function renderMgrRiskStrip(d) {
   const unassigned = d.summary?.unassignedChats || 0;
   const topMgr = managers[0];
   const topPct = topMgr ? Math.round((topMgr.count / total) * 100) : 0;
-  const topName = topMgr ? topMgr.name.replace('오토스테이_','') : '—';
+  const topName = topMgr ? dispMgrName(topMgr.name) : '—';
   const concStatus = topPct > 80 ? { cls: 'danger', label: '과부하' } : topPct > 60 ? { cls: 'warn', label: '주의' } : { cls: 'good', label: '양호' };
   const unaStatus = unassigned > 0 ? { cls: 'danger', label: '즉시 배정' } : { cls: 'good', label: '없음' };
   el.innerHTML = `
-    <div class="mgr-risk-card mrc-${concStatus.cls}"><div class="mrc-icon">${topPct > 80 ? '🔴' : topPct > 60 ? '🟡' : '🟢'}</div><div class="mrc-body"><div class="mrc-label">담당자 편중률</div><div class="mrc-value">${topName} · ${topPct}%</div><div class="mrc-status ${concStatus.cls}">${concStatus.label}</div></div></div>
+    <div class="mgr-risk-card mrc-${concStatus.cls}"><div class="mrc-icon">${topPct > 80 ? '🔴' : topPct > 60 ? '🟡' : '🟢'}</div><div class="mrc-body"><div class="mrc-label">담당자 편중률</div><div class="mrc-value">${topName}${topMgr ? ' · ' + topMgr.count + '건' : ''} · ${topPct}%</div><div class="mrc-status ${concStatus.cls}">${concStatus.label}</div></div></div>
     <div class="mgr-risk-card mrc-${unaStatus.cls}"><div class="mrc-icon">${unassigned > 0 ? '🔴' : '🟢'}</div><div class="mrc-body"><div class="mrc-label">미배정 채팅</div><div class="mrc-value">${unassigned}건</div><div class="mrc-status ${unaStatus.cls}">${unaStatus.label}</div></div></div>`;
 }
 
@@ -1279,7 +1287,7 @@ function renderManagers(d) {
       const comment = agentComment(m, rank);
       return `<tr style="${!isActive ? 'opacity:.45' : ''}">
         <td style="text-align:center"><span class="agent-rank ${rankClass}">${isActive ? rank + 1 : '—'}</span></td>
-        <td><div class="agent-name-cell"><div class="agent-avatar" style="${avatarStyle(i)}">${initials(m.name)}</div><span class="agent-name">${m.name.replace('오토스테이_','')}</span></div></td>
+        <td><div class="agent-name-cell"><div class="agent-avatar" style="${avatarStyle(i)}">${initials(m.name)}</div><span class="agent-name">${dispMgrName(m.name)}</span></div></td>
       <td class="num-r"><span style="font-weight:800">${isActive ? m.count + '건' : '—'}</span></td>
       <td class="num-r" style="font-size:11px;color:${m.medianFrtMin != null && m.medianFrtMin <= 5 ? 'var(--teal)' : m.medianFrtMin != null && m.medianFrtMin > 30 ? 'var(--amber)' : 'var(--text)'}">${frtDisplay}</td>
       <td class="num-r" style="font-size:11px">${resDisplay}</td>
@@ -1329,7 +1337,7 @@ function renderManagers(d) {
       <div class="agent-stat-card">
         <div class="agent-stat-card-title">📊 평균</div>
         <div class="agent-stat-row"><span class="agent-stat-label">운영 점수</span><span class="agent-stat-value">${avgOp}</span></div>
-        ${fastMgr ? `<div class="agent-stat-row"><span class="agent-stat-label">최단 FRT</span><span class="agent-stat-value" style="font-size:10.5px;color:var(--teal)">${fastMgr.name.replace('오토스테이_','')} ${fmtMin(fastMgr.medianFrtMin)}</span></div>` : ''}
+        ${fastMgr ? `<div class="agent-stat-row"><span class="agent-stat-label">최단 FRT</span><span class="agent-stat-value" style="font-size:10.5px;color:var(--teal)">${dispMgrName(fastMgr.name)} ${fmtMin(fastMgr.medianFrtMin)}</span></div>` : ''}
       </div>`;
   }
 
@@ -1349,7 +1357,7 @@ function renderMgrFrtTable(d) {
     <tbody>${managers.map((m, i) => `
       <tr>
         <td style="text-align:center"><span class="agent-rank rn">${i + 1}</span></td>
-        <td><div class="mgr-frt-name"><div class="agent-avatar" style="${avatarStyle(i)};width:24px;height:24px;font-size:10px">${initials(m.name)}</div>${m.name.replace('오토스테이_','')}</div></td>
+        <td><div class="mgr-frt-name"><div class="agent-avatar" style="${avatarStyle(i)};width:24px;height:24px;font-size:10px">${initials(m.name)}</div>${dispMgrName(m.name)}</div></td>
         <td class="num-r" style="font-weight:700">${m.count}</td>
         <td class="num-r" style="color:${m.avgFrtMin != null && m.avgFrtMin <= 10 ? 'var(--teal)' : 'var(--text)'}">${fmtMin(m.avgFrtMin)}</td>
         <td class="num-r" style="color:${m.medianFrtMin != null && m.medianFrtMin <= 5 ? 'var(--teal)' : m.medianFrtMin != null && m.medianFrtMin > 30 ? 'var(--rose)' : 'var(--text)'}">${fmtMin(m.medianFrtMin)}</td>
@@ -1796,19 +1804,26 @@ function renderDiagnostics(d) {
   const warns = diag.warnings || [];
   if (footerEl) {
     const okCount = calls.filter((c) => c.ok).length;
-    const cacheStr = diag.cacheHit ? `⚡ KV 캐시 HIT` : `🔄 fresh fetch`;
+    const cacheStr = diag.cacheHit ? `⚡ 캐시 응답` : `🔄 최신 조회`;
     const status = warns.length === 0 ? '✓ 정상' : `⚠ 부분실패 (${warns.length})`;
-    footerEl.innerHTML = `${cacheStr} · ${diag.totalMs}ms · ${status} · API ${okCount}/${calls.length}`;
+    // 캐시 히트 시 totalMs=0 — 원본 수집시간(paginationMs)을 표시
+    const displayMs = diag.cacheHit ? (diag.paginationMs ? `원본 ${diag.paginationMs}ms` : '—') : `${diag.totalMs}ms`;
+    footerEl.innerHTML = `${cacheStr} · ${displayMs} · ${status} · API ${okCount}/${calls.length}`;
   }
   if (!el) return;
   const totalRows = calls.map((c) => `<tr><td>${c.label}</td><td><span class="diag-status ${c.ok ? 'ok' : 'fail'}">${c.ok ? 'OK' : 'FAIL'}</span></td><td class="num-r">${c.status}</td><td class="num-r">${c.ms}ms</td></tr>`).join('');
   const warnHtml = warns.length ? `<div class="diag-warns">${warns.map((w) => `<span class="diag-warn-tag">⚠ ${w}</span>`).join('')}</div>` : `<div class="diag-ok">✓ 모든 호출 성공</div>`;
   const kvBadge = diag.kvEnabled ? '<span style="color:var(--teal);font-weight:700">✓ KV 활성</span>' : '<span style="color:var(--muted)">KV 미설정 (메모리 캐시만)</span>';
+  // 캐시 히트 시: 서버 응답(totalMs≈0ms)과 원본 API 수집시간(paginationMs) 구분 표시
+  const cacheSourceLabel = diag.cacheSource === 'memory' ? '메모리' : diag.cacheSource === 'kv' ? 'KV' : (diag.cacheSource || 'mem');
+  const responseTimeLabel = diag.cacheHit
+    ? `<span style="color:var(--teal)">캐시 응답</span> <span style="font-size:10px;color:var(--muted)">(원본 수집 ${diag.paginationMs || 0}ms)</span>`
+    : `${diag.totalMs}ms`;
   el.innerHTML = `
     <div class="diag-summary">
-      <div class="diag-stat"><span class="diag-stat-lbl">총 응답시간</span><span class="diag-stat-val">${diag.totalMs}ms</span></div>
-      <div class="diag-stat"><span class="diag-stat-lbl">캐시 상태</span><span class="diag-stat-val ${diag.cacheHit ? 'good' : ''}">${diag.cacheHit ? 'HIT (' + (diag.cacheSource || 'mem') + ')' : 'MISS'}</span></div>
-      <div class="diag-stat"><span class="diag-stat-lbl">페이지네이션</span><span class="diag-stat-val">${diag.pages || 0}p · ${diag.paginationMs || 0}ms</span></div>
+      <div class="diag-stat"><span class="diag-stat-lbl">서버 응답시간</span><span class="diag-stat-val">${responseTimeLabel}</span></div>
+      <div class="diag-stat"><span class="diag-stat-lbl">캐시 상태</span><span class="diag-stat-val ${diag.cacheHit ? 'good' : ''}">${diag.cacheHit ? '캐시(' + cacheSourceLabel + ')' : '최신 조회'}</span></div>
+      <div class="diag-stat"><span class="diag-stat-lbl">원본 수집</span><span class="diag-stat-val">${diag.pages || 0}p · ${diag.paginationMs || 0}ms</span></div>
       <div class="diag-stat"><span class="diag-stat-lbl">실패 호출</span><span class="diag-stat-val ${warns.length > 0 ? 'danger' : 'good'}">${warns.length}건</span></div>
     </div>
     ${warnHtml}
@@ -1880,17 +1895,36 @@ function initFilterDrawer() {
   const drawer = document.getElementById('filterDrawer');
   const closeBtn = document.getElementById('filterCloseBtn');
   const clearBtn = document.getElementById('filterClearBtn');
+  function openDrawer() {
+    drawer.style.display = 'block'; // 필요: max-height transition이 동작하려면 display:block 선행
+    requestAnimationFrame(() => drawer.classList.add('is-open'));
+    renderFilterDrawer(lastData);
+  }
+  function closeDrawer() {
+    drawer.classList.remove('is-open');
+    // transition 끝난 뒤 display:none (접근성)
+    drawer.addEventListener('transitionend', () => {
+      if (!drawer.classList.contains('is-open')) drawer.style.display = 'none';
+    }, { once: true });
+  }
   if (filterBtn) filterBtn.onclick = () => {
-    if (drawer.style.display === 'block') drawer.style.display = 'none';
-    else { drawer.style.display = 'block'; renderFilterDrawer(lastData); }
+    if (drawer.classList.contains('is-open')) closeDrawer();
+    else openDrawer();
   };
-  if (closeBtn) closeBtn.onclick = () => { drawer.style.display = 'none'; };
+  if (closeBtn) closeBtn.onclick = closeDrawer;
   if (clearBtn) clearBtn.onclick = () => {
     filterState.managers.clear(); filterState.tags.clear(); filterState.sources.clear();
     renderFilterDrawer(lastData);
     updateFilterBadges();
     applyFilteredRender();
   };
+  // 필터 외부 클릭 시 닫기
+  document.addEventListener('click', (e) => {
+    if (!drawer.classList.contains('is-open')) return;
+    if (!drawer.contains(e.target) && e.target !== filterBtn && !filterBtn.contains(e.target)) {
+      closeDrawer();
+    }
+  });
 }
 
 /* ─── Full Render ────────────────────────────────────────────────────── */
@@ -2238,8 +2272,20 @@ function initTooltips() {
     document.body.appendChild(tipEl);
   }
   let activeTarget = null;
+  /* data-tip 또는 title 속성 중 사용 가능한 툴팁 텍스트 반환 */
+  function getTipMsg(el) {
+    return el.getAttribute('data-tip') || el.getAttribute('title') || null;
+  }
+  /* title 속성을 가진 요소: 네이티브 툴팁 억제 후 커스텀 처리 */
+  function suppressNativeTitle(el) {
+    if (el.hasAttribute('title') && !el.hasAttribute('data-tip')) {
+      el.setAttribute('data-tip', el.getAttribute('title'));
+      el.removeAttribute('title');
+    }
+  }
   function showTip(el) {
-    const msg = el.getAttribute('data-tip');
+    suppressNativeTitle(el);
+    const msg = getTipMsg(el);
     if (!msg) return;
     activeTarget = el;
     tipEl.textContent = msg;
@@ -2261,16 +2307,33 @@ function initTooltips() {
     tipEl.style.top = top + 'px';
     tipEl.style.left = left + 'px';
   }
+  /* title 속성을 가진 요소를 미리 변환 (DOM 로드 후 + 렌더링 후 자동 적용) */
+  function convertTitleAttrs(root) {
+    (root || document).querySelectorAll('[title]:not([data-tip])').forEach(suppressNativeTitle);
+  }
+  // 초기 변환 + MutationObserver로 동적 렌더링 후에도 변환
+  convertTitleAttrs(document);
+  const mo = new MutationObserver((muts) => {
+    muts.forEach((m) => m.addedNodes.forEach((n) => {
+      if (n.nodeType === 1) {
+        suppressNativeTitle(n);
+        convertTitleAttrs(n);
+      }
+    }));
+  });
+  mo.observe(document.body, { childList: true, subtree: true });
+
   document.addEventListener('mouseover', (e) => {
-    const el = e.target.closest('[data-tip]');
-    if (el) showTip(el);
+    const el = e.target.closest('[data-tip]') || e.target.closest('[title]');
+    if (el) { suppressNativeTitle(el); showTip(el); }
   });
   document.addEventListener('mouseout', (e) => {
-    if (!e.relatedTarget || !e.relatedTarget.closest('[data-tip]')) hideTip();
+    const stillOn = e.relatedTarget && (e.relatedTarget.closest('[data-tip]') || e.relatedTarget.closest('[title]'));
+    if (!stillOn) hideTip();
   });
   document.addEventListener('focusin', (e) => {
-    const el = e.target.closest('[data-tip]');
-    if (el) showTip(el);
+    const el = e.target.closest('[data-tip]') || e.target.closest('[title]');
+    if (el) { suppressNativeTitle(el); showTip(el); }
   });
   document.addEventListener('focusout', hideTip);
   document.addEventListener('click', (e) => {
