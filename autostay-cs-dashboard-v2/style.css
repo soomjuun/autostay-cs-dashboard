@@ -2440,4 +2440,51 @@ canvas { display: block; }
   font-weight: 600;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* V4.2 — UX 개선 (새로고침 스피너 / 장기지연 버튼 / KPI ℹ 아이콘)            */
+/* ══════════════════════════════════════════════════════════════════════════ */
+
+/* 새로고침 버튼 로딩 스피너 */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.spin-icon {
+  display: inline-block;
+  animation: spin 0.8s linear infinite;
+  vertical-align: middle;
+}
+
+/* 장기지연 "전체 목록" — <a>에서 <button>으로 변경 시 리셋 스타일 */
+button.ld-more-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--teal);
+  cursor: pointer;
+  display: block;
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+  text-align: left;
+}
+button.ld-more-link:hover {
+  color: var(--teal-d);
+  text-decoration: underline;
+}
+
+/* KPI 카드 내 데이터 출처 ℹ 아이콘 */
+.kpi-src-icon {
+  font-size: 10px;
+  color: rgba(255,255,255,.35);
+  cursor: help;
+  font-style: normal;
+  vertical-align: middle;
+  margin-left: 2px;
+}
+.kpi-src-icon:hover {
+  color: rgba(255,255,255,.65);
+}
 
