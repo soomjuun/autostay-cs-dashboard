@@ -605,7 +605,7 @@ function renderKPIs(d, scoreObj) {
     const cacheSourceLabel = cacheSource
       ? (cacheSource.toLowerCase().includes('memory') || cacheSource.toLowerCase().includes('mem') ? '메모리' : 'KV')
       : 'KV';
-    const cacheLabel = isHit ? `⚡ ${cacheSourceLabel} 캐시` : '🔄 실시간 조회';
+    const cacheLabel = isHit ? '⚡ 캐시 응답' : '🔄 최신 조회';
     cacheBadge.innerHTML = cacheLabel;
     cacheBadge.className = isHit ? 'hero-cache-badge cache-hit' : 'hero-cache-badge cache-miss';
     cacheBadge.title = isHit
@@ -1485,13 +1485,14 @@ function renderGaugeGrid(d) {
   }
 
   // 편중도
-  const mgrs = (d.managers || []).filter((m) => m.count > 0);
+  const mgrs = (d.managers || []).filter((m) => !EXCLUDED_MANAGERS.includes(m.name) && m.count > 0);
   const mgrTotal = mgrs.reduce((s, m) => s + m.count, 0) || 1;
   const topMgr = mgrs[0];
   const topPct = topMgr ? Math.round(topMgr.count / mgrTotal * 100) : 0;
   setG('conc', topPct, topPct <= 40 ? 'gauge-fill--good' : topPct <= 60 ? 'gauge-fill--warn' : 'gauge-fill--danger');
   document.getElementById('gval-conc').textContent = topPct + '%';
-  document.getElementById('gsub-conc').textContent = topMgr ? (topMgr.name?.replace('오토스테이_','') + ' · ' + topMgr.count + '건 · 전체 ' + topPct + '%') : '—';
+  const topMgrDisplayName = topMgr ? (topMgr.name?.replace(/^오토스테이_?/,'') || topMgr.name || '담당자') : null;
+  document.getElementById('gsub-conc').textContent = topMgr ? `${topMgrDisplayName} · ${topMgr.count}건 처리 · 전체 ${topPct}%` : '—';
   setB('conc', topPct <= 40 ? '양호' : topPct <= 60 ? '주의' : '위험', topPct <= 40 ? 'good' : topPct <= 60 ? 'warn' : 'danger');
 }
 
@@ -2222,9 +2223,10 @@ document.addEventListener('DOMContentLoaded', () => {
   initCollapsibles();
   initFilterDrawer();
   initTooltips();
+  initTabs();
 });
 
-/* ─── Custom Tooltip System (data-tip) ───────────────────────────────── */
+/* ─── Custom Tooltip System (data-tip) ──────────────────── */
 function initTooltips() {
   let tipEl = document.getElementById('__ctip');
   if (!tipEl) {
@@ -2242,8 +2244,7 @@ function initTooltips() {
     activeTarget = el;
     tipEl.textContent = msg;
     tipEl.style.display = 'block';
-    setTimeout(() => { tipEl.style.opacity = '1'; }, 10);
-    posTip(el);
+    requestAnimationFrame(() => { posTip(el); tipEl.style.opacity = '1'; });
   }
   function hideTip() {
     tipEl.style.opacity = '0';
@@ -2279,7 +2280,7 @@ function initTooltips() {
   });
 }
 
-/* ─── Full Reload ───────────────────────────────────────────────────── */
+/* ─── Full Reload ───────────────────────────────────────────────────────────────── */
 function triggerFullReload() {
   const ov = document.getElementById('loadingOverlay');
   if (ov) { ov.style.opacity = '1'; ov.style.display = 'flex'; }

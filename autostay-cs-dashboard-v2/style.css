@@ -746,20 +746,20 @@ canvas { display: block; }
 .hm-row-label {
   font-size: 10px; font-weight: 700; color: var(--muted);
   display: flex; align-items: center; justify-content: center;
-  min-height: 20px;
+  min-height: 26px;
 }
 .hm-cell {
-  height: 20px; border-radius: 3px; font-size: 8px;
+  height: 26px; border-radius: 4px; font-size: 9px;
   display: flex; align-items: center; justify-content: center;
   color: rgba(0,0,0,.45); cursor: default;
   transition: transform .12s, box-shadow .12s;
-  min-width: 18px;
+  min-width: 22px;
 }
 .hm-cell:hover { transform: scale(1.25); z-index: 2; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
 @media (max-width: 700px) {
-  .heatmap { grid-template-columns: 20px repeat(24, 16px); gap: 2px; width: max-content; }
-  .hm-cell { height: 16px; min-width: 16px; font-size: 0; }
-  .hm-head { font-size: 8px; line-height: 16px; }
+  .heatmap { grid-template-columns: 20px repeat(24, 18px); gap: 2px; width: max-content; }
+  .hm-cell { height: 20px; min-width: 18px; font-size: 0; }
+  .hm-head { font-size: 8px; line-height: 20px; }
 }
 .hm-0 { background: var(--bg2); }
 .hm-1 { background: #a7f3d0; }
@@ -2504,7 +2504,7 @@ ion: none;
 /* ACTION QUEUE (운영 액션 큐 헤더)                                            */
 /* ══════════════════════════════════════════════════════════════════════════ */
 .aq-header {
-  font-size: 11px; font-weight: 700; color: var(--text);
+  font-size: 11px; font-weight: 700; color: rgba(255,255,255,.9);
   padding: 4px 0 8px;
   display: flex; align-items: center; gap: 6px;
   border-bottom: 1px solid var(--border-soft);
