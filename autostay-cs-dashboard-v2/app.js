@@ -297,14 +297,14 @@ function renderHeroAction(d, scoreObj) {
       type: 'danger', title: `컴플레인 급증 ${complaintPct}%`,
       sub: '위험 기준(15%) 초과 — 원인 점검',
       metric: complaintPct + '%',
-      onclick: `document.querySelector('[data-tab="voc-complaint"]').click(); return false;`,
+      onclick: `_gotoTab('[data-tab="voc-complaint"]'); return false;`,
     });
   } else if (complaintPct >= 8) {
     actions.push({
       type: 'warn', title: `컴플레인 모니터링 ${complaintPct}%`,
       sub: '주의 기준(8%) 초과',
       metric: complaintPct + '%',
-      onclick: `document.querySelector('[data-tab="voc-complaint"]').click(); return false;`,
+      onclick: `_gotoTab('[data-tab="voc-complaint"]'); return false;`,
     });
   }
   if (topPct > 70) {
@@ -312,7 +312,7 @@ function renderHeroAction(d, scoreObj) {
       type: 'warn', title: `${topMgr.name.replace('오토스테이_','')} 편중`,
       sub: '재배정 검토 필요',
       metric: topPct + '%',
-      onclick: `document.querySelector('[data-tab="mgr-conc"]').click(); return false;`,
+      onclick: `_gotoTab('[data-tab="mgr-conc"]'); return false;`,
     });
   }
   if (openChats > 5) {
@@ -927,7 +927,7 @@ function renderTagCooccur(d) {
   const el = document.getElementById('tagCooccurPanel');
   if (!el) return;
   const co = d.tagCooccurrence || [];
-  if (!co.length) { el.innerHTML = '<div class="adv-empty">공출현 패턴 없음</div>'; return; }
+  if (!co.length) { el.innerHTML = '<div class="adv-empty">동반 이슈 패턴 없음</div>'; return; }
   const max = co[0].cnt || 1;
   el.innerHTML = co.map((c, i) => {
     const isComp = c.pair.some((p) => p.includes('컴플레인'));
@@ -1832,9 +1832,45 @@ function initTabs() {
         tab.classList.add('active');
         const pane = parent.querySelector('#' + target);
         if (pane) pane.classList.add('active');
+        // Re-render charts/content for the newly visible tab pane
+        const d = lastFilteredData || lastData;
+        if (d) setTimeout(() => _rerenderTab(target, d), 30);
       };
     });
   });
+}
+
+/* 탭 전환 시 해당 탭의 차트/콘텐츠 재렌더링 */
+function _rerenderTab(tabId, d) {
+  switch (tabId) {
+    case 'voc-distribution': safeRender(() => renderTagBar(d), 'tagBar.tab'); break;
+    case 'voc-risk':         safeRender(() => renderVocRiskSection(d), 'vocRisk.tab'); break;
+    case 'voc-resolution':   safeRender(() => renderTagRes(d), 'tagRes.tab'); break;
+    case 'voc-cooccur':      safeRender(() => renderTagCooccur(d), 'tagCooccur.tab'); break;
+    case 'voc-complaint':    safeRender(() => renderComplaintCategory(d), 'complaintCat.tab'); break;
+    case 'mgr-table':
+      safeRender(() => renderManagers(d), 'managers.tab');
+      safeRender(() => renderMgrRiskStrip(d), 'mgrRisk.tab');
+      break;
+    case 'mgr-quadrant':     safeRender(() => renderMgrQuadrant(d), 'mgrQuad.tab'); break;
+    case 'mgr-conc':         safeRender(() => renderConcRisk(d), 'concRisk.tab'); break;
+    case 'mgr-frt':          safeRender(() => renderMgrFrtTable(d), 'mgrFrt.tab'); break;
+    default: break;
+  }
+  // Chart.js 캔버스 크기 강제 재조정 (숨겨진 상태에서 렌더 시 0px 방지)
+  const pane = document.getElementById(tabId);
+  if (pane) pane.querySelectorAll('canvas').forEach((c) => {
+    const ch = Chart.getChart(c); if (ch) ch.resize();
+  });
+}
+
+/* 액션 아이템 → 해당 탭 이동 + 패널 스크롤 */
+function _gotoTab(tabSelector) {
+  const btn = document.querySelector(tabSelector);
+  if (!btn) return;
+  btn.click();
+  const panel = btn.closest('.cg-panel');
+  if (panel) setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
 }
 
 /* ─── Filter Drawer Init ────────────────────────────────────────────── */
@@ -1918,8 +1954,21 @@ function scheduleRefresh() {
   refreshTimer = setTimeout(silentRefresh, 5 * 60 * 1000);
 }
 
+/* ─── 새로고침 상태 표시 ──────────────────────────────────────────── */
+function _setRefreshStatus(text, cls) {
+  const el = document.getElementById('refreshStatus');
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'refresh-status rs-' + (cls || 'idle');
+}
+function _nowHHMM() {
+  const n = new Date();
+  return n.getHours().toString().padStart(2, '0') + ':' + n.getMinutes().toString().padStart(2, '0');
+}
+
 function render() {
   return (async () => { try {
+    _setRefreshStatus('조회 중…', 'loading');
     setStep('lstep-api'); setProgress(20);
     const data = await fetchData();
     if (!data) return;
@@ -1930,6 +1979,12 @@ function render() {
     fullRender(data);
     setProgress(100);
     setStep('lstep-charts', true); setStep('lstep-done', true);
+    const hhmm = _nowHHMM();
+    if (data.diagnostics?.cacheHit) {
+      _setRefreshStatus('캐시 응답 · ' + hhmm, 'cache');
+    } else {
+      _setRefreshStatus('갱신 완료 · ' + hhmm, 'ok');
+    }
     setTimeout(() => {
       const ov = document.getElementById('loadingOverlay');
       if (ov) { ov.style.opacity = '0'; setTimeout(() => { ov.style.display = 'none'; }, 350); }
@@ -1939,6 +1994,7 @@ function render() {
     scheduleRefresh();
   } catch (e) {
     console.error('Render error:', e);
+    _setRefreshStatus('API 실패 ⚠', 'error');
     const eb2 = document.getElementById('errBanner');
     if (eb2) { eb2.style.display = 'flex'; eb2.innerHTML = `<span class="banner-icon">⚠️</span><span class="banner-msg">데이터 로드 실패: ${e.message}</span><button onclick="triggerFullReload()" style="margin-left:auto;background:#fff;border:1px solid #be123c;border-radius:4px;padding:3px 10px;font-size:12px;cursor:pointer;color:#be123c;font-weight:700;flex-shrink:0">재시도</button>`; }
     const ov2 = document.getElementById('loadingOverlay');
@@ -1949,6 +2005,7 @@ function render() {
 /* ─── Silent Refresh (백그라운드 갱신) ──────────────────────────────── */
 async function silentRefresh() {
   try {
+    _setRefreshStatus('백그라운드 갱신 중…', 'loading');
     const data = await fetchData();
     if (!data) return;
     lastData = data;
@@ -1992,10 +2049,17 @@ async function silentRefresh() {
     safeRender(() => renderForecast(data), 'forecast.silent');
     safeRender(() => renderComplaintTrend(data), 'complaintTrend.silent');
     safeRender(() => renderDiagnostics(data), 'diagnostics.silent');
+    const hhmm = _nowHHMM();
+    if (data.diagnostics?.cacheHit) {
+      _setRefreshStatus('캐시 응답 · ' + hhmm, 'cache');
+    } else {
+      _setRefreshStatus('갱신 완료 · ' + hhmm, 'ok');
+    }
     const eb = document.getElementById('errBanner');
     if (eb) eb.style.display = 'none';
   } catch (e) {
     console.warn('Silent refresh failed:', e);
+    _setRefreshStatus('갱신 실패 ⚠', 'error');
   }
   scheduleRefresh();
 }

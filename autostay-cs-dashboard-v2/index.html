@@ -123,6 +123,7 @@
           <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M13.65 2.35A8 8 0 1 0 14.94 8H13a6 6 0 1 1-1.25-3.72L9 7h5V2l-.35.35z"/></svg>
           새로고침
         </button>
+        <span id="refreshStatus" class="refresh-status rs-idle"></span>
       </div>
     </div>
 
@@ -291,7 +292,7 @@
           <button class="cg-tab active" data-tab="voc-distribution">분포</button>
           <button class="cg-tab" data-tab="voc-risk">리스크</button>
           <button class="cg-tab" data-tab="voc-resolution">해결시간</button>
-          <button class="cg-tab" data-tab="voc-cooccur">공출현</button>
+          <button class="cg-tab" data-tab="voc-cooccur" data-tip="같은 채팅에서 함께 등장한 태그 쌍을 분석합니다. 복합 이슈 패턴과 연관 문의를 파악하는 데 활용하세요.">동반 이슈 <span class="tab-tip-icon" aria-hidden="true">ⓘ</span></button>
           <button class="cg-tab" data-tab="voc-complaint">컴플레인 세분화</button>
         </div>
       </div>
