@@ -525,4 +525,24 @@
   <div id="longChatsModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true">
     <div class="modal-box">
       <div class="modal-header">
-        <span>�
+        <span>�        <span>🐢 8시간 이상 미해결 채팅</span>
+        <button class="modal-close" onclick="document.getElementById('longChatsModal').style.display='none'">✕</button>
+      </div>
+      <div id="longChatsBody" class="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- 푸터 -->
+  <footer class="footer-note">
+    <span>[OPS] 채널톡 CS 대시보드 · 데이터 출처: Channel Talk Open API v5</span>
+    <span class="footer-sep">·</span>
+    <span>자동 새로고침 5분 간격</span>
+    <span class="footer-sep">·</span>
+    <span id="footerDiag">진단 정보 로딩 중…</span>
+  </footer>
+
+</div><!-- /.app -->
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -77,6 +77,28 @@ function safeRender(fn, label) {
   try { fn(); } catch (e) { console.warn('[render] ' + label + ' failed:', e && e.message); }
 }
 
+/* ─── Toast 알림 ──────────────────────────────────────────────────────── */
+function showToast(msg, type = 'success', duration = 3500) {
+  let container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    container.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:99999;display:flex;flex-direction:column;gap:8px;pointer-events:none;';
+    document.body.appendChild(container);
+  }
+  const icons = { success: '✓', error: '✕', info: 'ℹ' };
+  const colors = { success: '#0f766e', error: '#be123c', info: '#1d4ed8' };
+  const toast = document.createElement('div');
+  toast.style.cssText = `background:${colors[type]||colors.info};color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:600;box-shadow:0 4px 20px rgba(0,0,0,.22);opacity:0;transform:translateY(10px);transition:all .22s cubic-bezier(.4,0,.2,1);max-width:340px;display:flex;align-items:center;gap:8px;`;
+  toast.innerHTML = `<span style="font-size:15px">${icons[type]||'ℹ'}</span><span>${msg}</span>`;
+  container.appendChild(toast);
+  requestAnimationFrame(() => { toast.style.opacity = '1'; toast.style.transform = 'translateY(0)'; });
+  setTimeout(() => {
+    toast.style.opacity = '0'; toast.style.transform = 'translateY(10px)';
+    setTimeout(() => toast.remove(), 240);
+  }, duration);
+}
+
 /* ─── C-1: 채널톡 딥링크 ──────────────────────────────────────────────── */
 function getChannelId() {
   return (lastData && lastData.channel && lastData.channel.id) || null;
@@ -214,6 +236,22 @@ function applyFilteredRender() {
   const filtered = applyFilters(lastData);
   lastFilteredData = filtered;
   fullRender(filtered);
+  // 필터 적용 범위 안내 배너
+  const count = activeFilterCount();
+  let scopeEl = document.getElementById('filterScopeNote');
+  if (!scopeEl) {
+    scopeEl = document.createElement('div');
+    scopeEl.id = 'filterScopeNote';
+    scopeEl.style.cssText = 'font-size:11.5px;color:#b45309;background:#fef9c3;border:1px solid #fde68a;border-radius:6px;padding:6px 12px;margin:4px 16px 0;display:none;';
+    const basis = document.getElementById('kpiBasisHeader');
+    if (basis && basis.parentNode) basis.parentNode.insertBefore(scopeEl, basis.nextSibling);
+  }
+  if (count > 0) {
+    scopeEl.style.display = 'block';
+    scopeEl.innerHTML = `⚠ 필터가 적용되었습니다 (${count}개 조건) — <strong>담당자 테이블·태그 VOC·장기지연 목록</strong>에만 반영됩니다. 요약 지표·차트는 전체 기간 원천 데이터 기준입니다.`;
+  } else {
+    scopeEl.style.display = 'none';
+  }
 }
 
 /* ─── A-2: Hero 액션 박스 ─────────────────────────────────────────────── */
@@ -334,11 +372,18 @@ function computeHealthScore(d) {
   const total = d.summary.totalChats || 1;
   const rb = d.resolutionBuckets || {};
   const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
-  const complaints = (d.tags?.labels || []).reduce((acc, lbl, i) => {
-    if (lbl.includes('컴플레인')) acc += (d.tags.values[i] || 0);
-    return acc;
-  }, 0);
-  const complaintRate = complaints / total;
+  let complaints, complaintBase;
+  if (d.complaintTrend?.complaints?.length > 0) {
+    complaints = d.complaintTrend.complaints.reduce((a, b) => a + b, 0);
+    complaintBase = d.complaintTrend.total.reduce((a, b) => a + b, 0) || total;
+  } else {
+    complaints = (d.tags?.labels || []).reduce((acc, lbl, i) => {
+      if (lbl.includes('컴플레인')) acc += (d.tags.values[i] || 0);
+      return acc;
+    }, 0);
+    complaintBase = total;
+  }
+  const complaintRate = complaints / complaintBase;
   let deductComplaint = 0;
   if (complaintRate > 0.20) deductComplaint = 25;
   else if (complaintRate > 0.15) deductComplaint = 18;
@@ -480,8 +525,16 @@ function renderAlertStrip(d, scoreObj) {
     const topPct = Math.round((managers[0].count || 0) / total * 100);
     if (topPct > 70) alerts.push({ level: 'danger', icon: '과부하', title: '담당자 과부하', body: `${managers[0].name}이(가) 전체 ${topPct}%` });
   }
-  const complaints = (d.tags?.labels || []).reduce((acc, lbl, i) => lbl.includes('컴플레인') ? acc + (d.tags.values[i] || 0) : acc, 0);
-  const complaintPct = Math.round(complaints / total * 100);
+  let complaintsAS, complaintBaseAS;
+  if (d.complaintTrend?.complaints?.length > 0) {
+    complaintsAS = d.complaintTrend.complaints.reduce((a, b) => a + b, 0);
+    complaintBaseAS = d.complaintTrend.total.reduce((a, b) => a + b, 0) || total;
+  } else {
+    complaintsAS = (d.tags?.labels || []).reduce((acc, lbl, i) => lbl.includes('컴플레인') ? acc + (d.tags.values[i] || 0) : acc, 0);
+    complaintBaseAS = total;
+  }
+  const complaints = complaintsAS;
+  const complaintPct = Math.round(complaintsAS / complaintBaseAS * 100);
   if (complaintPct >= 15) alerts.push({ level: 'danger', icon: '긴급', title: '컴플레인 급증', body: `${complaintPct}% (${complaints}건)` });
   const slowPct = Math.round((rb['8시간+'] || 0) / resTotal * 100);
   if (slowPct > 40) alerts.push({ level: 'warn', icon: '지연', title: '장시간 미해결', body: `${slowPct}%` });
@@ -543,27 +596,50 @@ function renderKPIs(d, scoreObj) {
   const cacheBadge = document.getElementById('cacheBadge');
   if (cacheBadge) {
     const isHit = d.diagnostics?.cacheHit;
-    cacheBadge.innerHTML = isHit ? '⚡ KV 캐시' : '🔄 fresh';
+    const cacheSource = d.diagnostics?.cacheSource || '';
+    const cacheSourceLabel = cacheSource
+      ? (cacheSource.toLowerCase().includes('memory') || cacheSource.toLowerCase().includes('mem') ? '메모리' : 'KV')
+      : 'KV';
+    const cacheLabel = isHit ? `⚡ ${cacheSourceLabel} 캐시` : '🔄 실시간 조회';
+    cacheBadge.innerHTML = cacheLabel;
     cacheBadge.className = isHit ? 'hero-cache-badge cache-hit' : 'hero-cache-badge cache-miss';
+    cacheBadge.title = isHit
+      ? 'Vercel KV 캐시에서 응답 — 최대 5분 지연 가능. 강제 갱신하려면 새로고침 버튼을 누르세요.'
+      : 'Channel Talk API를 직접 조회한 최신 데이터입니다.';
   }
 
   const kpiBasisHeaderEl = document.getElementById('kpiBasisHeader');
   if (kpiBasisHeaderEl) {
     kpiBasisHeaderEl.style.display = 'flex';
-    const sampledWarn = isSampled ? ` <span style="color:var(--amber);font-weight:700">⚠ 수집 상한(${limitVal}건) 도달</span>` : '';
-    kpiBasisHeaderEl.innerHTML = `<span>📊 분석 기준</span> <span style="font-weight:400;color:#0d9488">${currentDays === 'all' ? `최근 ${limitVal}건 한도` : `최근 ${currentDays}일`} · closed <strong>${totalChats}건</strong> · 5분 캐시 · KST</span>${sampledWarn}`;
+    const sampledWarn = isSampled ? ` <span style="color:var(--amber);font-weight:700">⚠ 수집 상한(${limitVal}건) 도달 — 최근 ${limitVal}건 기준 집계</span>` : '';
+    const cacheInfo = (d.diagnostics?.cacheHit)
+      ? `<span title="Vercel KV 5분 캐시 응답 · 강제 갱신: 새로고침 버튼" style="color:var(--amber);margin-left:6px;cursor:help">⚡ 캐시 응답</span>`
+      : `<span title="Channel Talk API 직접 조회 결과" style="color:var(--teal);margin-left:6px;cursor:help">🔄 fresh</span>`;
+    kpiBasisHeaderEl.innerHTML = `
+      <span>📊 분석 기준</span>
+      <span style="font-weight:400;color:#0d9488">
+        ${currentDays === 'all' ? `최근 ${limitVal}건 한도` : `최근 ${currentDays}일`}
+        · <span title="채널톡 API closed 상태 채팅 수 (완료 처리된 건만 집계)">closed <strong>${totalChats}건</strong></span>
+        · <span title="채널톡 Open API v5 실데이터 기준. 해결시간·FRT는 채팅 종료 후 계산값">Channel Talk API</span>
+        · <span title="서버 측 5분 TTL 캐시 적용. 새로고침 버튼 클릭 시 강제 재조회">5분 캐시</span>
+        · KST
+      </span>${cacheInfo}${sampledWarn}
+      <span style="margin-left:auto;font-size:10px;color:var(--muted)" title="실데이터=채널톡 API 원천값 / 계산값=수집 데이터 기반 서버 집계 / 캐시=5분 TTL KV 캐시">
+        🏷 실데이터 · 계산값 · 캐시 범례 — 각 지표 카드 배지 확인
+      </span>`;
   }
 
   const grid = document.getElementById('kpiGrid');
   if (!grid) return;
   grid.innerHTML = `
-    <div class="kpi-card a-${unassigned > 0 ? 'rose' : 'green'}" style="cursor:pointer" onclick="window.open('${chatTalkUnassignedUrl()}','_blank')">
-      <div class="kpi-label">미배정</div>
+    <div class="kpi-card a-${unassigned > 0 ? 'rose' : 'green'}" style="cursor:pointer" onclick="window.open('${chatTalkUnassignedUrl()}','_blank')" title="채널톡 미배정 채팅 큐로 이동합니다&#10;※ desk.channel.io 로그인 세션이 필요합니다&#10;출처: Channel Talk API (실시간 조회)">
+      <div class="kpi-label">미배정 <span class="kpi-src-icon" title="채널톡 실데이터 · API 실시간 조회">ℹ</span></div>
       <div class="kpi-value">${fmt(unassigned)}<span class="unit">건</span></div>
       <div class="kpi-meta">
         <span class="data-badge badge-real">실데이터</span>
-        <span class="delta ${unassigned > 0 ? 'bad' : 'good'}">${unassigned > 0 ? '즉시 배정' : '없음'}</span>
+        <span class="delta ${unassigned > 0 ? 'bad' : 'good'}">${unassigned > 0 ? '즉시 배정 ↗' : '없음'}</span>
       </div>
+      ${unassigned > 0 ? `<div style="font-size:9.5px;color:var(--muted);margin-top:2px">클릭 → 채널톡 미배정 큐 (로그인 필요)</div>` : ''}
     </div>
     <div class="kpi-card a-${openChats > 5 ? 'rose' : openChats > 0 ? 'amber' : 'green'}">
       <div class="kpi-label">오픈 채팅</div>
@@ -574,7 +650,7 @@ function renderKPIs(d, scoreObj) {
       </div>
     </div>
     <div class="kpi-card a-${slow8h > 10 ? 'rose' : slow8h > 0 ? 'amber' : 'green'}" style="cursor:pointer" onclick="openLongChatsPanel()">
-      <div class="kpi-label">8시간+ 미해결</div>
+      <div class="kpi-label" title="종결 채팅 중 해결시간이 8시간을 초과한 케이스 비율&#10;※ 현재 오픈 대기 중인 건수가 아닌, 종결 완료된 채팅 기준">8시간+ 해결시간 <span style="font-size:9px;opacity:.6">(종결 기준)</span></div>
       <div class="kpi-value">${fmt(slow8h)}<span class="unit">건</span></div>
       <div class="kpi-meta">
         <span class="data-badge badge-calc">계산값</span>
@@ -1057,16 +1133,23 @@ function renderLongDelayPanel(d) {
       <span class="lds-count">${slow8h}건</span>
       <span class="lds-label">8시간+ 해결 케이스</span>
     </div>
-    ${top5Html ? `<div class="long-delay-list-header">주요 케이스 TOP 5</div><div class="long-delay-list">${top5Html}</div><a href="#" class="ld-more-link" onclick="openLongChatsPanel();return false;">▸ 전체 목록 (${slow8h}건)</a>` : ''}`;
+    ${top5Html ? `<div class="long-delay-list-header">주요 케이스 TOP 5</div><div class="long-delay-list">${top5Html}</div><button class="ld-more-link" type="button" data-action="open-long-chats">▸ 전체 목록 (${slow8h}건) 보기</button>` : ''}`;
 }
 
 function openLongChatsPanel() {
-  if (!lastData || !lastData.longChats) return;
+  const src = lastFilteredData || lastData;
+  if (!src || !src.longChats) { showToast('표시할 장기 지연 데이터가 없습니다.', 'info'); return; }
   const modal = document.getElementById('longChatsModal');
   if (!modal) return;
   const mgrMap = {};
-  (lastData.managers || []).forEach((m) => { mgrMap[m.id] = m.name; });
-  const rows = lastData.longChats.map((c) => {
+  (src.managers || []).forEach((m) => { mgrMap[m.id] = m.name; });
+  // 모달 제목에 필터 적용 여부 표시
+  const titleEl = modal.querySelector('.modal-header span');
+  if (titleEl) {
+    const filterNote = activeFilterCount() > 0 ? ` (필터 적용 중 · ${src.longChats.length}건)` : ` (${src.longChats.length}건)`;
+    titleEl.textContent = `🐢 8시간 이상 미해결 채팅${filterNote}`;
+  }
+  const rows = src.longChats.map((c) => {
     const tagsHtml = c.tags.length ? c.tags.map((t) => `<span class="long-tag">#${t}</span>`).join(' ') : '<span style="color:var(--muted)">태그 없음</span>';
     const mgrName = c.assigneeId ? (mgrMap[c.assigneeId] || c.assigneeId) : '미배정';
     const totalMins = c.resolutionMin;
@@ -1084,10 +1167,11 @@ function openLongChatsPanel() {
       <td style="color:var(--muted)">${mgrName}</td>
     </tr>`;
   }).join('');
+  const tbody = rows || '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--muted)">데이터 없음</td></tr>';
   document.getElementById('longChatsBody').innerHTML = `
     <table style="width:100%;border-collapse:collapse">
       <thead><tr style="border-bottom:2px solid var(--border-soft)"><th style="text-align:left;padding:8px">일자</th><th style="text-align:left;padding:8px">소요시간</th><th style="text-align:left;padding:8px">태그</th><th style="text-align:left;padding:8px">담당자</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--muted)">데이터 없음</td></tr>'}</tbody>
+      <tbody>${tbody}</tbody>
     </table>`;
   modal.style.display = 'flex';
 }
@@ -1146,6 +1230,13 @@ function renderMgrRiskStrip(d) {
 /* ─── Manager Table — FRT 컬럼 추가 ─────────────────────────────────── */
 function agentComment(m, rank) {
   if (!m.count) return '<span class="agent-comment off">비활성</span>';
+  if (m.avgResolutionMin != null && m.avgResolutionMin > 600)
+    return '<span class="agent-comment warn" title="평균 해결시간 ' + m.avgResolutionMin + '분 — 10시간 초과">해결 지연</span>';
+  const cRatio = m.count > 0 ? (m.complaintHandled || 0) / m.count : 0;
+  if (cRatio > 0.20)
+    return '<span class="agent-comment warn" title="처리 건 중 컴플레인 ' + Math.round(cRatio*100) + '%">컴플레인 多</span>';
+  if (m.medianFrtMin != null && m.medianFrtMin > 60)
+    return '<span class="agent-comment warn" title="첫 응답 중앙값 ' + m.medianFrtMin + '분 초과">FRT 지연</span>';
   if (rank === 0 && m.operatorScore > 30 && m.touchScore > 50) return '<span class="agent-comment top">TOP 퍼포머</span>';
   if (m.operatorScore < 10 && m.touchScore < 20) return '<span class="agent-comment warn">코칭 필요</span>';
   if (m.touchScore < 20) return '<span class="agent-comment warn">응대 보완</span>';
@@ -1160,34 +1251,67 @@ function renderManagers(d) {
   if (!tbody) return;
   if (!managers.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted)">담당자 데이터 없음</td></tr>'; return; }
 
-  tbody.innerHTML = managers.map((m, i) => {
-    const isActive = m.count > 0;
-    const opColor = m.operatorScore > 30 ? 'var(--teal)' : m.operatorScore > 10 ? '#b45309' : 'var(--muted)';
-    const tcColor = m.touchScore > 50 ? 'var(--teal)' : m.touchScore > 20 ? '#b45309' : 'var(--muted)';
-    const rankClass = i === 0 ? 'r1' : i === 1 ? 'r2' : i === 2 ? 'r3' : 'rn';
-    const frtDisplay = isActive && m.medianFrtMin != null ? fmtMin(m.medianFrtMin) : '—';
-    const resDisplay = isActive && m.avgResolutionMin != null ? `${m.avgResolutionMin}분` : (isActive ? '—' : '—');
-    return `<tr style="${!isActive ? 'opacity:.55' : ''}">
-      <td style="text-align:center"><span class="agent-rank ${rankClass}">${isActive ? i + 1 : '—'}</span></td>
-      <td><div class="agent-name-cell"><div class="agent-avatar" style="${avatarStyle(i)}">${initials(m.name)}</div><span class="agent-name">${m.name.replace('오토스테이_','')}</span></div></td>
+  const activeMgrs = managers.filter(m => m.count > 0);
+  const inactiveMgrs = managers.filter(m => !m.count);
+
+  function buildMgrRows(list, rankOffset) {
+    return list.map((m, idx) => {
+      const i = rankOffset + idx;
+      const isActive = m.count > 0;
+      const rank = isActive ? rankOffset + idx : -1;
+      const opColor = m.operatorScore > 30 ? 'var(--teal)' : m.operatorScore > 10 ? '#b45309' : 'var(--muted)';
+      const tcColor = m.touchScore > 50 ? 'var(--teal)' : m.touchScore > 20 ? '#b45309' : 'var(--muted)';
+      const rankClass = rank === 0 ? 'r1' : rank === 1 ? 'r2' : rank === 2 ? 'r3' : 'rn';
+      const frtDisplay = isActive && m.medianFrtMin != null ? fmtMin(m.medianFrtMin) : '—';
+      const resDisplay = isActive && m.avgResolutionMin != null ? `${m.avgResolutionMin}분` : '—';
+      const comment = agentComment(m, rank);
+      return `<tr style="${!isActive ? 'opacity:.45' : ''}">
+        <td style="text-align:center"><span class="agent-rank ${rankClass}">${isActive ? rank + 1 : '—'}</span></td>
+        <td><div class="agent-name-cell"><div class="agent-avatar" style="${avatarStyle(i)}">${initials(m.name)}</div><span class="agent-name">${m.name.replace('오토스테이_','')}</span></div></td>
       <td class="num-r"><span style="font-weight:800">${isActive ? m.count + '건' : '—'}</span></td>
       <td class="num-r" style="font-size:11px;color:${m.medianFrtMin != null && m.medianFrtMin <= 5 ? 'var(--teal)' : m.medianFrtMin != null && m.medianFrtMin > 30 ? 'var(--amber)' : 'var(--text)'}">${frtDisplay}</td>
       <td class="num-r" style="font-size:11px">${resDisplay}</td>
       <td class="num-r"><div class="score-cell-fixed"><div class="score-bar-fixed"><div class="score-fill" style="width:${Math.min(m.operatorScore, 100)}%;background:${opColor}"></div></div><span class="score-num" style="color:${opColor}">${m.operatorScore}</span></div></td>
-      <td>${agentComment(m, i)}</td>
+      <td>${agentComment(m, rank)}</td>
     </tr>`;
-  }).join('');
+    }).join('');
+  }
+
+  // 활성 담당자만 우선 표시
+  tbody.innerHTML = buildMgrRows(activeMgrs, 0);
+
+  // 비활성 담당자 토글
+  if (inactiveMgrs.length > 0) {
+    const toggleTr = document.createElement('tr');
+    toggleTr.innerHTML = `<td colspan="8" style="text-align:center;padding:5px 0;border-top:1px solid var(--border)">
+      <button id="inactiveToggleBtn" style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 14px;font-size:11px;color:var(--muted);cursor:pointer">
+        ▾ 비활성 담당자 ${inactiveMgrs.length}명 보기
+      </button></td>`;
+    tbody.appendChild(toggleTr);
+    const inactiveTbody = document.createElement('tbody');
+    inactiveTbody.id = 'inactiveRowsGroup';
+    inactiveTbody.style.display = 'none';
+    inactiveTbody.innerHTML = buildMgrRows(inactiveMgrs, activeMgrs.length);
+    tbody.parentElement.appendChild(inactiveTbody);
+    document.getElementById('inactiveToggleBtn')?.addEventListener('click', function() {
+      const hidden = inactiveTbody.style.display === 'none';
+      inactiveTbody.style.display = hidden ? '' : 'none';
+      this.textContent = hidden
+        ? `▴ 비활성 담당자 ${inactiveMgrs.length}명 숨기기`
+        : `▾ 비활성 담당자 ${inactiveMgrs.length}명 보기`;
+    });
+  }
 
   // 사이드바
   const sidebar = document.getElementById('agentSidebar');
   if (sidebar) {
-    const activeMgrs = managers.filter((m) => m.count > 0);
-    const avgOp = activeMgrs.length ? Math.round(activeMgrs.reduce((s, m) => s + (m.operatorScore || 0), 0) / activeMgrs.length) : 0;
-    const fastMgr = activeMgrs.filter((m) => m.medianFrtMin != null).sort((a, b) => a.medianFrtMin - b.medianFrtMin)[0];
+    const activeMgrsForSidebar = managers.filter((m) => m.count > 0);
+    const avgOp = activeMgrsForSidebar.length ? Math.round(activeMgrsForSidebar.reduce((s, m) => s + (m.operatorScore || 0), 0) / activeMgrsForSidebar.length) : 0;
+    const fastMgr = activeMgrsForSidebar.filter((m) => m.medianFrtMin != null).sort((a, b) => a.medianFrtMin - b.medianFrtMin)[0];
     sidebar.innerHTML = `
       <div class="agent-stat-card">
         <div class="agent-stat-card-title">👥 인원</div>
-        <div class="agent-stat-row"><span class="agent-stat-label">활성</span><span class="agent-stat-value" style="color:var(--teal)">${activeMgrs.length}명</span></div>
+        <div class="agent-stat-row"><span class="agent-stat-label">활성</span><span class="agent-stat-value" style="color:var(--teal)">${activeMgrsForSidebar.length}명</span></div>
         <div class="agent-stat-row"><span class="agent-stat-label">총 처리</span><span class="agent-stat-value">${total.toLocaleString()}건</span></div>
       </div>
       <div class="agent-stat-card">
@@ -1315,12 +1439,14 @@ function renderGaugeGrid(d) {
   setG('quick', quickPct, quickPct >= 70 ? 'gauge-fill--good' : quickPct >= 50 ? 'gauge-fill--warn' : 'gauge-fill--danger');
   document.getElementById('gval-quick').textContent = quickPct + '%';
   document.getElementById('gsub-quick').textContent = `${quick}건 / ${total}건`;
+  document.getElementById('gsub-quick').title = `분모: 종결(closed) 채팅 ${total}건 기준 — 진행 중·미응답 제외`;
   setB('quick', quickPct >= 70 ? '양호' : quickPct >= 50 ? '주의' : '위험', quickPct >= 70 ? 'good' : quickPct >= 50 ? 'warn' : 'danger');
 
   // 8h+
   setG('slow', slowPct, slowPct <= 10 ? 'gauge-fill--good' : slowPct <= 25 ? 'gauge-fill--warn' : 'gauge-fill--danger');
   document.getElementById('gval-slow').textContent = slowPct + '%';
-  document.getElementById('gsub-slow').textContent = `${slow8h}건 장기`;
+  document.getElementById('gsub-slow').textContent = `${slow8h}건 종결 기준`;
+  document.getElementById('gsub-slow').title = `종결 완료된 채팅 중 해결시간 8시간 초과 건수 — 현재 오픈 대기 건수와 다름`;
   setB('slow', slowPct <= 10 ? '양호' : slowPct <= 25 ? '주의' : '위험', slowPct <= 10 ? 'good' : slowPct <= 25 ? 'warn' : 'danger');
 
   // FRT (B-1)
@@ -1368,7 +1494,7 @@ function renderWow(d) {
   const cls = w.delta > 0 ? 'wow-up' : w.delta < 0 ? 'wow-down' : 'wow-flat';
   el.innerHTML = `
     <div class="wow-card"><div class="wow-label">현 기간</div><div class="wow-val">${w.currentTotal}건</div></div>
-    <div class="wow-card"><div class="wow-label">직전 동기간</div><div class="wow-val muted">${w.previousTotal}건</div></div>
+    <div class="wow-card"><div class="wow-label">직전 동기간</div><div class="wow-val muted">${w.previousTotal}건</div>${w.previousTotal === 0 ? '<div class="wow-sub" style="color:var(--amber);font-size:9.5px">⚠ 직전 데이터 없음</div>' : ''}</div>
     <div class="wow-card ${cls}"><div class="wow-label">증감</div><div class="wow-val">${sign}${w.delta}건</div><div class="wow-sub">${deltaArrow(w.deltaPct)}</div></div>`;
 }
 
@@ -1389,7 +1515,7 @@ function renderSLA(d) {
       <div class="sla-meta"><div class="sla-label">${it.label}</div><div class="sla-target">목표 ${it.target}%</div></div>
       <div class="sla-bar-wrap"><div class="sla-bar-fill sla-${cls}" style="width:${Math.min(v.rate, 100)}%"></div><div class="sla-target-marker" style="left:${it.target}%"></div></div>
       <div class="sla-val sla-${cls}">${v.rate}%</div>
-      <div class="sla-count">${v.count}/${v.total}</div>
+      <div class="sla-count" title="분모: 종결(closed) 채팅 ${v.total}건 기준 · 진행 중(open) 제외 · ${it.label} 내 완료 ${v.count}건" style="cursor:help">${v.count}/${v.total} ⓘ</div>
       <span class="sla-status sla-${cls}">${v.rate >= it.target ? '준수' : v.rate >= it.target * 0.7 ? '근접' : '미달'}</span>
     </div>`;
   }).join('');
@@ -1777,8 +1903,8 @@ function scheduleRefresh() {
   refreshTimer = setTimeout(silentRefresh, 5 * 60 * 1000);
 }
 
-async function render() {
-  try {
+function render() {
+  return (async () => { try {
     setStep('lstep-api'); setProgress(20);
     const data = await fetchData();
     if (!data) return;
@@ -1796,107 +1922,239 @@ async function render() {
     const eb = document.getElementById('errBanner');
     if (eb) eb.style.display = 'none';
     scheduleRefresh();
-  } catch (err) {
-    console.error('Render error:', err);
-    const ov = document.getElementById('loadingOverlay');
-    if (ov) ov.style.display = 'none';
-    const eb = document.getElementById('errBanner');
-    if (eb) {
-      const lastOk = lastSuccessTime ? ` — 마지막 성공: ${lastSuccessTime.toLocaleString('ko-KR')}` : '';
-      eb.innerHTML = `<strong>데이터 로드 실패</strong>: ${err.message}${lastOk}`;
-      eb.style.display = 'block';
-    }
-    scheduleRefresh();
-  }
+  } catch (e) {
+    console.error('Render error:', e);
+    const eb2 = document.getElementById('errBanner');
+    if (eb2) { eb2.style.display = 'flex'; eb2.textContent = `데이터 로드 실패: ${e.message}`; }
+    const ov2 = document.getElementById('loadingOverlay');
+    if (ov2) { ov2.style.opacity = '0'; setTimeout(() => { ov2.style.display = 'none'; }, 350); }
+  }})();
 }
 
+/* ─── Silent Refresh (백그라운드 갱신) ──────────────────────────────── */
 async function silentRefresh() {
   try {
     const data = await fetchData();
     if (!data) return;
     lastData = data;
+    const scoreObj = computeHealthScore(data);
+    const insights = generateInsights(data, scoreObj);
     safeRender(() => updateBanner(data), 'banner.silent');
-    fullRender(data);
+    safeRender(() => renderHealthScore(scoreObj, data), 'healthScore.silent');
+    safeRender(() => renderHeroQuickStats(data, scoreObj), 'heroQuickStats.silent');
+    safeRender(() => renderHeroAction(data, scoreObj), 'heroAction.silent');
+    safeRender(() => renderKPIs(data, scoreObj), 'kpis.silent');
+    safeRender(() => renderAlertStrip(data, scoreObj), 'alertStrip.silent');
+    safeRender(() => renderInsights(insights), 'insights.silent');
+    safeRender(() => renderGaugeGrid(data), 'gaugeGrid.silent');
+    safeRender(() => renderTrend(data), 'trend.silent');
+    safeRender(() => renderHeatmap(data), 'heatmap.silent');
+    safeRender(() => renderTagBar(data), 'tagBar.silent');
+    safeRender(() => renderVOC(data), 'voc.silent');
+    safeRender(() => renderVocRiskSection(data), 'vocRisk.silent');
+    safeRender(() => renderTagRes(data), 'tagRes.silent');
+    safeRender(() => renderTagCooccur(data), 'tagCooccur.silent');
+    safeRender(() => renderComplaintCategory(data), 'complaintCat.silent');
+    safeRender(() => renderCategoryBars(data), 'categoryBars.silent');
+    safeRender(() => renderConcRisk(data), 'concRisk.silent');
+    safeRender(() => renderMgrRiskStrip(data), 'mgrRiskStrip.silent');
+    safeRender(() => renderManagers(data), 'managers.silent');
+    safeRender(() => renderMgrQuadrant(data), 'mgrQuad.silent');
+    safeRender(() => renderMgrFrtTable(data), 'mgrFrt.silent');
+    safeRender(() => renderChannel(data), 'channel.silent');
+    safeRender(() => renderResolution(data), 'resolution.silent');
+    safeRender(() => renderLongDelayPanel(data), 'longDelay.silent');
+    safeRender(() => renderBotsGroups(data), 'botsGroups.silent');
+    safeRender(() => renderWow(data), 'wow.silent');
+    safeRender(() => renderSLA(data), 'sla.silent');
+    safeRender(() => renderFcrPanel(data), 'fcrPanel.silent');
+    safeRender(() => renderHourLoad(data), 'hourLoad.silent');
+    safeRender(() => renderWeekdayLoad(data), 'weekdayLoad.silent');
+    safeRender(() => renderPercentile(data), 'percentile.silent');
+    safeRender(() => renderAging(data), 'aging.silent');
+    safeRender(() => renderSourcePerf(data), 'sourcePerf.silent');
+    safeRender(() => renderAnomaly(data), 'anomaly.silent');
+    safeRender(() => renderForecast(data), 'forecast.silent');
+    safeRender(() => renderComplaintTrend(data), 'complaintTrend.silent');
+    safeRender(() => renderDiagnostics(data), 'diagnostics.silent');
     const eb = document.getElementById('errBanner');
     if (eb) eb.style.display = 'none';
-  } catch (e) { console.warn('Silent refresh failed:', e); }
+  } catch (e) {
+    console.warn('Silent refresh failed:', e);
+  }
   scheduleRefresh();
 }
 
-/* ─── CSV Download ──────────────────────────────────────────────────── */
+/* ─── CSV Helpers ───────────────────────────────────────────────────── */
 function _triggerCSV(csvLines, filename) {
   const BOM = '﻿';
   const blob = new Blob([BOM + csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
   a.href = url; a.download = filename;
   document.body.appendChild(a); a.click();
   document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
-function downloadCSV() {
-  if (!lastData) return;
-  const dateStr = new Date().toLocaleString('ko-KR');
-  const lines = [`# [OPS] 채널톡 CS 대시보드 v4.0 — ${dateStr}`, ''];
-  // 담당자
-  const managers = (lastData.managers || []).filter((m) => !EXCLUDED_MANAGERS.includes(m.name));
-  lines.push('=== 담당자 성과 ===', '담당자명,처리건수,FRT평균,FRT P50,평균해결,P50,P90,컴플레인처리');
-  managers.forEach((m) => {
-    lines.push(`${m.name},${m.count},${m.avgFrtMin ?? ''},${m.medianFrtMin ?? ''},${m.avgResolutionMin ?? ''},${m.medianResolutionMin ?? ''},${m.p90ResolutionMin ?? ''},${m.complaintHandled ?? 0}`);
-  });
-  lines.push('');
-  // SLA
-  const s = lastData.slaStats || {};
-  lines.push('=== SLA 준수율 ===', 'SLA,준수율,건수');
-  lines.push(`30분,${s.sla30Min?.rate || 0}%,${s.sla30Min?.count || 0}/${s.sla30Min?.total || 0}`);
-  lines.push(`2시간,${s.sla2Hour?.rate || 0}%,${s.sla2Hour?.count || 0}/${s.sla2Hour?.total || 0}`);
-  lines.push(`8시간,${s.sla8Hour?.rate || 0}%,${s.sla8Hour?.count || 0}/${s.sla8Hour?.total || 0}`);
-  lines.push('');
-  // FCR
-  const f = lastData.fcrStats || {};
-  lines.push('=== FCR / 재오픈 ===', `1차해결률,${f.fcrRate || 0}%`, `재오픈건수,${f.reopenedCount || 0}`, `재오픈율,${f.reopenedRate || 0}%`);
-  lines.push('');
-  // 컴플레인 세분화
-  const c = lastData.complaintCategories || {};
-  lines.push('=== 컴플레인 세분화 ===', '카테고리,건수');
-  Object.entries(c).forEach(([k, v]) => lines.push(`${k},${v}`));
-  _triggerCSV(lines, `OPS-channeltalk-cs-v4-${new Date().toISOString().slice(0, 10)}.csv`);
+function _csvHeader() {
+  const dateStr  = new Date().toLocaleString('ko-KR');
+  const rangeStr = currentDays === 'all' ? '전체(최대 500건)' : `최근 ${currentDays}일`;
+  const total    = lastData?.summary?.totalChats ?? '?';
+  const filterInfo = filterState && filterState.size > 0 ? ` · 필터: ${[...filterState].join(', ')}` : '';
+  return [
+    `# 오토스테이 CS 대시보드 내보내기 — ${dateStr}`,
+    `# 기간: ${rangeStr} · 분석 채팅: ${total}건${filterInfo}`,
+    '',
+  ];
 }
 
-/* ─── Events ────────────────────────────────────────────────────────── */
+/* ─── CSV Download ──────────────────────────────────────────────────── */
+function downloadCSV() {
+  if (!lastData) { showToast('데이터 없음 — 먼저 대시보드를 로드하세요', 'warn'); return; }
+  const managers  = (lastData.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
+  const total     = lastData.summary.totalChats || 1;
+  const rb        = lastData.resolutionBuckets || {};
+  const rbTotal   = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
+  const tags      = lastData.tags || {};
+  const tagResStats  = lastData.tagResolutionStats || [];
+  const sourceStats  = lastData.sourceStats || [];
+  const aging        = lastData.agingBuckets || {};
+  const slaStats     = lastData.slaStats || {};
+
+  const mgrRows = managers.map((m, i) => {
+    const pct     = Math.round(m.count / total * 100);
+    const comment = agentComment(m, i).replace(/<[^>]*>/g, '');
+    return [m.name.replace('오토스테이_',''), m.count, `${pct}%`, m.operatorScore, m.touchScore,
+      m.avgFrtMin ?? '', m.medianFrtMin ?? '',
+      m.avgResolutionMin ?? '', m.medianResolutionMin ?? '', m.p90ResolutionMin ?? '',
+      m.complaintHandled ?? '', comment].join(',');
+  });
+
+  const rbRows  = Object.entries(rb).map(([k, v]) => `${k},${v},${Math.round(v / rbTotal * 100)}%`);
+  const tagRows = (tags.labels || []).map((lbl, i) => {
+    const cnt = tags.values[i]; const pct = Math.round(cnt / total * 100);
+    return `${lbl},${cnt},${pct}%,${pct >= 15 ? '위험' : pct >= 8 ? '주의' : '정상'}`;
+  });
+  const tagResRows = tagResStats.map(s => `${s.tag},${s.count},${s.avg ?? ''},${s.median ?? ''},${s.p90 ?? ''}`);
+  const srcRows    = sourceStats.filter(s => s.count > 0)
+    .map(s => `${s.source},${s.count},${s.avgResolutionMin ?? ''},${s.medianResolutionMin ?? ''},${s.p90ResolutionMin ?? ''}`);
+  const agingRows = [
+    `<8h,${aging.lt8h || 0}`, `8-24h,${aging.h8_24 || 0}`,
+    `1-3d,${aging.d1_3 || 0}`, `3-7d,${aging.d3_7 || 0}`, `7d+,${aging.d7plus || 0}`,
+  ];
+  const slaRows = [
+    `30분 SLA,${slaStats.sla30Min?.rate || 0}%,${slaStats.sla30Min?.count || 0}/${slaStats.sla30Min?.total || 0}`,
+    `2시간 SLA,${slaStats.sla2Hour?.rate || 0}%,${slaStats.sla2Hour?.count || 0}/${slaStats.sla2Hour?.total || 0}`,
+    `8시간 SLA,${slaStats.sla8Hour?.rate || 0}%,${slaStats.sla8Hour?.count || 0}/${slaStats.sla8Hour?.total || 0}`,
+  ];
+
+  // 컴플레인 추이 (있으면)
+  const ct = lastData.complaintTrend;
+  const ctRows = ct?.labels?.length
+    ? ct.labels.map((lbl, i) => `${lbl},${ct.complaints[i] || 0},${ct.total[i] || 0},${Math.round((ct.complaints[i] || 0) / (ct.total[i] || 1) * 100)}%`)
+    : [];
+
+  const lines = [
+    ..._csvHeader(),
+    '=== SLA 준수율 ===',
+    'SLA,준수율,건수',
+    ...slaRows,
+    '',
+    '=== 담당자 성과 ===',
+    '담당자명,처리,비중,운영점수,응대점수,FRT평균(분),FRT중앙값(분),해결평균(분),해결중앙값(분),해결P90(분),컴플레인,코멘트',
+    ...mgrRows,
+    '',
+    '=== 해결시간 분포 ===',
+    '구간,건수,비율',
+    ...rbRows,
+    '',
+    '=== 에이징 파이프라인 ===',
+    '구간,건수',
+    ...agingRows,
+    '',
+    '=== VOC 태그 ===',
+    '태그,건수,비율,리스크',
+    ...tagRows,
+    '',
+    '=== 태그별 해결시간 ===',
+    '태그,건수,평균(분),P50(분),P90(분)',
+    ...tagResRows,
+    '',
+    '=== 채널별 성능 ===',
+    '채널,건수,평균(분),P50(분),P90(분)',
+    ...srcRows,
+    ...(ctRows.length ? ['', '=== 일별 컴플레인 추이 ===', '날짜,컴플레인,전체,비율', ...ctRows] : []),
+  ];
+
+  const rangeStr = currentDays === 'all' ? 'all' : `${currentDays}d`;
+  const filterSuffix = filterState?.size > 0 ? `-filtered` : '';
+  _triggerCSV(lines, `OPS-channeltalk-${rangeStr}${filterSuffix}-${new Date().toISOString().slice(0,10)}.csv`);
+  showToast('CSV 다운로드 완료', 'success');
+}
+
+/* ─── Collapsibles ──────────────────────────────────────────────────── */
+function initCollapsibles() {
+  document.querySelectorAll('.collapse-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const content = document.getElementById(btn.dataset.target);
+      if (!content) return;
+      const isHidden = content.classList.toggle('hidden');
+      btn.classList.toggle('collapsed', isHidden);
+      btn.textContent = isHidden ? '▸' : '▾';
+    });
+  });
+}
+
+/* ─── Events / DOMContentLoaded ─────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
+  // 새로고침 버튼
   const btn = document.getElementById('refreshBtn');
   if (btn) btn.addEventListener('click', () => triggerFullReload());
-  document.querySelectorAll('.range-tab').forEach((tabBtn) => {
+
+  // 기간 탭
+  document.querySelectorAll('.range-tab').forEach(tabBtn => {
     tabBtn.addEventListener('click', () => {
-      const range = tabBtn.dataset.days;
-      document.querySelectorAll('.range-tab').forEach((t) => t.classList.remove('active'));
+      const range = tabBtn.dataset.days || tabBtn.dataset.range;
+      document.querySelectorAll('.range-tab').forEach(t => t.classList.remove('active'));
       tabBtn.classList.add('active');
       currentDays = range === 'all' ? 'all' : parseInt(range);
       triggerFullReload();
     });
   });
+
+  // CSV 다운로드
   const csvBtn = document.getElementById('csvDownloadBtn');
   if (csvBtn) csvBtn.addEventListener('click', downloadCSV);
+
+  // 롱챗 모달 배경 클릭 닫기
   const modal = document.getElementById('longChatsModal');
-  if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) closeLongChatsPanel(); });
-  initTabs();
-  initFilterDrawer();
+  if (modal) modal.addEventListener('click', e => { if (e.target === modal) closeLongChatsPanel(); });
+
+  // data-action 이벤트 위임
+  document.addEventListener('click', e => {
+    const el = e.target.closest('[data-action]');
+    if (!el) return;
+    const action = el.dataset.action;
+    if (action === 'open-long-chats') { openLongChatsPanel(); return; }
+    if (action === 'trigger-reload') { triggerFullReload(); return; }
+  });
+
+  initCollapsibles();
 });
 
+/* ─── Full Reload ───────────────────────────────────────────────────── */
 function triggerFullReload() {
   const ov = document.getElementById('loadingOverlay');
   if (ov) { ov.style.opacity = '1'; ov.style.display = 'flex'; }
-  ['lstep-conn', 'lstep-api', 'lstep-charts', 'lstep-done'].forEach((id) => {
+  const loadText = document.getElementById('loadText');
+  if (loadText) loadText.textContent = '채널톡 데이터 수집 중…';
+  ['lstep-conn','lstep-api','lstep-charts','lstep-done'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.classList.remove('active', 'done');
+    if (el) el.classList.remove('active','done');
   });
-  const c = document.getElementById('lstep-conn');
-  if (c) c.classList.add('done');
+  const connStep = document.getElementById('lstep-conn');
+  if (connStep) connStep.classList.add('done');
   setProgress(5);
-  // 필터 초기화
-  filterState.managers.clear(); filterState.tags.clear(); filterState.sources.clear();
-  updateFilterBadges();
   render();
 }
 
