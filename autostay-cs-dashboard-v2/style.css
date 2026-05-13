@@ -896,6 +896,21 @@ canvas { display: block; }
 .action-check  { background: #f3f4f6; color: var(--muted); border: 1px solid var(--border-soft); }
 .action-ok     { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
 
+/* VOC 위험도 범례 */
+.vrc-legend {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin: 0 0 12px; padding: 6px 10px;
+  background: var(--bg2); border-radius: 7px;
+  border: 1px solid var(--border-soft);
+}
+.vrc-l-item {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 10.5px; color: var(--muted); font-weight: 600;
+}
+.vrc-l-dot {
+  width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+}
+
 .voc-list {
   display: flex; flex-direction: column; gap: 0;
 }
@@ -2058,15 +2073,16 @@ canvas { display: block; }
 }
 .filter-drawer {
   background: var(--surface); border-bottom: 1px solid var(--border);
-  position: sticky; top: 50px; z-index: 600;
-  box-shadow: 0 4px 16px rgba(0,0,0,.1);
+  /* sticky는 부모 toolbar-strip이 처리 — 자식에서 중첩 sticky 제거 */
   overflow: hidden;
   max-height: 0;
-  transition: max-height .28s cubic-bezier(.4,0,.2,1), box-shadow .2s;
+  transition: max-height .32s cubic-bezier(.4,0,.2,1);
+  will-change: max-height;
 }
 .filter-drawer.is-open {
-  max-height: 400px;
-  box-shadow: 0 4px 16px rgba(0,0,0,.1);
+  max-height: 420px;
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 4px 16px rgba(0,0,0,.08);
 }
 .filter-drawer-inner {
   max-width: 1400px; margin: 0 auto; padding: 16px 24px;
@@ -2135,7 +2151,7 @@ canvas { display: block; }
   transition: all .15s; cursor: pointer;
 }
 .cg-tab:hover { background: var(--surface); color: var(--text); }
-.cg-tab.active { background: var(--navy); color: #fff; }
+.cg-tab.active { background: var(--navy); color: #fff; font-weight: 800; box-shadow: 0 2px 8px rgba(15,30,80,.25); border-color: var(--navy); }
 .cg-tab-pane { display: none; }
 .cg-tab-pane.active { display: block; animation: fadeInPane .25s; min-height: 320px; }
 @keyframes fadeInPane {
@@ -2640,18 +2656,20 @@ ion: none;
 /* ACTION QUEUE (운영 액션 큐 헤더)                                            */
 /* ══════════════════════════════════════════════════════════════════════════ */
 .aq-header {
-  font-size: 12px; font-weight: 800; color: #fff !important;
-  padding: 6px 0 8px;
+  font-size: 12.5px; font-weight: 900; color: #fff !important;
+  padding: 7px 10px 9px;
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-  border-bottom: 1px solid rgba(255,255,255,.15);
-  margin-bottom: 6px; letter-spacing: -.01em;
-  text-shadow: 0 1px 3px rgba(0,0,0,.4);
+  border-bottom: 1px solid rgba(255,255,255,.2);
+  margin-bottom: 8px; letter-spacing: -.01em;
+  background: rgba(0,0,0,.18); border-radius: 8px 8px 0 0; margin: -2px -4px 8px;
+  text-shadow: 0 1px 4px rgba(0,0,0,.6);
 }
 .aq-header .aq-sep { color: rgba(255,255,255,.45); margin: 0 2px; font-weight: 400; }
 .aq-total {
-  background: rgba(255,255,255,.18); color: #fff;
-  border-radius: 10px; padding: 1px 8px; font-size: 11px;
+  background: rgba(255,255,255,.28); color: #fff;
+  border-radius: 10px; padding: 2px 10px; font-size: 11px;
   font-weight: 800; letter-spacing: 0; flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,.2);
 }
 .aq-header.aq-ok { color: #4ade80 !important; text-shadow: none; }
 .aq-urgent {
@@ -2847,3 +2865,21 @@ ion: none;
 .ct-val.danger { color: var(--rose); }
 .ct-val.warn   { color: var(--amber); }
 .ct-val.good   { color: var(--teal-d); }
+
+/* Custom tooltip element (#__ctip) */
+#__ctip {
+  position: fixed !important;
+  z-index: 99990 !important;
+  background: #1e293b !important;
+  color: #f8fafc !important;
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+  padding: 7px 11px !important;
+  border-radius: 7px !important;
+  max-width: 300px !important;
+  pointer-events: none !important;
+  box-shadow: 0 4px 18px rgba(0,0,0,.35) !important;
+  white-space: pre-wrap !important;
+  border: 1px solid rgba(255,255,255,.08) !important;
+  word-break: keep-all !important;
+}

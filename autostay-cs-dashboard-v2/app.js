@@ -505,7 +505,7 @@ function generateInsights(d, scoreObj) {
   else if (complaintPct >= 8) insights.push({ type: 'warn', icon: '주의', text: `컴플레인 ${complaintPct}% — 모니터링` });
   if (managers.length > 0) {
     const topPct = Math.round((managers[0].count || 0) / total * 100);
-    const topName = managers[0].name.replace('오토스테이_','');
+    const topName = dispMgrName(managers[0].name);
     if (topPct > 80) insights.push({ type: 'danger', icon: '위험', text: `${topName} 처리 집중도 ${topPct}%` });
     else if (topPct > 60) insights.push({ type: 'warn', icon: '주의', text: `${topName} 처리 집중도 ${topPct}%` });
   }
@@ -547,7 +547,7 @@ function renderAlertStrip(d, scoreObj) {
   const managers = (d.managers || []).filter((m) => !EXCLUDED_MANAGERS.includes(m.name));
   if (managers.length > 0) {
     const topPct = Math.round((managers[0].count || 0) / total * 100);
-    if (topPct > 70) alerts.push({ level: 'danger', icon: '과부하', title: '담당자 과부하', body: `${managers[0].name}이(가) 전체 ${topPct}%` });
+    if (topPct > 70) alerts.push({ level: 'danger', icon: '과부하', title: '담당자 과부하', body: `${dispMgrName(managers[0].name)} · 전체 ${topPct}%` });
   }
   let complaintsAS, complaintBaseAS;
   if (d.complaintTrend?.complaints?.length > 0) {
@@ -928,7 +928,8 @@ function renderVocRiskSection(d) {
     const ctx = VOC_CONTEXTS[lbl] || '관련 문의';
     return { lbl, cnt, pct, action, ctx, badge, riskScore: lbl.includes('컴플레인') ? 100 : pct };
   }).sort((a, b) => b.riskScore - a.riskScore);
-  el.innerHTML = items.map((it) => `
+  const legendHtml = `<div class="vrc-legend"><span class="vrc-l-item"><span class="vrc-l-dot" style="background:var(--rose)"></span>HIGH ≥15%·컴플레인</span><span class="vrc-l-item"><span class="vrc-l-dot" style="background:var(--amber)"></span>MID ≥8%</span><span class="vrc-l-item"><span class="vrc-l-dot" style="background:var(--teal)"></span>LOW 정상</span></div>`;
+  el.innerHTML = legendHtml + items.map((it) => `
     <div class="voc-risk-card ${it.pct >= 15 || it.lbl.includes('컴플레인') ? 'vrc-high' : it.pct >= 8 ? 'vrc-mid' : 'vrc-low'}">
       <div class="vrc-header"><span class="vrc-tag">#${it.lbl}</span>${it.badge}</div>
       <div class="vrc-meta">${it.ctx}</div>
@@ -1100,7 +1101,22 @@ function renderCategoryBars(d) {
       <div class="cat-parent-count">${cat.count}건<span class="cat-parent-pct"> ${Math.round(cat.count / total * 100)}%</span></div>
     </div>
     ${hasChildren ? `<div class="cat-children-wrap" id="${catId}" style="display:none">${childHtml}</div>` : childHtml}`;
-  }).join('') + '<div class="cat-hierarchy-note">ⓘ 태그 기반 자동 분류입니다. 컴플레인 하위 항목은 세부 태그 집계 결과이며, 상위 합계에 포함됩니다.</div>';
+  }).join('') + '<div class="cat-hierarchy-note">ⓘ 태그명 기반 자동 분류 — <strong>컴플레인</strong>: "컴플레인" 포함 태그 / <strong>구독 관련</strong>: "구독"·"정기구독" 포함 / <strong>이용 문의</strong>: "이용"·"단순문의" 포함 / 나머지 기타. 색상: <span style="color:var(--rose)">■</span>위험(≥15%) <span style="color:var(--amber)">■</span>주의(≥8%) <span style="color:var(--teal)">■</span>정상</div>';
+}
+
+/* ─── ChannelTalk Link Helper ─────────────────────────────────────────── */
+function openChannelTalkWithGuide(url) {
+  if (!url || url === '#') {
+    showToast('⚠ 채널톡 URL을 설정하세요 (CHANNEL_TALK_BASE_URL)', 'warn', 4000);
+    return;
+  }
+  const w = window.open(url, '_blank');
+  if (!w) {
+    showToast('팝업이 차단되었습니다 — 브라우저에서 팝업 허용 후 다시 시도하세요', 'warn', 5000);
+    return;
+  }
+  // 2초 후 로그인 안내 (세션 없을 수 있음)
+  setTimeout(() => showToast('채널톡 로그인 세션이 필요합니다 (desk.channel.io)', 'info', 4000), 1800);
 }
 
 /* ─── Category Toggle ──────────────────────────────────────────────────── */
@@ -1218,7 +1234,7 @@ function renderLongDelayPanel(d) {
     const days = Math.floor(hrs / 24);
     const timeStr = days >= 1 ? `${days}일 ${hrs % 24}시간` : `${hrs}시간`;
     const rawMgr4 = c.assigneeId ? (mgrMap[c.assigneeId] || c.assigneeId) : null;
-    const mgrName = rawMgr4 ? rawMgr4.replace('오토스테이_','') : '미배정';
+    const mgrName = rawMgr4 ? dispMgrName(rawMgr4) : '미배정';
     const timeColor = (c.resolutionMin || 0) > 2880 ? 'var(--rose)' : 'var(--amber)';
     const safeTags4 = Array.isArray(c.tags) ? c.tags : [];
     const tagsStr = safeTags4.slice(0, 2).map((t) => `#${t}`).join(' ') || '태그없음';
@@ -1236,7 +1252,7 @@ function renderLongDelayPanel(d) {
       <span class="lds-label">8시간+ 해결 케이스</span>
     </div>
     ${top5Html ? `<div class="long-delay-list-header">주요 케이스 TOP 5</div><div class="long-delay-list">${top5Html}</div>` : ''}
-    <button class="ld-more-link" type="button" data-action="open-long-chats">▸ 전체 목록 (${slow8h}건) 보기</button>`;
+    <button class="ld-more-link" type="button" data-action="open-long-chats" onclick="openLongChatsPanel()">▸ 전체 목록 (${slow8h}건) 보기</button>`;
 }
 
 function openLongChatsPanel() {
@@ -1709,7 +1725,7 @@ function renderGaugeGrid(d) {
   const topPct = topMgr ? Math.round(topMgr.count / mgrTotal * 100) : 0;
   setG('conc', topPct, topPct <= 40 ? 'gauge-fill--good' : topPct <= 60 ? 'gauge-fill--warn' : 'gauge-fill--danger');
   document.getElementById('gval-conc').textContent = topPct + '%';
-  document.getElementById('gsub-conc').textContent = topMgr ? `${dispMgrName(topMgr.name)} · ${topMgr.count}건 처리 · 전체 ${topPct}%` : '—';
+  document.getElementById('gsub-conc').textContent = topMgr ? `${dispMgrName(topMgr.name)} ${topMgr.count}건 · ${topPct}% · ${topPct > 70 ? '편중 주의' : topPct > 50 ? '모니터링' : '분산 양호'}` : '—';
   setB('conc', topPct <= 40 ? '양호' : topPct <= 60 ? '주의' : '위험', topPct <= 40 ? 'good' : topPct <= 60 ? 'warn' : 'danger');
 }
 
@@ -2140,21 +2156,24 @@ function initFilterDrawer() {
   const closeBtn = document.getElementById('filterCloseBtn');
   const clearBtn = document.getElementById('filterClearBtn');
   function openDrawer() {
-    if (!lastData) return; // 데이터 로드 전 클릭 방지
+    if (!lastData) return;
+    drawer.style.removeProperty('display'); // display:none 인라인 스타일 초기화
     drawer.style.display = 'block';
-    // double-rAF: display:block 반영 후 is-open 클래스 추가해야 transition 동작
-    requestAnimationFrame(() => requestAnimationFrame(() => drawer.classList.add('is-open')));
-    renderFilterDrawer(lastData);
+    // 단일 rAF: max-height 0→420px 트랜지션
+    requestAnimationFrame(() => {
+      drawer.classList.add('is-open');
+      renderFilterDrawer(lastData);
+    });
   }
   function closeDrawer() {
     drawer.classList.remove('is-open');
-    // transition 끝난 뒤 display:none (접근성) + 350ms 폴백
-    const onEnd = () => {
-      if (!drawer.classList.contains('is-open')) drawer.style.display = 'none';
-    };
-    drawer.addEventListener('transitionend', onEnd, { once: true });
-    setTimeout(onEnd, 350);
+    // 트랜지션 완료 후 최소화 (display:none 대신 max-height로 충분)
+    setTimeout(() => {
+      if (!drawer.classList.contains('is-open')) drawer.style.display = '';
+    }, 360);
   }
+  // 드로어 초기 표시 상태 확보 (max-height:0으로 시각적 숨김)
+  drawer.style.display = 'block';
   if (filterBtn) filterBtn.onclick = () => {
     if (drawer.classList.contains('is-open')) closeDrawer();
     else openDrawer();
@@ -2264,7 +2283,7 @@ function render() {
     setStep('lstep-charts', true); setStep('lstep-done', true);
     const hhmm = _nowHHMM();
     if (data.diagnostics?.cacheHit) {
-      _setRefreshStatus('캐시 응답 · ' + hhmm, 'cache');
+      _setRefreshStatus('기간 내 동일 집계 (캐시) · ' + hhmm, 'cache');
     } else {
       _setRefreshStatus('갱신 완료 · ' + hhmm, 'ok');
     }
@@ -2334,7 +2353,7 @@ async function silentRefresh() {
     safeRender(() => renderDiagnostics(data), 'diagnostics.silent');
     const hhmm = _nowHHMM();
     if (data.diagnostics?.cacheHit) {
-      _setRefreshStatus('캐시 응답 · ' + hhmm, 'cache');
+      _setRefreshStatus('기간 내 동일 집계 (캐시) · ' + hhmm, 'cache');
     } else {
       _setRefreshStatus('갱신 완료 · ' + hhmm, 'ok');
     }
@@ -2483,6 +2502,9 @@ document.addEventListener('DOMContentLoaded', () => {
       document.querySelectorAll('.range-tab').forEach(t => t.classList.remove('active'));
       tabBtn.classList.add('active');
       currentDays = range === 'all' ? 'all' : parseInt(range);
+      // 기간 변경 시 집계 기준 안내 toast
+      const rangeLabel = range === 'all' ? '전체 기간 (최대 500건)' : `최근 ${range}일`;
+      showToast(`📅 ${rangeLabel} 기준 · 채널톡 API 집계 · 5분 캐시 적용`, 'info', 3200);
       triggerFullReload();
     });
   });
@@ -2533,19 +2555,29 @@ function initTooltips() {
       el.removeAttribute('title');
     }
   }
+  let _hideTimer = null;
   function showTip(el) {
     suppressNativeTitle(el);
     const msg = getTipMsg(el);
     if (!msg) return;
+    if (_hideTimer) { clearTimeout(_hideTimer); _hideTimer = null; }
     activeTarget = el;
     tipEl.textContent = msg;
     tipEl.style.display = 'block';
-    requestAnimationFrame(() => { posTip(el); tipEl.style.opacity = '1'; });
+    tipEl.style.opacity = '0';
+    // double rAF ensures layout is complete before measuring offsetWidth
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      posTip(el);
+      tipEl.style.opacity = '1';
+    }));
   }
   function hideTip() {
-    tipEl.style.opacity = '0';
-    setTimeout(() => { if (tipEl.style.opacity === '0') tipEl.style.display = 'none'; }, 160);
-    activeTarget = null;
+    _hideTimer = setTimeout(() => {
+      tipEl.style.opacity = '0';
+      setTimeout(() => { if (tipEl.style.opacity === '0') tipEl.style.display = 'none'; }, 160);
+      activeTarget = null;
+      _hideTimer = null;
+    }, 80); // 80ms debounce prevents flicker on element boundary
   }
   function posTip(el) {
     const r = el.getBoundingClientRect();
