@@ -370,6 +370,7 @@
       </div>
       <div id="mgr-conc" class="cg-tab-pane">
         <div id="concRiskPanel" class="conc-risk-panel"></div>
+        <div id="concRiskInterp" class="interp-note"></div>
         <div id="concAlert" class="conc-alert" style="display:none"></div>
       </div>
       <div id="mgr-frt" class="cg-tab-pane">
@@ -383,6 +384,7 @@
       <div id="resSummary" class="res-summary"></div>
       <div id="resList" class="res-list"></div>
       <div id="avgResNote" class="avg-res-note"></div>
+      <div id="resInterpNote" class="interp-note"></div>
     </div>
 
     <div class="cg-panel col-6">
@@ -512,6 +514,7 @@
       </div>
       <div class="cg-chart-wrap" style="height:200px"><canvas id="complaintTrendChart"></canvas></div>
       <div id="complaintTrendKV" class="complaint-trend-kv"></div>
+      <div id="complaintTrendInterp" class="interp-note"></div>
     </div>
 
     <!-- 진단 (col-12) -->
@@ -524,11 +527,22 @@
     </div>
   </section>
 
+  <!-- 컴플레인 분석 모달 -->
+  <div id="complaintModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span>🔴 컴플레인 분석</span>
+        <button class="modal-close" onclick="closeComplaintPanel()">✕</button>
+      </div>
+      <div id="complaintBody" class="modal-body"></div>
+    </div>
+  </div>
+
   <!-- 장기 채팅 모달 -->
   <div id="longChatsModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true">
     <div class="modal-box">
       <div class="modal-header">
-        <span>�        <span>🐢 8시간 이상 미해결 채팅</span>
+        <span>🐢 8시간+ 해결 지연 채팅</span>
         <button class="modal-close" onclick="document.getElementById('longChatsModal').style.display='none'">✕</button>
       </div>
       <div id="longChatsBody" class="modal-body"></div>

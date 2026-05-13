@@ -734,7 +734,7 @@ canvas { display: block; }
 .heatmap {
   display: grid;
   grid-template-columns: 28px repeat(6, 1fr);
-  gap: 4px;
+  gap: 6px;
   font-size: 11px;
   min-width: 0;
 }
@@ -745,21 +745,22 @@ canvas { display: block; }
 .hm-row-label {
   font-size: 11px; font-weight: 700; color: var(--text);
   display: flex; align-items: center; justify-content: center;
-  min-height: 42px;
+  min-height: 52px;
 }
 .hm-cell {
-  height: 42px; border-radius: 7px; font-size: 11px; font-weight: 600;
+  height: 52px; border-radius: 8px; font-size: 11.5px; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
-  color: rgba(0,0,0,.55); cursor: default;
+  color: rgba(0,0,0,.6); cursor: default;
   transition: transform .12s, box-shadow .12s;
 }
 .hm-cell:hover { transform: scale(1.06); z-index: 2; box-shadow: 0 2px 10px rgba(0,0,0,.2); }
 @media (max-width: 700px) {
-  .heatmap { grid-template-columns: 24px repeat(6, 1fr); gap: 3px; }
-  .hm-cell { height: 36px; font-size: 10px; }
+  .heatmap-scroll-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .heatmap { grid-template-columns: 24px repeat(6, minmax(44px,1fr)); gap: 4px; min-width: 340px; }
+  .hm-cell { height: 44px; font-size: 10px; }
   .hm-head { font-size: 8px; }
 }
-.hm-0 { background: var(--bg2); }
+.hm-0 { background: var(--bg2); opacity: 0.38; }
 .hm-1 { background: #a7f3d0; }
 .hm-2 { background: #34d399; }
 .hm-3 { background: #10b981; color: #fff; }
@@ -1221,6 +1222,48 @@ canvas { display: block; }
 /* ══════════════════════════════════════════════════════════════════════════ */
 /* CATEGORY BARS                                                              */
 /* ══════════════════════════════════════════════════════════════════════════ */
+/* 카테고리 계층 구조 */
+.cat-parent-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 0 4px; border-bottom: 1px solid var(--border-soft);
+  margin-bottom: 4px;
+}
+.cat-parent-label {
+  font-size: 12px; font-weight: 800; color: var(--text); min-width: 120px;
+}
+.cat-parent-count {
+  font-size: 12px; font-weight: 800; color: var(--text);
+  font-variant-numeric: tabular-nums; flex-shrink: 0;
+}
+.cat-parent-pct {
+  font-size: 10px; color: var(--muted); margin-left: 2px;
+}
+.cat-parent-bar-wrap {
+  flex: 1; height: 8px; background: var(--border-soft);
+  border-radius: 4px; overflow: hidden;
+}
+.cat-parent-bar { height: 100%; border-radius: 4px; transition: width .4s; }
+.cat-children { margin-bottom: 8px; }
+.cat-child-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 3px 0 3px 16px;
+}
+.cat-child-label {
+  font-size: 10.5px; color: var(--muted); min-width: 110px; font-weight: 600;
+}
+.cat-child-count { font-size: 10.5px; color: var(--text); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.cat-child-pct { font-size: 9.5px; color: var(--muted); margin-left: 2px; }
+.cat-child-bar-wrap {
+  flex: 1; height: 5px; background: var(--border-soft);
+  border-radius: 3px; overflow: hidden;
+}
+.cat-child-bar { height: 100%; border-radius: 3px; opacity: 0.7; transition: width .4s; }
+.cat-hierarchy-note {
+  font-size: 10px; color: var(--muted); margin-top: 8px;
+  padding: 6px 8px; background: var(--bg2); border-radius: 6px;
+  line-height: 1.5;
+}
+
 .category-bars { display: flex; flex-direction: column; gap: 5px; }
 .cat-bar-row {
   display: grid; grid-template-columns: 110px 1fr 50px 44px;
@@ -1367,6 +1410,55 @@ canvas { display: block; }
 /* ══════════════════════════════════════════════════════════════════════════ */
 /* HEATMAP PEAK SUMMARY                                                       */
 /* ══════════════════════════════════════════════════════════════════════════ */
+/* ── 피크 집중 시간대 별도 카드 ── */
+.hm-peak-cards {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  margin-top: 16px;
+}
+@media (max-width: 600px) {
+  .hm-peak-cards { grid-template-columns: 1fr; }
+}
+.hm-peak-card {
+  background: var(--bg2); border-radius: 10px;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 4px;
+  border: 1.5px solid var(--border-soft);
+  position: relative; overflow: hidden;
+}
+.hm-peak-card.rank-1 { border-color: #b45309; }
+.hm-peak-card.rank-2 { border-color: #6b7280; }
+.hm-peak-card.rank-3 { border-color: #0f766e; }
+.hm-peak-card-rank {
+  font-size: 9px; font-weight: 900; letter-spacing: .06em;
+  text-transform: uppercase; margin-bottom: 2px;
+}
+.hm-peak-card.rank-1 .hm-peak-card-rank { color: #b45309; }
+.hm-peak-card.rank-2 .hm-peak-card-rank { color: #6b7280; }
+.hm-peak-card.rank-3 .hm-peak-card-rank { color: #0f766e; }
+.hm-peak-card-time {
+  font-size: 14px; font-weight: 800; color: var(--text); line-height: 1.2;
+}
+.hm-peak-card-label {
+  font-size: 10px; color: var(--muted); font-weight: 600;
+}
+.hm-peak-card-count {
+  font-size: 11px; font-weight: 800; color: var(--teal-d);
+  margin-top: 4px;
+}
+.hm-peak-card-bar {
+  height: 4px; background: var(--border-soft); border-radius: 2px;
+  margin-top: 6px; overflow: hidden;
+}
+.hm-peak-card-bar-fill {
+  height: 100%; border-radius: 2px;
+  background: linear-gradient(90deg, var(--teal-d), var(--teal));
+  transition: width .5s ease;
+}
+.hm-peak-day-note {
+  margin-top: 12px; font-size: 10.5px; color: var(--muted);
+  border-top: 1px solid var(--border-soft); padding-top: 8px;
+}
+.hm-peak-day-note strong { color: var(--text); }
+
 .hm-peak-summary {
   margin-top: 12px; padding: 10px 14px;
   background: linear-gradient(135deg, #f0fdf9, #ecfeff);
@@ -1837,6 +1929,7 @@ canvas { display: block; }
 .hac-body { display: flex; flex-direction: column; gap: 8px; }
 .hac-loading { text-align: center; color: rgba(255,255,255,.4); font-size: 12px; padding: 16px 0; }
 .hac-row {
+  cursor: pointer;
   display: flex; align-items: center; gap: 10px;
   padding: 9px 11px; border-radius: 9px;
   background: rgba(255,255,255,.05);
@@ -1859,6 +1952,25 @@ canvas { display: block; }
 .hac-row-body { flex: 1; min-width: 0; }
 .hac-row-title { font-size: 12.5px; font-weight: 700; color: #fff; line-height: 1.3; }
 .hac-row-sub { font-size: 10.5px; color: rgba(255,255,255,.55); margin-top: 2px; line-height: 1.3; }
+
+/* Action queue CTA */
+.hac-row-cta {
+  font-size: 10.5px;
+  color: rgba(255,255,255,.65);
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  transition: color .15s;
+}
+.hac-row:hover .hac-row-cta { color: rgba(255,255,255,.95); }
+.hac-arrow {
+  display: inline-block;
+  font-size: 12px;
+  transition: transform .15s;
+}
+.hac-row:hover .hac-arrow { transform: translateX(3px); }
+
 .hac-row-metric {
   font-size: 13px; font-weight: 800; color: #fff;
   font-variant-numeric: tabular-nums; flex-shrink: 0;
@@ -2509,13 +2621,19 @@ ion: none;
 /* ACTION QUEUE (운영 액션 큐 헤더)                                            */
 /* ══════════════════════════════════════════════════════════════════════════ */
 .aq-header {
-  font-size: 12px; font-weight: 800; color: #fff;
-  padding: 4px 0 8px;
+  font-size: 12px; font-weight: 800; color: #fff !important;
+  padding: 6px 0 8px;
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
   border-bottom: 1px solid rgba(255,255,255,.15);
   margin-bottom: 6px; letter-spacing: -.01em;
+  text-shadow: 0 1px 3px rgba(0,0,0,.4);
 }
-.aq-header.aq-ok { color: #4ade80; }
+.aq-header .aq-total {
+  background: rgba(255,255,255,.18); color: #fff;
+  border-radius: 10px; padding: 1px 8px; font-size: 11px;
+  font-weight: 800; letter-spacing: 0; flex-shrink: 0;
+}
+.aq-header.aq-ok { color: #4ade80 !important; text-shadow: none; }
 .aq-urgent {
   background: #ef4444; color: #fff;
   border-radius: 10px; padding: 2px 9px; font-size: 10.5px; font-weight: 700;
@@ -2573,3 +2691,139 @@ ion: none;
   font-size: 10px; opacity: .65; margin-left: 2px;
   vertical-align: super; line-height: 1;
 }
+
+/* ─── Complaint Panel Styles ───────────────────────────────────── */
+.cp-summary-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.cp-kpi {
+  background: var(--bg2);
+  border-radius: 10px;
+  padding: 12px;
+  text-align: center;
+}
+.cp-kpi-val {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.cp-kpi-lbl {
+  font-size: 10.5px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.cp-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 16px 0 8px;
+  letter-spacing: .3px;
+}
+.cp-tag-rows { display: flex; flex-direction: column; gap: 7px; }
+.cp-tag-row {
+  display: grid;
+  grid-template-columns: 1fr 120px 44px 36px;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+}
+.cp-tag-label { color: var(--text); font-weight: 600; }
+.cp-tag-bar-wrap {
+  height: 8px;
+  background: var(--border-soft);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.cp-tag-bar {
+  height: 100%;
+  background: var(--rose);
+  border-radius: 4px;
+  transition: width .3s;
+}
+.cp-tag-count { color: var(--rose); font-weight: 700; text-align: right; }
+.cp-tag-pct   { color: var(--muted); font-size: 10.5px; text-align: right; }
+.cp-long-list { display: flex; flex-direction: column; gap: 6px; }
+.cp-long-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  background: var(--bg2);
+  border-radius: 8px;
+  font-size: 11px;
+}
+.cp-long-date { color: var(--muted); white-space: nowrap; min-width: 56px; }
+.cp-long-mgr  { font-weight: 600; min-width: 52px; }
+.cp-long-tags { flex: 1; color: var(--teal-d); font-size: 10.5px; }
+
+/* ─── P2.11/P2.12 Auto-Interpretation + Complaint Bar ──────────────── */
+.interp-note { margin-top: 10px; }
+.auto-interp {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: var(--bg2);
+  border-left: 3px solid var(--teal);
+  border-radius: 0 8px 8px 0;
+  padding: 9px 12px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.ai-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.ai-text { flex: 1; }
+
+/* complaint category bar */
+.complaint-cat-row {
+  display: grid;
+  grid-template-columns: 28px 1fr 120px 44px 36px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 11.5px;
+}
+.complaint-cat-row:last-child { border-bottom: none; }
+.cc-bar-wrap {
+  height: 8px;
+  background: var(--border-soft);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.cc-bar {
+  height: 100%;
+  border-radius: 4px;
+  transition: width .3s;
+}
+.cc-cnt { text-align: right; font-weight: 700; color: var(--rose); }
+.cc-pct { text-align: right; color: var(--muted); font-size: 10.5px; }
+
+/* complaint trend KV — 5-column grid */
+.complaint-trend-kv {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+.ct-kv {
+  flex: 1 1 80px;
+  min-width: 70px;
+  background: var(--bg2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ct-lbl { font-size: 10px; color: var(--muted); }
+.ct-val { font-size: 14px; font-weight: 700; }
+.ct-val.danger { color: var(--rose); }
+.ct-val.warn   { color: var(--amber); }
+.ct-val.good   { color: var(--teal-d); }
