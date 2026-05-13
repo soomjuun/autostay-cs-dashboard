@@ -755,10 +755,24 @@ canvas { display: block; }
 }
 .hm-cell:hover { transform: scale(1.06); z-index: 2; box-shadow: 0 2px 10px rgba(0,0,0,.2); }
 @media (max-width: 700px) {
-  .heatmap-scroll-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .heatmap-scroll-wrap {
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    position: relative;
+  }
+  .heatmap-scroll-wrap::after {
+    content: '← 스크롤';
+    position: absolute; right: 8px; top: 4px;
+    font-size: 9px; color: var(--muted); opacity: .55; pointer-events: none;
+  }
   .heatmap { grid-template-columns: 24px repeat(6, minmax(44px,1fr)); gap: 4px; min-width: 340px; }
   .hm-cell { height: 44px; font-size: 10px; }
   .hm-head { font-size: 8px; }
+}
+@media (max-width: 420px) {
+  .heatmap { grid-template-columns: 20px repeat(6, minmax(38px,1fr)); gap: 3px; min-width: 290px; }
+  .hm-cell { height: 38px; font-size: 9px; border-radius: 5px; }
+  .hm-row-label { font-size: 9px; min-height: 38px; }
+  .hm-head { font-size: 7px; }
 }
 .hm-0 { background: var(--bg2); opacity: 0.38; }
 .hm-1 { background: #a7f3d0; }
@@ -1223,6 +1237,11 @@ canvas { display: block; }
 /* CATEGORY BARS                                                              */
 /* ══════════════════════════════════════════════════════════════════════════ */
 /* 카테고리 계층 구조 */
+.cat-expandable { cursor: pointer; user-select: none; }
+.cat-expandable:hover { background: var(--bg2); border-radius: 8px; }
+.cat-chevron { font-size: 9px; margin-left: 5px; color: var(--muted); transition: transform .2s; display: inline-block; }
+.cat-children-wrap { animation: catFadeIn .18s ease; }
+@keyframes catFadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 .cat-parent-row {
   display: flex; align-items: center; gap: 8px;
   padding: 7px 0 4px; border-bottom: 1px solid var(--border-soft);
@@ -2628,7 +2647,8 @@ ion: none;
   margin-bottom: 6px; letter-spacing: -.01em;
   text-shadow: 0 1px 3px rgba(0,0,0,.4);
 }
-.aq-header .aq-total {
+.aq-header .aq-sep { color: rgba(255,255,255,.45); margin: 0 2px; font-weight: 400; }
+.aq-total {
   background: rgba(255,255,255,.18); color: #fff;
   border-radius: 10px; padding: 1px 8px; font-size: 11px;
   font-weight: 800; letter-spacing: 0; flex-shrink: 0;

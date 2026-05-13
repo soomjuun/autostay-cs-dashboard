@@ -54,10 +54,13 @@ function fmt(n, unit = '') {
 function initials(name) {
   return (name || '?').replace(/오토스테이_/, '').replace(/[^A-Za-z가-힣]/g, '').slice(0, 2).toUpperCase() || '?';
 }
-/* 담당자 표시명: 'D'처럼 단일 문자인 경우 '담당자' 접미사 추가 */
+/* 담당자 표시명: 단일 문자·반복패턴("D D") → "D 담당자"로 정규화 */
 function dispMgrName(name) {
-  const d = (name || '').replace('오토스테이_', '');
-  return d.length <= 2 ? d + ' 담당자' : d;
+  const d = (name || '').replace('오토스테이_', '').trim();
+  // "D D", "M M" 등 짧은 파트가 반복되는 경우 첫 파트만 사용
+  const parts = d.split(/\s+/);
+  const simple = (parts.length > 1 && parts.every(p => p.length <= 2)) ? parts[0] : d;
+  return simple.length <= 2 ? simple + ' 담당자' : simple;
 }
 function avatarStyle(idx) {
   const [a, b] = AVATAR_COLORS[idx % AVATAR_COLORS.length].split(',');
@@ -352,7 +355,7 @@ function renderHeroAction(d, scoreObj) {
     const warnCount   = actions.filter(a => a.type === 'warn').length;
     const totalCount = urgentCount + warnCount;
     const queueHeader = totalCount > 0
-      ? `<div class="aq-header">🎯 <span style="color:#fff;font-weight:900">오늘 처리할 일</span> <span class="aq-total">${totalCount}건</span> <span class="aq-urgent">${urgentCount > 0 ? '즉시 ' + urgentCount + '건' : ''}</span><span class="aq-warn">${warnCount > 0 ? '확인 ' + warnCount + '건' : ''}</span></div>`
+      ? `<div class="aq-header">🎯 <span style="color:#fff;font-weight:900">오늘 처리할 일</span> <span class="aq-total">${totalCount}건</span>${urgentCount > 0 ? '<span class="aq-sep"> · </span><span class="aq-urgent">즉시 ' + urgentCount + '건</span>' : ''}${warnCount > 0 ? '<span class="aq-sep"> · </span><span class="aq-warn">확인 ' + warnCount + '건</span>' : ''}</div>`
       : `<div class="aq-header aq-ok">✅ 오늘 즉시 조치 필요 없음</div>`;
     hacBody.innerHTML = queueHeader + top3.map((a, i) => {
       const isClickable = !!(a.url || a.onclick);
@@ -1088,14 +1091,28 @@ function renderCategoryBars(d) {
           <div class="cat-child-count">${subCnt}건<span class="cat-child-pct"> ${Math.round(subCnt / total * 100)}%</span></div>
         </div>`).join('')
     }</div>` : '';
+    const catId = `cat-${cat.label.replace(/\s+/g,'_')}`;
+    const hasChildren = showChildren && childEntries.length > 0;
     return `
-    <div class="cat-parent-row">
-      <div class="cat-parent-label">${cat.label}</div>
+    <div class="cat-parent-row${hasChildren ? ' cat-expandable' : ''}" ${hasChildren ? `onclick="toggleCatChildren('${catId}')" aria-expanded="false"` : ''}>
+      <div class="cat-parent-label">${cat.label}${hasChildren ? '<span class="cat-chevron" id="' + catId + '-chev">▶</span>' : ''}</div>
       <div class="cat-parent-bar-wrap"><div class="cat-parent-bar" style="width:${Math.max(cat.count / maxCount * 100, 3)}%;background:${cat.color}"></div></div>
       <div class="cat-parent-count">${cat.count}건<span class="cat-parent-pct"> ${Math.round(cat.count / total * 100)}%</span></div>
     </div>
-    ${childHtml}`;
+    ${hasChildren ? `<div class="cat-children-wrap" id="${catId}" style="display:none">${childHtml}</div>` : childHtml}`;
   }).join('') + '<div class="cat-hierarchy-note">ⓘ 태그 기반 자동 분류입니다. 컴플레인 하위 항목은 세부 태그 집계 결과이며, 상위 합계에 포함됩니다.</div>';
+}
+
+/* ─── Category Toggle ──────────────────────────────────────────────────── */
+function toggleCatChildren(id) {
+  const wrap = document.getElementById(id);
+  const chev = document.getElementById(id + '-chev');
+  const row  = wrap ? wrap.previousElementSibling : null;
+  if (!wrap) return;
+  const isOpen = wrap.style.display !== 'none';
+  wrap.style.display = isOpen ? 'none' : 'block';
+  if (chev) chev.textContent = isOpen ? '▶' : '▼';
+  if (row) row.setAttribute('aria-expanded', String(!isOpen));
 }
 
 /* ─── Channel ─────────────────────────────────────────────────────────── */
@@ -1218,7 +1235,8 @@ function renderLongDelayPanel(d) {
       <span class="lds-count">${slow8h}건</span>
       <span class="lds-label">8시간+ 해결 케이스</span>
     </div>
-    ${top5Html ? `<div class="long-delay-list-header">주요 케이스 TOP 5</div><div class="long-delay-list">${top5Html}</div><button class="ld-more-link" type="button" data-action="open-long-chats">▸ 전체 목록 (${slow8h}건) 보기</button>` : ''}`;
+    ${top5Html ? `<div class="long-delay-list-header">주요 케이스 TOP 5</div><div class="long-delay-list">${top5Html}</div>` : ''}
+    <button class="ld-more-link" type="button" data-action="open-long-chats">▸ 전체 목록 (${slow8h}건) 보기</button>`;
 }
 
 function openLongChatsPanel() {
@@ -2130,10 +2148,12 @@ function initFilterDrawer() {
   }
   function closeDrawer() {
     drawer.classList.remove('is-open');
-    // transition 끝난 뒤 display:none (접근성)
-    drawer.addEventListener('transitionend', () => {
+    // transition 끝난 뒤 display:none (접근성) + 350ms 폴백
+    const onEnd = () => {
       if (!drawer.classList.contains('is-open')) drawer.style.display = 'none';
-    }, { once: true });
+    };
+    drawer.addEventListener('transitionend', onEnd, { once: true });
+    setTimeout(onEnd, 350);
   }
   if (filterBtn) filterBtn.onclick = () => {
     if (drawer.classList.contains('is-open')) closeDrawer();
@@ -2432,7 +2452,9 @@ function downloadCSV() {
   const filterSuffix = activeFilterCount() > 0 ? `-filtered` : '';
   const csvFilename = `OPS-channeltalk-${rangeStr}${filterSuffix}-${new Date().toISOString().slice(0,10)}.csv`;
   _triggerCSV(lines, csvFilename);
-  showToast(`📥 ${csvFilename} 저장됨`, 'success', 4500);
+  const dlRangeLabel = currentDays === 'all' ? '전체 기간' : `최근 ${currentDays}일`;
+  const dlFilterLabel = activeFilterCount() > 0 ? ` · 필터 ${activeFilterCount()}개 적용` : ' · 필터 없음';
+  showToast(`📥 CSV 저장 완료 · ${dlRangeLabel}${dlFilterLabel}`, 'success', 5000);
 }
 
 /* ─── Collapsibles ──────────────────────────────────────────────────── */
