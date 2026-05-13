@@ -191,8 +191,9 @@ function renderFilterDrawer(data) {
     </span>`;
   }).join('');
 
-  // chip 클릭 핸들러
-  document.querySelectorAll('.filter-chip').forEach((chip) => {
+  // chip 클릭 핸들러 — 드로어 내부만 스코프
+  const drawerEl = document.getElementById('filterDrawer');
+  (drawerEl || document).querySelectorAll('.filter-chip').forEach((chip) => {
     chip.onclick = () => {
       const kind = chip.dataset.fkind;
       const val = chip.dataset.fval;
@@ -623,18 +624,18 @@ function renderKPIs(d, scoreObj) {
     kpiBasisHeaderEl.style.display = 'flex';
     const sampledWarn = isSampled ? ` <span style="color:var(--amber);font-weight:700">⚠ 수집 상한(${limitVal}건) 도달 — 최근 ${limitVal}건 기준 집계</span>` : '';
     const cacheInfo = (d.diagnostics?.cacheHit)
-      ? `<span title="Vercel KV 캐시 응답 (최대 5분 지연) · 강제 갱신: 새로고침 버튼" style="color:var(--amber);margin-left:6px;cursor:help">⚡ 캐시 응답</span>`
-      : (d.diagnostics ? `<span title="Channel Talk API 직접 조회 결과 — 지연 없음" style="color:var(--teal);margin-left:6px;cursor:help">🔄 최신 조회</span>` : `<span style="color:var(--muted);margin-left:6px">캐시 없음</span>`);
+      ? `<span data-tip="Vercel KV 캐시 응답 (최대 5분 지연) · 강제 갱신: 새로고침 버튼" style="color:var(--amber);margin-left:6px;cursor:help" tabindex="0">⚡ 캐시 응답</span>`
+      : (d.diagnostics ? `<span data-tip="Channel Talk API 직접 조회 결과 — 지연 없음" style="color:var(--teal);margin-left:6px;cursor:help" tabindex="0">🔄 최신 조회</span>` : `<span style="color:var(--muted);margin-left:6px">캐시 없음</span>`);
     kpiBasisHeaderEl.innerHTML = `
       <span>📊 분석 기준</span>
       <span style="font-weight:400;color:#0d9488">
         ${currentDays === 'all' ? `최근 ${limitVal}건 한도` : `최근 ${currentDays}일`}
-        · <span title="채널톡 API closed 상태 채팅 수 (완료 처리된 건만 집계)">closed <strong>${totalChats}건</strong></span>
-        · <span title="채널톡 Open API v5 실데이터 기준. 해결시간·FRT는 채팅 종료 후 계산값">Channel Talk API</span>
-        · <span title="서버 측 5분 TTL 캐시 적용. 새로고침 버튼 클릭 시 강제 재조회">5분 캐시</span>
+        · <span data-tip="채널톡 API closed 상태 채팅 수 (완료 처리된 건만 집계)" tabindex="0" style="cursor:help">closed <strong>${totalChats}건</strong></span>
+        · <span data-tip="채널톡 Open API v5 실데이터 기준. 해결시간·FRT는 채팅 종료 후 계산값" tabindex="0" style="cursor:help">Channel Talk API</span>
+        · <span data-tip="서버 측 5분 TTL 캐시 적용. 새로고침 버튼 클릭 시 강제 재조회" tabindex="0" style="cursor:help">5분 캐시</span>
         · KST
       </span>${cacheInfo}${sampledWarn}
-      <span style="margin-left:auto;font-size:10px;color:var(--muted)" title="실데이터=채널톡 API 원천값 / 계산값=수집 데이터 기반 서버 집계 / 캐시=5분 TTL KV 캐시">
+      <span style="margin-left:auto;font-size:10px;color:var(--muted);cursor:help" data-tip="실데이터=채널톡 API 원천값 / 계산값=수집 데이터 기반 서버 집계 / 캐시=5분 TTL KV 캐시" tabindex="0">
         🏷 실데이터 · 계산값 · 캐시 범례 — 각 지표 카드 배지 확인
       </span>`;
   }
@@ -642,7 +643,7 @@ function renderKPIs(d, scoreObj) {
   const grid = document.getElementById('kpiGrid');
   if (!grid) return;
   grid.innerHTML = `
-    <div class="kpi-card a-${unassigned > 0 ? 'rose' : 'green'}" style="cursor:pointer" onclick="window.open('${chatTalkUnassignedUrl()}','_blank')" title="채널톡 미배정 채팅 큐로 이동합니다&#10;※ desk.channel.io 로그인 세션이 필요합니다&#10;출처: Channel Talk API (실시간 조회)">
+    <div class="kpi-card a-${unassigned > 0 ? 'rose' : 'green'}" style="cursor:pointer" onclick="window.open('${chatTalkUnassignedUrl()}','_blank')" data-tip="채널톡 미배정 채팅 큐로 이동합니다&#10;※ desk.channel.io 로그인 세션이 필요합니다&#10;출처: Channel Talk API (실시간 조회)" tabindex="0">
       <div class="kpi-label">미배정 <span class="kpi-src-icon" data-tip="채널톡 실데이터 · API 실시간 조회" tabindex="0" style="cursor:help">ⓘ</span></div>
       <div class="kpi-value">${fmt(unassigned)}<span class="unit">건</span></div>
       <div class="kpi-meta">
@@ -660,7 +661,7 @@ function renderKPIs(d, scoreObj) {
       </div>
     </div>
     <div class="kpi-card a-${slow8h > 10 ? 'rose' : slow8h > 0 ? 'amber' : 'green'}" style="cursor:pointer" onclick="openLongChatsPanel()">
-      <div class="kpi-label" title="종결 채팅 중 해결시간이 8시간을 초과한 케이스 비율&#10;※ 현재 오픈 대기 중인 건수가 아닌, 종결 완료된 채팅 기준">8시간+ 해결시간 <span style="font-size:9px;opacity:.6">(종결 기준)</span></div>
+      <div class="kpi-label" data-tip="종결 채팅 중 해결시간이 8시간을 초과한 케이스 비율&#10;※ 현재 오픈 대기 중인 건수가 아닌, 종결 완료된 채팅 기준" tabindex="0" style="cursor:help">8시간+ 해결시간 <span style="font-size:9px;opacity:.6">(종결 기준)</span></div>
       <div class="kpi-value">${fmt(slow8h)}<span class="unit">건</span></div>
       <div class="kpi-meta">
         <span class="data-badge badge-calc">계산값</span>
@@ -682,7 +683,7 @@ function renderKPIs(d, scoreObj) {
         <span class="data-badge badge-calc">계산값</span>
         <span class="delta ${topPct > 80 ? 'bad' : topPct > 60 ? 'neutral' : 'good'}">${topPct > 80 ? '과부하' : topPct > 60 ? '주의' : '분산 양호'}</span>
       </div>
-      <div class="kpi-meta" style="margin-top:2px"><span style="font-size:10px;color:var(--muted)">${topMgr?.name?.replace('오토스테이_','') || '—'}</span></div>
+      <div class="kpi-meta" style="margin-top:2px"><span style="font-size:10px;color:var(--muted)">${topMgr ? dispMgrName(topMgr.name) : '—'}</span></div>
     </div>
   `;
 }
@@ -763,30 +764,47 @@ function renderPeakAnalysis(peakAnalysis, managers) {
 /* ─── Heatmap ─────────────────────────────────────────────────────────── */
 function renderHeatmap(d) {
   const days = ['월', '화', '수', '목', '금', '토', '일'];
-  const hours = Array.from({ length: 24 }, (_, i) => i);
+  // 4시간 블록으로 그룹화: 6개 컬럼
+  const blocks = [
+    { label: '0-3시\n새벽', hours: [0,1,2,3] },
+    { label: '4-7시\n이른아침', hours: [4,5,6,7] },
+    { label: '8-11시\n오전', hours: [8,9,10,11] },
+    { label: '12-15시\n오후', hours: [12,13,14,15] },
+    { label: '16-19시\n저녁', hours: [16,17,18,19] },
+    { label: '20-23시\n심야', hours: [20,21,22,23] },
+  ];
   const hm = d.heatmap || {};
-  const allVals = Object.values(hm);
+  // 블록별 집계
+  const blockData = {}; // key: `${di}-${bi}` => sum
+  for (let di = 0; di < 7; di++) {
+    blocks.forEach((blk, bi) => {
+      blockData[`${di}-${bi}`] = blk.hours.reduce((s, h) => s + (hm[`${di}-${h}`] || 0), 0);
+    });
+  }
+  const allVals = Object.values(blockData);
   const maxVal = allVals.length ? Math.max(...allVals) : 1;
 
   const el = document.getElementById('heatmap');
   el.innerHTML = '';
+  // 헤더 행: 빈 셀 + 블록 라벨
   el.appendChild(Object.assign(document.createElement('div'), { className: 'hm-head' }));
-  hours.forEach((h) => {
+  blocks.forEach((blk) => {
     const div = document.createElement('div');
-    div.className = 'hm-head'; div.textContent = h;
+    div.className = 'hm-head'; div.innerHTML = blk.label.replace('\n', '<br>');
     el.appendChild(div);
   });
   days.forEach((day, di) => {
     const lbl = document.createElement('div');
     lbl.className = 'hm-row-label'; lbl.textContent = day;
     el.appendChild(lbl);
-    hours.forEach((h) => {
-      const v = hm[`${di}-${h}`] || 0;
+    blocks.forEach((blk, bi) => {
+      const v = blockData[`${di}-${bi}`];
       const lvl = v === 0 ? 0 : Math.min(5, Math.ceil((v / maxVal) * 5));
       const cell = document.createElement('div');
       cell.className = `hm-cell hm-${lvl}`;
       cell.textContent = v || '';
-      cell.title = `${day}요일 ${h}시 · ${v}건`;
+      const rangeStr = `${blk.hours[0]}~${blk.hours[3]}시`;
+      cell.setAttribute('data-tip', `${day}요일 ${rangeStr} · ${v}건`);
       el.appendChild(cell);
     });
   });
@@ -803,27 +821,27 @@ function renderHeatmap(d) {
 
   const hmPeakEl = document.getElementById('hmPeakSummary');
   if (hmPeakEl) {
-    const hourTotals = {};
-    for (let di = 0; di < 7; di++) for (let h = 0; h < 24; h++) {
-      hourTotals[h] = (hourTotals[h] || 0) + (hm[`${di}-${h}`] || 0);
-    }
-    const top3Hours = Object.entries(hourTotals).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    // 블록 기준으로 피크 집계
+    const blockTotals = blocks.map((blk, bi) => {
+      const total = days.reduce((s, _, di) => s + (blockData[`${di}-${bi}`] || 0), 0);
+      return { label: blk.label.replace('\n', ' '), total };
+    });
+    const top3 = [...blockTotals].sort((a, b) => b.total - a.total).slice(0, 3).filter(b => b.total > 0);
     const dayTotals = {};
     for (let di = 0; di < 7; di++) {
-      dayTotals[di] = 0;
-      for (let h = 0; h < 24; h++) dayTotals[di] += hm[`${di}-${h}`] || 0;
+      dayTotals[di] = blocks.reduce((s, _, bi) => s + (blockData[`${di}-${bi}`] || 0), 0);
     }
     const peakDayIdx = Object.entries(dayTotals).sort((a, b) => b[1] - a[1])[0];
-    if (top3Hours.length > 0) hmPeakEl.style.display = 'block';
+    if (top3.length > 0) hmPeakEl.style.display = 'block';
     hmPeakEl.innerHTML = `
       <div class="hm-peak-title">피크 집중 시간대</div>
       <div class="hm-peak-list">
-        ${top3Hours.map(([h, v], rank) => `
+        ${top3.map((blk, rank) => `
           <div class="hm-peak-row rank-${rank + 1}">
             <span class="hm-peak-rank">${rank + 1}위</span>
-            <span class="hm-peak-hour">${h}시</span>
-            <div class="hm-peak-bar-wrap"><div class="hm-peak-bar" style="width:${Math.round(v / (top3Hours[0][1] || 1) * 100)}%"></div></div>
-            <span class="hm-peak-val">${v}건</span>
+            <span class="hm-peak-hour">${blk.label}</span>
+            <div class="hm-peak-bar-wrap"><div class="hm-peak-bar" style="width:${Math.round(blk.total / (top3[0].total || 1) * 100)}%"></div></div>
+            <span class="hm-peak-val">${blk.total}건</span>
           </div>`).join('')}
       </div>
       ${peakDayIdx ? `<div class="hm-peak-day-note">📅 주간 최다: <strong>${days[parseInt(peakDayIdx[0])]}요일</strong> (${peakDayIdx[1]}건)</div>` : ''}`;
@@ -1163,9 +1181,10 @@ function openLongChatsPanel() {
     titleEl.textContent = `🐢 8시간+ 해결시간 초과 채팅${filterNote}`;
   }
   const rows = longChatsList.map((c) => {
-    const tagsHtml = c.tags.length ? c.tags.map((t) => `<span class="long-tag">#${t}</span>`).join(' ') : '<span style="color:var(--muted)">태그 없음</span>';
-    const mgrName = c.assigneeId ? (mgrMap[c.assigneeId] || c.assigneeId) : '미배정';
-    const totalMins = c.resolutionMin;
+    const tags = Array.isArray(c.tags) ? c.tags : [];
+    const tagsHtml = tags.length ? tags.map((t) => `<span class="long-tag">#${t}</span>`).join(' ') : '<span style="color:var(--muted)">태그 없음</span>';
+    const mgrName = c.assigneeId ? dispMgrName(mgrMap[c.assigneeId] || c.assigneeId) : '미배정';
+    const totalMins = c.resolutionMin || 0;
     const totalHrs = Math.floor(totalMins / 60);
     const daysCnt = Math.floor(totalHrs / 24);
     const remHrs = totalHrs % 24;
@@ -1251,12 +1270,12 @@ function renderMgrRiskStrip(d) {
 function agentComment(m, rank) {
   if (!m.count) return '<span class="agent-comment off">비활성</span>';
   if (m.avgResolutionMin != null && m.avgResolutionMin > 600)
-    return '<span class="agent-comment warn" title="평균 해결시간 ' + m.avgResolutionMin + '분 — 10시간 초과">해결 지연</span>';
+    return '<span class="agent-comment warn" data-tip="평균 해결시간 ' + m.avgResolutionMin + '분 — 10시간 초과">해결 지연</span>';
   const cRatio = m.count > 0 ? (m.complaintHandled || 0) / m.count : 0;
   if (cRatio > 0.20)
-    return '<span class="agent-comment warn" title="처리 건 중 컴플레인 ' + Math.round(cRatio*100) + '%">컴플레인 多</span>';
+    return '<span class="agent-comment warn" data-tip="처리 건 중 컴플레인 ' + Math.round(cRatio*100) + '%">컴플레인 多</span>';
   if (m.medianFrtMin != null && m.medianFrtMin > 60)
-    return '<span class="agent-comment warn" title="첫 응답 중앙값 ' + m.medianFrtMin + '분 초과">FRT 지연</span>';
+    return '<span class="agent-comment warn" data-tip="첫 응답 중앙값 ' + m.medianFrtMin + '분 초과">FRT 지연</span>';
   if (rank === 0 && m.operatorScore > 30 && m.touchScore > 50) return '<span class="agent-comment top">TOP 퍼포머</span>';
   if (m.operatorScore < 10 && m.touchScore < 20) return '<span class="agent-comment warn">코칭 필요</span>';
   if (m.touchScore < 20) return '<span class="agent-comment warn">응대 보완</span>';
@@ -1459,14 +1478,14 @@ function renderGaugeGrid(d) {
   setG('quick', quickPct, quickPct >= 70 ? 'gauge-fill--good' : quickPct >= 50 ? 'gauge-fill--warn' : 'gauge-fill--danger');
   document.getElementById('gval-quick').textContent = quickPct + '%';
   document.getElementById('gsub-quick').textContent = `${quick}건 / ${total}건`;
-  document.getElementById('gsub-quick').title = `분모: 종결(closed) 채팅 ${total}건 기준 — 진행 중·미응답 제외`;
+  document.getElementById('gsub-quick').setAttribute('data-tip', `분모: 종결(closed) 채팅 ${total}건 기준 — 진행 중·미응답 제외`);
   setB('quick', quickPct >= 70 ? '양호' : quickPct >= 50 ? '주의' : '위험', quickPct >= 70 ? 'good' : quickPct >= 50 ? 'warn' : 'danger');
 
   // 8h+
   setG('slow', slowPct, slowPct <= 10 ? 'gauge-fill--good' : slowPct <= 25 ? 'gauge-fill--warn' : 'gauge-fill--danger');
   document.getElementById('gval-slow').textContent = slowPct + '%';
   document.getElementById('gsub-slow').textContent = `${slow8h}건 종결 기준`;
-  document.getElementById('gsub-slow').title = `종결 완료된 채팅 중 해결시간 8시간 초과 건수 — 현재 오픈 대기 건수와 다름`;
+  document.getElementById('gsub-slow').setAttribute('data-tip', `종결 완료된 채팅 중 해결시간 8시간 초과 건수 — 현재 오픈 대기 건수와 다름`);
   setB('slow', slowPct <= 10 ? '양호' : slowPct <= 25 ? '주의' : '위험', slowPct <= 10 ? 'good' : slowPct <= 25 ? 'warn' : 'danger');
 
   // FRT (B-1)
@@ -1499,8 +1518,7 @@ function renderGaugeGrid(d) {
   const topPct = topMgr ? Math.round(topMgr.count / mgrTotal * 100) : 0;
   setG('conc', topPct, topPct <= 40 ? 'gauge-fill--good' : topPct <= 60 ? 'gauge-fill--warn' : 'gauge-fill--danger');
   document.getElementById('gval-conc').textContent = topPct + '%';
-  const topMgrDisplayName = topMgr ? (topMgr.name?.replace(/^오토스테이_?/,'') || topMgr.name || '담당자') : null;
-  document.getElementById('gsub-conc').textContent = topMgr ? `${topMgrDisplayName} · ${topMgr.count}건 처리 · 전체 ${topPct}%` : '—';
+  document.getElementById('gsub-conc').textContent = topMgr ? `${dispMgrName(topMgr.name)} · ${topMgr.count}건 처리 · 전체 ${topPct}%` : '—';
   setB('conc', topPct <= 40 ? '양호' : topPct <= 60 ? '주의' : '위험', topPct <= 40 ? 'good' : topPct <= 60 ? 'warn' : 'danger');
 }
 
@@ -1896,8 +1914,10 @@ function initFilterDrawer() {
   const closeBtn = document.getElementById('filterCloseBtn');
   const clearBtn = document.getElementById('filterClearBtn');
   function openDrawer() {
-    drawer.style.display = 'block'; // 필요: max-height transition이 동작하려면 display:block 선행
-    requestAnimationFrame(() => drawer.classList.add('is-open'));
+    if (!lastData) return; // 데이터 로드 전 클릭 방지
+    drawer.style.display = 'block';
+    // double-rAF: display:block 반영 후 is-open 클래스 추가해야 transition 동작
+    requestAnimationFrame(() => requestAnimationFrame(() => drawer.classList.add('is-open')));
     renderFilterDrawer(lastData);
   }
   function closeDrawer() {
