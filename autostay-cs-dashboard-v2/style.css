@@ -42,13 +42,14 @@
 
 /* ─── Reset & Base ────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { font-size: 14px; scroll-behavior: smooth; }
+html { font-size: 14px; scroll-behavior: smooth; overflow-x: hidden; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif;
   background: var(--bg);
   color: var(--text);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 button { cursor: pointer; border: none; background: none; font-family: inherit; }
 table { border-collapse: collapse; width: 100%; }
@@ -113,7 +114,7 @@ canvas { display: block; }
 /* ══════════════════════════════════════════════════════════════════════════ */
 /* APP WRAPPER                                                                */
 /* ══════════════════════════════════════════════════════════════════════════ */
-.app { min-height: 100vh; }
+.app { min-height: 100vh; overflow-x: hidden; width: 100%; }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
 /* HERO                                                                       */
@@ -2012,6 +2013,16 @@ canvas { display: block; }
 .hac-row-link {
   text-decoration: none; color: inherit; display: block;
 }
+/* button 래퍼: <a>와 동일한 클릭 UX 보장 */
+button.hac-row-btn {
+  width: 100%; background: none; border: none;
+  padding: 0; cursor: pointer; font: inherit;
+  text-align: left; color: inherit;
+}
+button.hac-row-btn:focus-visible .hac-row {
+  outline: 2px solid rgba(20,184,166,.55);
+  outline-offset: 2px;
+}
 .hac-footer {
   margin-top: 10px; padding-top: 8px;
   border-top: 1px solid rgba(255,255,255,.08);
@@ -2649,9 +2660,6 @@ button.ld-more-link:hover {
   color: rgba(255,255,255,.65);
 }
 
-ion: none;
-}
-
 /* ══════════════════════════════════════════════════════════════════════════ */
 /* ACTION QUEUE (운영 액션 큐 헤더)                                            */
 /* ══════════════════════════════════════════════════════════════════════════ */
@@ -2882,4 +2890,155 @@ ion: none;
   white-space: pre-wrap !important;
   border: 1px solid rgba(255,255,255,.08) !important;
   word-break: keep-all !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* LONG CHATS MODAL — 정렬 레이블 / 퀵 필터                                   */
+/* ══════════════════════════════════════════════════════════════════════════ */
+.lc-sort-label {
+  font-size: 10.5px; color: var(--muted); font-weight: 600;
+  padding: 4px 0 8px; margin-bottom: 4px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.lc-qf-bar {
+  padding: 10px 0 12px;
+  border-bottom: 1px solid var(--border-soft);
+  margin-bottom: 6px;
+  display: flex; flex-direction: column; gap: 7px;
+}
+.lc-qf-group {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
+}
+.lc-qf-label {
+  font-size: 9.5px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--muted); min-width: 44px;
+}
+.lc-qf-chip {
+  font-size: 10.5px; font-weight: 600; padding: 3px 10px;
+  border-radius: 12px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text);
+  cursor: pointer; transition: all .12s; user-select: none;
+}
+.lc-qf-chip:hover { background: var(--bg2); }
+.lc-qf-chip.active {
+  background: var(--teal); color: #fff;
+  border-color: var(--teal);
+  box-shadow: 0 0 0 2px rgba(15,118,110,.22);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* HERO ACTION QUEUE — 권장 액션 / 목표 시간                                  */
+/* ══════════════════════════════════════════════════════════════════════════ */
+.hac-row-rec {
+  font-size: 10px; color: rgba(255,255,255,.55);
+  margin-top: 2px; font-weight: 500;
+}
+.hac-row-target {
+  font-size: 9.5px; color: rgba(255,255,255,.38); font-weight: 600;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* FILTER CHIP — 선택 상태 강화                                                */
+/* ══════════════════════════════════════════════════════════════════════════ */
+.filter-chip.active {
+  background: var(--teal); color: #fff; border-color: var(--teal);
+  box-shadow: 0 0 0 2px rgba(15,118,110,.25);
+  font-weight: 700;
+}
+.filter-chip:not(.active) {
+  opacity: .8;
+}
+.filter-chip:not(.active):hover {
+  opacity: 1; background: var(--bg2);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* MOBILE OVERFLOW FIX — 375–430px 가로 스크롤 방지                           */
+/* ══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 430px) {
+  /* ── Toolbar: 탭 오버플로우 시 가로 스크롤 허용 (페이지는 막음) ────────── */
+  .toolbar-inner {
+    padding: 8px 12px;
+    height: auto;
+    min-height: 46px;
+    flex-wrap: nowrap;
+    gap: 6px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .toolbar-inner::-webkit-scrollbar { display: none; }
+  .toolbar-strip { overflow: hidden; }
+  .range-tabs { flex-shrink: 0; gap: 3px; }
+  .range-tab { font-size: 11px; padding: 4px 10px; }
+  .toolbar-actions { flex-shrink: 0; }
+  .toolbar-btn { font-size: 11px; padding: 4px 10px; }
+
+  /* ── Filter drawer: 패딩 축소 ────────────────────────────────────────── */
+  .filter-drawer-inner { padding: 12px 14px; }
+  .filter-group { grid-template-columns: 64px 1fr; gap: 8px; }
+  .filter-chip { font-size: 10.5px; padding: 4px 9px; }
+
+  /* ── Hero / section: 패딩 축소 ──────────────────────────────────────── */
+  .hero-container { padding: 0 16px; }
+  .section-wrap { padding: 0 12px; }
+  .basis-row { padding: 6px 12px 0; }
+  .alert-strip { padding: 0 12px; }
+  .adv-section-wrap { padding: 0 12px 32px; }
+  .chart-master-grid { padding: 0 12px 20px; }
+
+  /* ── Modal: 화면 폭에 맞게 ───────────────────────────────────────────── */
+  .modal-overlay { padding: 8px; }
+  .modal-box { border-radius: 12px; max-height: 92vh; }
+  .modal-header { padding: 14px 16px; font-size: 13px; }
+  .modal-body { padding: 12px; }
+
+  /* ── Long chats modal: 카드 레이아웃 ─────────────────────────────────── */
+  .lc-mobile-card {
+    background: var(--bg);
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 11px 13px;
+    margin-bottom: 8px;
+  }
+  .lc-mobile-card:last-child { margin-bottom: 0; }
+  .lc-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .lc-card-time {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+  }
+  .lc-card-time-sub {
+    font-size: 10px;
+    color: var(--muted);
+    font-weight: 400;
+    margin-top: 1px;
+  }
+  .lc-card-link {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--teal);
+    white-space: nowrap;
+    text-decoration: none;
+  }
+  .lc-card-link:hover { color: var(--teal-d); text-decoration: underline; }
+  .lc-card-meta {
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    margin-bottom: 6px;
+  }
+  .lc-card-meta-item { display: flex; align-items: center; gap: 3px; }
+  .lc-card-meta-label { font-weight: 700; color: var(--text); opacity: .65; }
+  .lc-card-tags { display: flex; flex-wrap: wrap; gap: 4px; }
 }

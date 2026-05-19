@@ -25,7 +25,7 @@ Chart.defaults.borderColor = '#f1efe8';
 let charts = {};
 let lastData = null;
 let lastFilteredData = null;
-let currentDays = 30;
+let currentDays = 7; // 초기값: HTML에서 7일 탭이 active 상태이므로 일치
 let refreshTimer = null;
 let lastSuccessTime = null;
 
@@ -35,6 +35,9 @@ const filterState = {
   tags: new Set(),      // tag string
   sources: new Set(),   // 'native' | 'phone' | 'other'
 };
+
+// 장기 지연 모달 내 퀵 필터 상태
+let lcModalFilter = { mgr: null, tag: null, src: null };
 
 /* ─── Helpers ───────────────────────────────────────────────────────────── */
 function setStep(id, done = false) {
@@ -172,26 +175,23 @@ function renderFilterDrawer(data) {
   if (!mgrEl || !tagEl || !srcEl) return;
 
   const managers = (data.managers || []).filter((m) => !EXCLUDED_MANAGERS.includes(m.name) && m.count > 0);
-  mgrEl.innerHTML = managers.map((m) => `
-    <span class="filter-chip ${filterState.managers.has(m.id) ? 'active' : ''}" data-fkind="mgr" data-fval="${m.id}">
-      ${m.name.replace('오토스테이_','')}<span class="filter-chip-cnt">${m.count}</span>
-    </span>
-  `).join('');
+  mgrEl.innerHTML = managers.map((m) => {
+    const isActive = filterState.managers.has(m.id);
+    return `<span class="filter-chip ${isActive ? 'active' : ''}" data-fkind="mgr" data-fval="${m.id}">${isActive ? '✓ ' : ''}${m.name.replace('오토스테이_','')}<span class="filter-chip-cnt">${m.count}</span></span>`;
+  }).join('');
 
   const tags = (data.tags?.labels || []).slice(0, 10);
-  tagEl.innerHTML = tags.map((t, i) => `
-    <span class="filter-chip ${filterState.tags.has(t) ? 'active' : ''}" data-fkind="tag" data-fval="${t}">
-      #${t}<span class="filter-chip-cnt">${data.tags.values[i] || 0}</span>
-    </span>
-  `).join('');
+  tagEl.innerHTML = tags.map((t, i) => {
+    const isActive = filterState.tags.has(t);
+    return `<span class="filter-chip ${isActive ? 'active' : ''}" data-fkind="tag" data-fval="${t}">${isActive ? '✓ ' : ''}#${t}<span class="filter-chip-cnt">${data.tags.values[i] || 0}</span></span>`;
+  }).join('');
 
   const srcMap = { native: '인앱', phone: '전화', other: '기타' };
   srcEl.innerHTML = ['native', 'phone', 'other'].map((s) => {
     const cnt = (data.sources || {})[s] || 0;
     if (cnt === 0) return '';
-    return `<span class="filter-chip ${filterState.sources.has(s) ? 'active' : ''}" data-fkind="src" data-fval="${s}">
-      ${srcMap[s]}<span class="filter-chip-cnt">${cnt}</span>
-    </span>`;
+    const isActive = filterState.sources.has(s);
+    return `<span class="filter-chip ${isActive ? 'active' : ''}" data-fkind="src" data-fval="${s}">${isActive ? '✓ ' : ''}${srcMap[s]}<span class="filter-chip-cnt">${cnt}</span></span>`;
   }).join('');
 
   // chip 클릭 핸들러 — 드로어 내부만 스코프
@@ -227,8 +227,14 @@ function updateFilterBadges() {
   filterState.managers.forEach((id) => badges.push({ kind: 'mgr', val: id, label: `담당: ${mgrMap[id] || id}` }));
   filterState.tags.forEach((t) => badges.push({ kind: 'tag', val: t, label: `#${t}` }));
   filterState.sources.forEach((s) => badges.push({ kind: 'src', val: s, label: `채널: ${srcMap[s] || s}` }));
+  // 필터 적용 후 장기 지연 건수 카운트 (결과 안내)
+  const filteredLc = lastFilteredData?.longChats?.length ?? (lastData?.longChats?.length ?? 0);
+  const resultNote = lastFilteredData
+    ? `<span style="font-size:10px;color:var(--muted);margin-left:8px">장기지연 ${filteredLc}건 반영 중</span>`
+    : '';
   badgeEl.innerHTML = `<span style="font-size:10.5px;color:var(--muted);font-weight:700;margin-right:4px">활성 필터:</span>` +
-    badges.map((b) => `<span class="filter-badge">${b.label}<span class="filter-badge-x" data-fkind="${b.kind}" data-fval="${b.val}">×</span></span>`).join('');
+    badges.map((b) => `<span class="filter-badge">${b.label}<span class="filter-badge-x" data-fkind="${b.kind}" data-fval="${b.val}">×</span></span>`).join('') +
+    resultNote;
   badgeEl.querySelectorAll('.filter-badge-x').forEach((x) => {
     x.onclick = () => {
       const set = x.dataset.fkind === 'mgr' ? filterState.managers : x.dataset.fkind === 'tag' ? filterState.tags : filterState.sources;
@@ -292,6 +298,8 @@ function renderHeroAction(d, scoreObj) {
       title: `미배정 채팅 ${unassigned}건`,
       cta: '채널톡에서 배정하기',
       metric: unassigned + '건',
+      rec: '담당자 즉시 배정',
+      target: '30분 내',
       url: chatTalkUnassignedUrl(),
     });
   }
@@ -301,6 +309,8 @@ function renderHeroAction(d, scoreObj) {
       title: `장기 지연 ${slow8h}건 (8시간+)`,
       cta: '지연 목록 확인하기',
       metric: slow8h + '건',
+      rec: '최장 지연 건 우선 회수',
+      target: '오늘 중',
       onclick: 'openLongChatsPanel(); return false;',
     });
   }
@@ -310,6 +320,8 @@ function renderHeroAction(d, scoreObj) {
       title: `컴플레인 ${complaintCount}건 (${complaintPct}%)`,
       cta: '원인 분석하기',
       metric: complaintCount + '건',
+      rec: '원인 파악 후 즉시 대응',
+      target: '오늘 중',
       onclick: 'openComplaintPanel(); return false;',
     });
   } else if (complaintPct >= 8) {
@@ -318,6 +330,8 @@ function renderHeroAction(d, scoreObj) {
       title: `컴플레인 ${complaintCount}건 (${complaintPct}%)`,
       cta: '원인 모니터링하기',
       metric: complaintCount + '건',
+      rec: '추이 주시',
+      target: '이번 주',
       onclick: 'openComplaintPanel(); return false;',
     });
   }
@@ -327,6 +341,8 @@ function renderHeroAction(d, scoreObj) {
       title: `${dispMgrName(topMgr.name)} 처리 편중`,
       cta: '담당자 재배정 검토',
       metric: topPct + '%',
+      rec: '채팅 재배분 검토',
+      target: '이번 주',
       onclick: `_gotoTab('[data-tab="mgr-conc"]'); return false;`,
     });
   }
@@ -336,6 +352,8 @@ function renderHeroAction(d, scoreObj) {
       title: `미해결 오픈 채팅 ${openChats}건`,
       cta: '채널톡에서 확인하기',
       metric: openChats + '건',
+      rec: '우선순위 검토',
+      target: '오늘 중',
       url: chatTalkChannel(),
     });
   }
@@ -359,10 +377,11 @@ function renderHeroAction(d, scoreObj) {
       : `<div class="aq-header aq-ok">✅ 오늘 즉시 조치 필요 없음</div>`;
     hacBody.innerHTML = queueHeader + top3.map((a, i) => {
       const isClickable = !!(a.url || a.onclick);
-    const inner = `
+      const inner = `
         <div class="hac-row-num">${i + 1}</div>
         <div class="hac-row-body">
           <div class="hac-row-title">${a.title}</div>
+          ${a.rec ? `<div class="hac-row-rec">권장: ${a.rec}${a.target ? `<span class="hac-row-target"> · ${a.target}</span>` : ''}</div>` : ''}
           ${isClickable ? `<div class="hac-row-cta">${a.cta} <span class="hac-arrow">→</span></div>` : ''}
         </div>
         <div class="hac-row-metric">${a.metric}</div>
@@ -370,7 +389,8 @@ function renderHeroAction(d, scoreObj) {
       if (a.url) {
         return `<a href="${a.url}" target="_blank" class="hac-row-link"><div class="hac-row ${a.type}">${inner}</div></a>`;
       } else if (a.onclick) {
-        return `<div class="hac-row ${a.type}" onclick="${a.onclick}">${inner}</div>`;
+        // button 래퍼: <a>와 동일한 hac-row-link 클래스로 커서·호버·키보드 접근성 보장
+        return `<button class="hac-row-link hac-row-btn" type="button" onclick="${a.onclick}"><div class="hac-row ${a.type}">${inner}</div></button>`;
       }
       return `<div class="hac-row ${a.type}">${inner}</div>`;
     }).join('');
@@ -619,36 +639,46 @@ function renderKPIs(d, scoreObj) {
 
   const cacheBadge = document.getElementById('cacheBadge');
   if (cacheBadge) {
-    const isHit = d.diagnostics?.cacheHit;
-    const cacheSource = d.diagnostics?.cacheSource || '';
-    const cacheSourceLabel = cacheSource
-      ? (cacheSource.toLowerCase().includes('memory') || cacheSource.toLowerCase().includes('mem') ? '메모리' : 'KV')
-      : 'KV';
-    const cacheLabel = isHit ? '⚡ 캐시 응답' : '🔄 최신 조회';
+    const diag = d.diagnostics || {};
+    const isHit = diag.cacheHit;
+    // 캐시 타입: diag.kvEnabled 을 단일 출처로 사용
+    const kvEnabled = diag.kvEnabled;
+    const cacheTypeLabel = kvEnabled ? 'Vercel KV 캐시' : '메모리 캐시';
+    const cacheLabel = isHit ? `⚡ ${kvEnabled ? 'KV' : '메모리'} 캐시` : '🔄 최신 조회';
     cacheBadge.innerHTML = cacheLabel;
     cacheBadge.className = isHit ? 'hero-cache-badge cache-hit' : 'hero-cache-badge cache-miss';
+    // TTL / 수집시간 / 갱신 방법을 tooltip에 통합
+    const paginMs = diag.paginationMs ? `원본 수집 ${diag.paginationMs}ms` : '';
     cacheBadge.title = isHit
-      ? 'Vercel KV 캐시에서 응답 — 최대 5분 지연 가능. 강제 갱신하려면 새로고침 버튼을 누르세요.'
-      : 'Channel Talk API를 직접 조회한 최신 데이터입니다.';
+      ? `${cacheTypeLabel}에서 응답 · 최대 5분 TTL${paginMs ? ' · ' + paginMs : ''}\n강제 갱신: 새로고침 버튼 클릭`
+      : `Channel Talk API 직접 조회 — 최신 데이터 (지연 없음)\n캐시 방식: ${cacheTypeLabel}`;
   }
 
   const kpiBasisHeaderEl = document.getElementById('kpiBasisHeader');
   if (kpiBasisHeaderEl) {
     kpiBasisHeaderEl.style.display = 'flex';
+    const diagObj = d.diagnostics || {};
+    const kvEnabled = diagObj.kvEnabled;
+    // 캐시 타입: diag.kvEnabled 단일 출처 사용 (header/diagnostics 동기화)
+    const cacheTypeName = kvEnabled ? 'Vercel KV' : '메모리';
+    const cacheTipText = kvEnabled
+      ? 'Vercel KV 캐시 · 5분 TTL · 강제 갱신: 새로고침 버튼'
+      : '메모리 캐시 · 5분 TTL · KV 미설정 · 강제 갱신: 새로고침 버튼';
     const sampledWarn = isSampled ? ` <span style="color:var(--amber);font-weight:700">⚠ 수집 상한(${limitVal}건) 도달 — 최근 ${limitVal}건 기준 집계</span>` : '';
-    const cacheInfo = (d.diagnostics?.cacheHit)
-      ? `<span data-tip="Vercel KV 캐시 응답 (최대 5분 지연) · 강제 갱신: 새로고침 버튼" style="color:var(--amber);margin-left:6px;cursor:help" tabindex="0">⚡ 캐시 응답</span>`
-      : (d.diagnostics ? `<span data-tip="Channel Talk API 직접 조회 결과 — 지연 없음" style="color:var(--teal);margin-left:6px;cursor:help" tabindex="0">🔄 최신 조회</span>` : `<span style="color:var(--muted);margin-left:6px">캐시 없음</span>`);
+    const paginMs = diagObj.paginationMs ? diagObj.paginationMs + 'ms' : '—';
+    const cacheInfo = diagObj.cacheHit
+      ? `<span data-tip="${cacheTypeName} 캐시 응답 (최대 5분 지연) · 원본 수집시간 ${paginMs} · 강제 갱신: 새로고침 버튼" style="color:var(--amber);margin-left:6px;cursor:help" tabindex="0">⚡ ${cacheTypeName} 캐시</span>`
+      : (d.diagnostics ? `<span data-tip="Channel Talk API 직접 조회 결과 — 지연 없음 · ${cacheTypeName} 캐시 대기 중" style="color:var(--teal);margin-left:6px;cursor:help" tabindex="0">🔄 최신 조회</span>` : `<span style="color:var(--muted);margin-left:6px">캐시 없음</span>`);
     kpiBasisHeaderEl.innerHTML = `
       <span>📊 분석 기준</span>
       <span style="font-weight:400;color:#0d9488">
         ${currentDays === 'all' ? `최근 ${limitVal}건 한도` : `최근 ${currentDays}일`}
         · <span data-tip="채널톡 API closed 상태 채팅 수 (완료 처리된 건만 집계)" tabindex="0" style="cursor:help">closed <strong>${totalChats}건</strong></span>
         · <span data-tip="채널톡 Open API v5 실데이터 기준. 해결시간·FRT는 채팅 종료 후 계산값" tabindex="0" style="cursor:help">Channel Talk API</span>
-        · <span data-tip="서버 측 5분 TTL 캐시 적용. 새로고침 버튼 클릭 시 강제 재조회" tabindex="0" style="cursor:help">5분 캐시</span>
+        · <span data-tip="${cacheTipText}" tabindex="0" style="cursor:help">${cacheTypeName} 5분 캐시</span>
         · KST
       </span>${cacheInfo}${sampledWarn}
-      <span style="margin-left:auto;font-size:10px;color:var(--muted);cursor:help" data-tip="실데이터=채널톡 API 원천값 / 계산값=수집 데이터 기반 서버 집계 / 캐시=5분 TTL KV 캐시" tabindex="0">
+      <span style="margin-left:auto;font-size:10px;color:var(--muted);cursor:help" data-tip="실데이터=채널톡 API 원천값 / 계산값=수집 데이터 기반 서버 집계 / 캐시=5분 TTL (${cacheTypeName})" tabindex="0">
         🏷 실데이터 · 계산값 · 캐시 범례 — 각 지표 카드 배지 확인
       </span>`;
   }
@@ -656,7 +686,8 @@ function renderKPIs(d, scoreObj) {
   const grid = document.getElementById('kpiGrid');
   if (!grid) return;
   grid.innerHTML = `
-    <div class="kpi-card a-${unassigned > 0 ? 'rose' : 'green'}" style="cursor:pointer" onclick="window.open('${chatTalkUnassignedUrl()}','_blank')" data-tip="채널톡 미배정 채팅 큐로 이동합니다&#10;※ desk.channel.io 로그인 세션이 필요합니다&#10;출처: Channel Talk API (실시간 조회)" tabindex="0">
+    <div class="kpi-card a-${unassigned > 0 ? 'rose' : 'green'}" style="cursor:pointer" onclick="window.open('${chatTalkUnassignedUrl()}','_blank')"
+      data-tip="【미배정 채팅】&#10;출처: 채널톡 API 실시간 조회 (실데이터)&#10;정의: 담당자 미배정 상태인 채팅 수&#10;계산: API openChats 중 assigneeId=null 건&#10;분모: 전체 오픈 채팅 (필터 없음)&#10;기준: 현재 실시간 상태&#10;클릭 → 채널톡 미배정 큐로 이동" tabindex="0">
       <div class="kpi-label">미배정 <span class="kpi-src-icon" data-tip="채널톡 실데이터 · API 실시간 조회" tabindex="0" style="cursor:help">ⓘ</span></div>
       <div class="kpi-value">${fmt(unassigned)}<span class="unit">건</span></div>
       <div class="kpi-meta">
@@ -665,7 +696,8 @@ function renderKPIs(d, scoreObj) {
       </div>
       ${unassigned > 0 ? `<div style="font-size:9.5px;color:var(--muted);margin-top:2px">클릭 → 채널톡 미배정 큐 (로그인 필요)</div>` : ''}
     </div>
-    <div class="kpi-card a-${openChats > 5 ? 'rose' : openChats > 0 ? 'amber' : 'green'}" style="cursor:pointer" onclick="window.open('${chatTalkChannel()}','_blank')" data-tip="현재 진행 중인 오픈(미종결) 채팅 수&#10;클릭 → 채널톡 채팅 목록으로 이동" tabindex="0">
+    <div class="kpi-card a-${openChats > 5 ? 'rose' : openChats > 0 ? 'amber' : 'green'}" style="cursor:pointer" onclick="window.open('${chatTalkChannel()}','_blank')"
+      data-tip="【오픈 채팅】&#10;출처: 채널톡 API 실시간 조회 (실데이터)&#10;정의: 현재 진행 중인 미종결(open) 채팅 수&#10;계산: API status=opened 건수&#10;기준: 현재 실시간 상태 (기간 필터 무관)&#10;클릭 → 채널톡 채팅 목록으로 이동" tabindex="0">
       <div class="kpi-label">오픈 채팅</div>
       <div class="kpi-value">${fmt(openChats)}<span class="unit">건</span></div>
       <div class="kpi-meta">
@@ -674,15 +706,18 @@ function renderKPIs(d, scoreObj) {
       </div>
       ${openChats > 0 ? '<div style="font-size:9.5px;color:var(--muted);margin-top:2px">클릭 → 채널톡 채팅 목록 ↗</div>' : ''}
     </div>
-    <div class="kpi-card a-${slow8h > 10 ? 'rose' : slow8h > 0 ? 'amber' : 'green'}" style="cursor:pointer" onclick="openLongChatsPanel()">
-      <div class="kpi-label" data-tip="종결 채팅 중 해결시간이 8시간을 초과한 케이스 비율&#10;※ 현재 오픈 대기 중인 건수가 아닌, 종결 완료된 채팅 기준" tabindex="0" style="cursor:help">8시간+ 해결시간 <span style="font-size:9px;opacity:.6">(종결 기준)</span></div>
+    <div class="kpi-card a-${slow8h > 10 ? 'rose' : slow8h > 0 ? 'amber' : 'green'}" style="cursor:pointer" onclick="openLongChatsPanel()"
+      data-tip="【8시간+ 해결시간】&#10;출처: 서버 계산값&#10;정의: 종결 채팅 중 해결시간 > 480분(8h) 케이스 수&#10;계산: closed 채팅의 resolutionMin > 480 건수&#10;분모: 해결시간 집계 가능한 closed 채팅 전체(${resTotal}건)&#10;비율: ${slow8hPct}% (${slow8h}/${resTotal})&#10;※ 오픈 대기중인 건이 아닌 완료된 채팅 기준" tabindex="0">
+      <div class="kpi-label">8시간+ 해결시간 <span style="font-size:9px;opacity:.6">(종결 기준)</span></div>
       <div class="kpi-value">${fmt(slow8h)}<span class="unit">건</span></div>
       <div class="kpi-meta">
         <span class="data-badge badge-calc">계산값</span>
         <span class="delta ${slow8h === 0 ? 'good' : slow8h > 10 ? 'bad' : 'neutral'}">${slow8hPct}%</span>
       </div>
+      <div style="font-size:9.5px;color:var(--muted);margin-top:2px">클릭 → 장기지연 목록 상세보기</div>
     </div>
-    <div class="kpi-card a-${complaintPct >= 15 ? 'rose' : complaintPct >= 8 ? 'amber' : 'green'}" style="cursor:pointer" onclick="openComplaintPanel()" data-tip="컴플레인 태그 채팅 비율&#10;클릭 → 유형별 원인 분석 상세보기" tabindex="0">
+    <div class="kpi-card a-${complaintPct >= 15 ? 'rose' : complaintPct >= 8 ? 'amber' : 'green'}" style="cursor:pointer" onclick="openComplaintPanel()"
+      data-tip="【컴플레인율】&#10;출처: 채널톡 태그 실데이터&#10;정의: '컴플레인' 포함 태그가 붙은 채팅 비율&#10;계산: 컴플레인 태그 채팅 수 / 전체 closed 채팅 수 × 100&#10;분모: summary.totalChats (${totalChats}건)&#10;※ 한 채팅에 여러 컴플레인 태그 가능 → 태그 기준 집계&#10;클릭 → 유형별 원인 분석" tabindex="0">
       <div class="kpi-label">컴플레인율</div>
       <div class="kpi-value">${complaintPct}<span class="unit">%</span></div>
       <div class="kpi-meta">
@@ -691,7 +726,8 @@ function renderKPIs(d, scoreObj) {
       </div>
       <div style="font-size:9.5px;color:var(--muted);margin-top:2px">클릭 → 유형별 원인 분석</div>
     </div>
-    <div class="kpi-card a-${topPct > 80 ? 'rose' : topPct > 60 ? 'amber' : 'green'}" style="cursor:pointer" onclick="_gotoTab('[data-tab=\'mgr-conc\']')" data-tip="최다 처리 담당자의 비중&#10;클릭 → 담당자 집중도 탭으로 이동" tabindex="0">
+    <div class="kpi-card a-${topPct > 80 ? 'rose' : topPct > 60 ? 'amber' : 'green'}" style="cursor:pointer" onclick="_gotoTab('[data-tab=\'mgr-conc\']')"
+      data-tip="【담당자 편중도】&#10;출처: 서버 계산값&#10;정의: 최다 처리 담당자가 전체에서 차지하는 비중&#10;계산: 최다처리 담당자 채팅 수 / 전체 closed 채팅 수 × 100&#10;분모: summary.totalChats (${totalChats}건)&#10;최다 처리: ${topMgr ? dispMgrName(topMgr.name) + ' (' + topMgr.count + '건)' : '—'}&#10;제외 담당자: ${EXCLUDED_MANAGERS.join(', ')}&#10;클릭 → 담당자 집중도 탭" tabindex="0">
       <div class="kpi-label">담당자 편중</div>
       <div class="kpi-value">${topPct}<span class="unit">%</span></div>
       <div class="kpi-meta">
@@ -1255,67 +1291,167 @@ function renderLongDelayPanel(d) {
     <button class="ld-more-link" type="button" data-action="open-long-chats" onclick="openLongChatsPanel()">▸ 전체 목록 (${slow8h}건) 보기</button>`;
 }
 
-function openLongChatsPanel() {
+function openLongChatsPanel(keepFilter) {
   const modal = document.getElementById('longChatsModal');
   if (!modal) return;
   // 필터 데이터에 longChats가 없거나 비어 있으면 원본 데이터로 폴백
   const src = (lastFilteredData && lastFilteredData.longChats && lastFilteredData.longChats.length)
     ? lastFilteredData
     : lastData;
-  const longChatsList = (src && src.longChats) ? src.longChats : [];
+  const rawList = (src && src.longChats) ? src.longChats : [];
+  // 해결시간 기준 내림차순 정렬
+  const longChatsList = [...rawList].sort((a, b) => (b.resolutionMin || 0) - (a.resolutionMin || 0));
   const mgrMap = {};
   ((src && src.managers) || []).forEach((m) => { mgrMap[m.id] = m.name; });
+
   // 모달 제목에 필터 적용 여부 표시
   const titleEl = modal.querySelector('.modal-header span');
   if (titleEl) {
     const filterNote = activeFilterCount() > 0 ? ` (필터 적용 중 · ${longChatsList.length}건)` : ` (${longChatsList.length}건)`;
     titleEl.textContent = `🐢 8시간+ 해결시간 초과 채팅${filterNote}`;
   }
-  const rows = longChatsList.map((c) => {
-    const safeTags = Array.isArray(c.tags) ? c.tags : [];
-    const tagsHtml = safeTags.length ? safeTags.slice(0,3).map((t) => `<span class="long-tag">#${t}</span>`).join(' ') : '<span style="color:var(--muted)">태그 없음</span>';
-    const mgrName = c.assigneeId ? dispMgrName(mgrMap[c.assigneeId] || c.assigneeId) : '미배정';
-    const totalMins = c.resolutionMin || 0;
-    const totalHrs = Math.floor(totalMins / 60);
-    const daysCnt = Math.floor(totalHrs / 24);
-    const remHrs = totalHrs % 24;
-    const humanTime = daysCnt >= 1 ? `${daysCnt}일 ${remHrs}시간` : `${totalHrs}시간 ${totalMins % 60}분`;
-    const timeColor = totalMins > 2880 ? 'var(--rose)' : totalMins > 480 ? 'var(--amber)' : 'var(--text)';
-    const url = chatTalkUrl(c.id);
-    const dateCell = url ? `<a href="${url}" target="_blank" class="cs-deeplink">${c.date || '—'} ↗</a>` : (c.date || '—');
-    const srcMap = { native: '앱/웹', phone: '전화', other: '기타' };
-    const channelTxt = srcMap[c.source] || c.source || '—';
-    const statusMap = { closed: '종결', opened: '열림', 'bot-resolved': '봇처리' };
-    const statusTxt = statusMap[c.status] || c.status || '—';
-    const statusStyle = c.status === 'closed' ? 'color:var(--teal-d)' : 'color:var(--amber)';
-    const linkCell = url ? `<a href="${url}" target="_blank" class="cs-deeplink" style="font-size:10.5px">채팅 보기 ↗</a>` : '—';
-    return `<tr style="border-bottom:1px solid var(--border-soft)">
-      <td style="padding:7px 8px;white-space:nowrap">${dateCell}</td>
-      <td style="padding:7px 8px;color:${timeColor};font-weight:700;white-space:nowrap">${totalMins}분 <span style="color:var(--muted);font-size:10px;font-weight:400">(${humanTime})</span></td>
-      <td style="padding:7px 8px">${mgrName}</td>
-      <td style="padding:7px 8px">${tagsHtml}</td>
-      <td style="padding:7px 8px;font-size:10.5px">${channelTxt}</td>
-      <td style="padding:7px 8px;font-size:10.5px;${statusStyle}">${statusTxt}</td>
-      <td style="padding:7px 8px">${linkCell}</td>
-    </tr>`;
-  }).join('');
-  const tbody = rows || '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted)">데이터 없음</td></tr>';
-  document.getElementById('longChatsBody').innerHTML = `
-    <div style="overflow-x:auto">
-    <table style="width:100%;border-collapse:collapse;min-width:640px">
-      <thead><tr style="border-bottom:2px solid var(--border-soft);background:var(--bg2)">
-        <th style="text-align:left;padding:8px;font-size:11px;color:var(--muted);font-weight:700">일자</th>
-        <th style="text-align:left;padding:8px;font-size:11px;color:var(--muted);font-weight:700">해결시간</th>
-        <th style="text-align:left;padding:8px;font-size:11px;color:var(--muted);font-weight:700">담당자</th>
-        <th style="text-align:left;padding:8px;font-size:11px;color:var(--muted);font-weight:700">태그</th>
-        <th style="text-align:left;padding:8px;font-size:11px;color:var(--muted);font-weight:700">채널</th>
-        <th style="text-align:left;padding:8px;font-size:11px;color:var(--muted);font-weight:700">상태</th>
-        <th style="text-align:left;padding:8px;font-size:11px;color:var(--muted);font-weight:700">바로가기</th>
-      </tr></thead>
-      <tbody>${tbody}</tbody>
-    </table>
-    </div>`;
+
+  // 모달 열 때 퀵 필터 초기화 (keepFilter=true 시 유지)
+  if (!keepFilter) lcModalFilter = { mgr: null, tag: null, src: null };
+
+  const isMobile = window.innerWidth <= 430;
+  const srcMap = { native: '앱/웹', phone: '전화', other: '기타' };
+  const statusMap = { closed: '종결', opened: '열림', 'bot-resolved': '봇처리' };
+
+  // 퀵 필터에서 사용할 고유값 수집
+  const uniqueMgrs = [...new Set(longChatsList.map(c => c.assigneeId).filter(Boolean))].slice(0, 6);
+  const uniqueTags = [...new Set(longChatsList.flatMap(c => Array.isArray(c.tags) ? c.tags : []))].slice(0, 6);
+  const uniqueSrcs = [...new Set(longChatsList.map(c => c.source).filter(Boolean))];
+
+  // 퀵 필터 칩 HTML 생성 헬퍼
+  function lcChip(kind, val, label, isActive) {
+    return `<button class="lc-qf-chip${isActive ? ' active' : ''}" data-lckind="${kind}" data-lcval="${val}" type="button">${label}</button>`;
+  }
+  const mgrChips = uniqueMgrs.map(id => lcChip('mgr', id, dispMgrName(mgrMap[id] || id), lcModalFilter.mgr === id)).join('');
+  const tagChips = uniqueTags.map(t => lcChip('tag', t, '#' + t, lcModalFilter.tag === t)).join('');
+  const srcChips = uniqueSrcs.map(s => lcChip('src', s, srcMap[s] || s, lcModalFilter.src === s)).join('');
+  const hasQfOptions = mgrChips || tagChips || srcChips;
+
+  const sortLabel = `<div class="lc-sort-label">🔽 해결시간 기준 내림차순</div>`;
+  const filterBar = hasQfOptions ? `
+    <div class="lc-qf-bar" id="lcQuickFilters">
+      ${mgrChips ? `<div class="lc-qf-group"><span class="lc-qf-label">담당자</span>${mgrChips}</div>` : ''}
+      ${tagChips ? `<div class="lc-qf-group"><span class="lc-qf-label">태그</span>${tagChips}</div>` : ''}
+      ${srcChips ? `<div class="lc-qf-group"><span class="lc-qf-label">채널</span>${srcChips}</div>` : ''}
+    </div>` : '';
+
+  // 현재 퀵 필터 조건에 맞게 목록 필터링
+  const filteredList = longChatsList.filter(c => {
+    if (lcModalFilter.mgr && c.assigneeId !== lcModalFilter.mgr) return false;
+    if (lcModalFilter.tag && !(Array.isArray(c.tags) ? c.tags : []).includes(lcModalFilter.tag)) return false;
+    if (lcModalFilter.src && c.source !== lcModalFilter.src) return false;
+    return true;
+  });
+
+  if (isMobile) {
+    // ─── 모바일: 카드 레이아웃 ─────────────────────────────────────────
+    const cards = filteredList.length === 0
+      ? '<p style="text-align:center;padding:20px;color:var(--muted)">데이터 없음</p>'
+      : filteredList.map((c) => {
+        const safeTags = Array.isArray(c.tags) ? c.tags : [];
+        const mgrName = c.assigneeId ? dispMgrName(mgrMap[c.assigneeId] || c.assigneeId) : '미배정';
+        const totalMins = c.resolutionMin || 0;
+        const totalHrs = Math.floor(totalMins / 60);
+        const daysCnt = Math.floor(totalHrs / 24);
+        const remHrs = totalHrs % 24;
+        const humanTime = daysCnt >= 1 ? `${daysCnt}일 ${remHrs}시간` : `${totalHrs}시간 ${totalMins % 60}분`;
+        const timeColor = totalMins > 2880 ? 'var(--rose)' : totalMins > 480 ? 'var(--amber)' : 'var(--text)';
+        const url = chatTalkUrl(c.id);
+        const channelTxt = srcMap[c.source] || c.source || '—';
+        const statusTxt = statusMap[c.status] || c.status || '—';
+        const statusColor = c.status === 'closed' ? 'var(--teal-d)' : 'var(--amber)';
+        const tagsHtml = safeTags.length
+          ? safeTags.slice(0,3).map((t) => `<span class="long-tag">#${t}</span>`).join(' ')
+          : '<span style="color:var(--muted);font-size:10px">태그 없음</span>';
+        const linkHtml = url
+          ? `<a href="${url}" target="_blank" class="lc-card-link">채팅 보기 ↗</a>`
+          : '';
+        return `<div class="lc-mobile-card">
+          <div class="lc-card-top">
+            <div>
+              <div class="lc-card-time" style="color:${timeColor}">${totalMins}분</div>
+              <div class="lc-card-time-sub">${humanTime} · ${c.date || '—'}</div>
+            </div>
+            ${linkHtml}
+          </div>
+          <div class="lc-card-meta">
+            <span class="lc-card-meta-item"><span class="lc-card-meta-label">담당자</span> ${mgrName}</span>
+            <span class="lc-card-meta-item"><span class="lc-card-meta-label">채널</span> ${channelTxt}</span>
+            <span class="lc-card-meta-item"><span class="lc-card-meta-label" style="color:${statusColor}">${statusTxt}</span></span>
+          </div>
+          <div class="lc-card-tags">${tagsHtml}</div>
+        </div>`;
+      }).join('');
+    document.getElementById('longChatsBody').innerHTML = sortLabel + filterBar + cards;
+  } else {
+    // ─── 데스크톱: 테이블 레이아웃 ─────────────────────────────────────
+    const rows = filteredList.map((c) => {
+      const safeTags = Array.isArray(c.tags) ? c.tags : [];
+      const tagsHtml = safeTags.length ? safeTags.slice(0,3).map((t) => `<span class="long-tag">#${t}</span>`).join(' ') : '<span style="color:var(--muted)">태그 없음</span>';
+      const mgrName = c.assigneeId ? dispMgrName(mgrMap[c.assigneeId] || c.assigneeId) : '미배정';
+      const totalMins = c.resolutionMin || 0;
+      const totalHrs = Math.floor(totalMins / 60);
+      const daysCnt = Math.floor(totalHrs / 24);
+      const remHrs = totalHrs % 24;
+      const humanTime = daysCnt >= 1 ? `${daysCnt}일 ${remHrs}시간` : `${totalHrs}시간 ${totalMins % 60}분`;
+      const timeColor = totalMins > 2880 ? 'var(--rose)' : totalMins > 480 ? 'var(--amber)' : 'var(--text)';
+      const url = chatTalkUrl(c.id);
+      const dateCell = url ? `<a href="${url}" target="_blank" class="cs-deeplink">${c.date || '—'} ↗</a>` : (c.date || '—');
+      const channelTxt = srcMap[c.source] || c.source || '—';
+      const statusTxt = statusMap[c.status] || c.status || '—';
+      const statusStyle = c.status === 'closed' ? 'color:var(--teal-d)' : 'color:var(--amber)';
+      const linkCell = url ? `<a href="${url}" target="_blank" class="cs-deeplink" style="font-size:10.5px">채팅 보기 ↗</a>` : '—';
+      return `<tr style="border-bottom:1px solid var(--border-soft)">
+        <td style="padding:7px 8px;white-space:nowrap">${dateCell}</td>
+        <td style="padding:7px 8px;color:${timeColor};font-weight:700;white-space:nowrap">${totalMins}분 <span style="color:var(--muted);font-size:10px;font-weight:400">(${humanTime})</span></td>
+        <td style="padding:7px 8px">${mgrName}</td>
+        <td style="padding:7px 8px">${tagsHtml}</td>
+        <td style="padding:7px 8px;font-size:10.5px">${channelTxt}</td>
+        <td style="padding:7px 8px;font-size:10.5px;${statusStyle}">${statusTxt}</td>
+        <td style="padding:7px 8px">${linkCell}</td>
+      </tr>`;
+    }).join('');
+    const tbody = rows || '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted)">데이터 없음</td></tr>';
+    document.getElementById('longChatsBody').innerHTML = sortLabel + filterBar + `
+      <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;min-width:640px">
+        <thead><tr style="border-bottom:2px solid var(--border-soft);background:var(--bg2)">
+          <th style="text-align:left;padding:8px;font-size:11px;color:var(--muted);font-weight:700">일자</th>
+          <th style="text-align:left;padding:8px;font-size:11px;color:var(--muted);font-weight:700">해결시간</th>
+          <th style="text-align:left;padding:8px;font-size:11px;color:var(--muted);font-weight:700">담당자</th>
+          <th style="text-align:left;padding:8px;font-size:11px;color:var(--muted);font-weight:700">태그</th>
+          <th style="text-align:left;padding:8px;font-size:11px;color:var(--muted);font-weight:700">채널</th>
+          <th style="text-align:left;padding:8px;font-size:11px;color:var(--muted);font-weight:700">상태</th>
+          <th style="text-align:left;padding:8px;font-size:11px;color:var(--muted);font-weight:700">바로가기</th>
+        </tr></thead>
+        <tbody>${tbody}</tbody>
+      </table>
+      </div>`;
+  }
   modal.style.display = 'flex';
+
+  // 퀵 필터 칩 클릭 핸들러 — 클릭 시 필터 상태 토글 후 모달 재렌더
+  const qfBar = document.getElementById('lcQuickFilters');
+  if (qfBar) {
+    qfBar.querySelectorAll('.lc-qf-chip').forEach((chip) => {
+      chip.onclick = () => {
+        const kind = chip.dataset.lckind;
+        const val  = chip.dataset.lcval;
+        // 같은 값 클릭 시 해제 (토글), 다른 값 클릭 시 교체
+        if (lcModalFilter[kind] === val) {
+          lcModalFilter[kind] = null;
+        } else {
+          lcModalFilter[kind] = val;
+        }
+        openLongChatsPanel(true); // keepFilter=true
+      };
+    });
+  }
 }
 
 /* ─── Complaint Analysis Panel ─────────────────────────────────────────── */
