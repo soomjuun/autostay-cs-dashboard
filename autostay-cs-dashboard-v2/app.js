@@ -177,13 +177,13 @@ function renderFilterDrawer(data) {
   const managers = (data.managers || []).filter((m) => !EXCLUDED_MANAGERS.includes(m.name) && m.count > 0);
   mgrEl.innerHTML = managers.map((m) => {
     const isActive = filterState.managers.has(m.id);
-    return `<span class="filter-chip ${isActive ? 'active' : ''}" data-fkind="mgr" data-fval="${m.id}">${isActive ? '✓ ' : ''}${m.name.replace('오토스테이_','')}<span class="filter-chip-cnt">${m.count}</span></span>`;
+    return `<span class="filter-chip ${isActive ? 'active' : ''}" role="button" aria-pressed="${isActive}" data-fkind="mgr" data-fval="${m.id}">${isActive ? '✓ ' : ''}${m.name.replace('오토스테이_','')}<span class="filter-chip-cnt">${m.count}</span></span>`;
   }).join('');
 
   const tags = (data.tags?.labels || []).slice(0, 10);
   tagEl.innerHTML = tags.map((t, i) => {
     const isActive = filterState.tags.has(t);
-    return `<span class="filter-chip ${isActive ? 'active' : ''}" data-fkind="tag" data-fval="${t}">${isActive ? '✓ ' : ''}#${t}<span class="filter-chip-cnt">${data.tags.values[i] || 0}</span></span>`;
+    return `<span class="filter-chip ${isActive ? 'active' : ''}" role="button" aria-pressed="${isActive}" data-fkind="tag" data-fval="${t}">${isActive ? '✓ ' : ''}#${t}<span class="filter-chip-cnt">${data.tags.values[i] || 0}</span></span>`;
   }).join('');
 
   const srcMap = { native: '인앱', phone: '전화', other: '기타' };
@@ -191,7 +191,7 @@ function renderFilterDrawer(data) {
     const cnt = (data.sources || {})[s] || 0;
     if (cnt === 0) return '';
     const isActive = filterState.sources.has(s);
-    return `<span class="filter-chip ${isActive ? 'active' : ''}" data-fkind="src" data-fval="${s}">${isActive ? '✓ ' : ''}${srcMap[s]}<span class="filter-chip-cnt">${cnt}</span></span>`;
+    return `<span class="filter-chip ${isActive ? 'active' : ''}" role="button" aria-pressed="${isActive}" data-fkind="src" data-fval="${s}">${isActive ? '✓ ' : ''}${srcMap[s]}<span class="filter-chip-cnt">${cnt}</span></span>`;
   }).join('');
 
   // chip 클릭 핸들러 — 드로어 내부만 스코프
@@ -202,7 +202,9 @@ function renderFilterDrawer(data) {
       const val = chip.dataset.fval;
       const set = kind === 'mgr' ? filterState.managers : kind === 'tag' ? filterState.tags : filterState.sources;
       if (set.has(val)) set.delete(val); else set.add(val);
+      const nowActive = set.has(val);
       chip.classList.toggle('active');
+      chip.setAttribute('aria-pressed', String(chip.classList.contains('active')));
       updateFilterBadges();
       applyFilteredRender();
     };
@@ -641,29 +643,22 @@ function renderKPIs(d, scoreObj) {
   if (cacheBadge) {
     const diag = d.diagnostics || {};
     const isHit = diag.cacheHit;
-    // 캐시 타입: diag.kvEnabled 을 단일 출처로 사용
-    const kvEnabled = diag.kvEnabled;
-    const cacheTypeLabel = kvEnabled ? 'Vercel KV 캐시' : '메모리 캐시';
-    const cacheLabel = isHit ? `⚡ ${kvEnabled ? 'KV' : '메모리'} 캐시` : '🔄 최신 조회';
+    const cacheLabel = isHit ? '⚡ 메모리 캐시' : '🔄 최신 조회';
     cacheBadge.innerHTML = cacheLabel;
     cacheBadge.className = isHit ? 'hero-cache-badge cache-hit' : 'hero-cache-badge cache-miss';
     // TTL / 수집시간 / 갱신 방법을 tooltip에 통합
     const paginMs = diag.paginationMs ? `원본 수집 ${diag.paginationMs}ms` : '';
     cacheBadge.title = isHit
-      ? `${cacheTypeLabel}에서 응답 · 최대 5분 TTL${paginMs ? ' · ' + paginMs : ''}\n강제 갱신: 새로고침 버튼 클릭`
-      : `Channel Talk API 직접 조회 — 최신 데이터 (지연 없음)\n캐시 방식: ${cacheTypeLabel}`;
+      ? `메모리 캐시에서 응답 · 최대 5분 TTL${paginMs ? ' · ' + paginMs : ''}\n강제 갱신: 새로고침 버튼 클릭`
+      : `Channel Talk API 직접 조회 — 최신 데이터 (지연 없음)\n캐시 방식: 메모리 캐시`;
   }
 
   const kpiBasisHeaderEl = document.getElementById('kpiBasisHeader');
   if (kpiBasisHeaderEl) {
     kpiBasisHeaderEl.style.display = 'flex';
     const diagObj = d.diagnostics || {};
-    const kvEnabled = diagObj.kvEnabled;
-    // 캐시 타입: diag.kvEnabled 단일 출처 사용 (header/diagnostics 동기화)
-    const cacheTypeName = kvEnabled ? 'Vercel KV' : '메모리';
-    const cacheTipText = kvEnabled
-      ? 'Vercel KV 캐시 · 5분 TTL · 강제 갱신: 새로고침 버튼'
-      : '메모리 캐시 · 5분 TTL · KV 미설정 · 강제 갱신: 새로고침 버튼';
+    const cacheTypeName = '메모리';
+    const cacheTipText = '메모리 캐시 · 5분 TTL · 강제 갱신: 새로고침 버튼';
     const sampledWarn = isSampled ? ` <span style="color:var(--amber);font-weight:700">⚠ 수집 상한(${limitVal}건) 도달 — 최근 ${limitVal}건 기준 집계</span>` : '';
     const paginMs = diagObj.paginationMs ? diagObj.paginationMs + 'ms' : '—';
     const cacheInfo = diagObj.cacheHit
@@ -727,8 +722,8 @@ function renderKPIs(d, scoreObj) {
       <div style="font-size:9.5px;color:var(--muted);margin-top:2px">클릭 → 유형별 원인 분석</div>
     </div>
     <div class="kpi-card a-${topPct > 80 ? 'rose' : topPct > 60 ? 'amber' : 'green'}" style="cursor:pointer" onclick="_gotoTab('[data-tab=\'mgr-conc\']')"
-      data-tip="【담당자 편중도】&#10;출처: 서버 계산값&#10;정의: 최다 처리 담당자가 전체에서 차지하는 비중&#10;계산: 최다처리 담당자 채팅 수 / 전체 closed 채팅 수 × 100&#10;분모: summary.totalChats (${totalChats}건)&#10;최다 처리: ${topMgr ? dispMgrName(topMgr.name) + ' (' + topMgr.count + '건)' : '—'}&#10;제외 담당자: ${EXCLUDED_MANAGERS.join(', ')}&#10;클릭 → 담당자 집중도 탭" tabindex="0">
-      <div class="kpi-label">담당자 편중</div>
+      data-tip="【담당자 편중 — 전체 기준】&#10;출처: 서버 계산값&#10;계산: 최다 처리 담당자 수 ÷ 전체 closed 채팅 수 × 100&#10;분모: summary.totalChats (${totalChats}건, 봇·미배정 포함)&#10;최다 처리: ${topMgr ? dispMgrName(topMgr.name) + ' (' + topMgr.count + '건)' : '—'}&#10;제외 담당자: ${EXCLUDED_MANAGERS.join(', ')}&#10;※ 게이지의 '처리 기준'은 배정 건만 분모로 사용해 수치가 다를 수 있음&#10;클릭 → 담당자 집중도 탭" tabindex="0">
+      <div class="kpi-label">담당자 편중 (전체 기준)</div>
       <div class="kpi-value">${topPct}<span class="unit">%</span></div>
       <div class="kpi-meta">
         <span class="data-badge badge-calc">계산값</span>
@@ -1292,6 +1287,7 @@ function renderLongDelayPanel(d) {
 }
 
 function openLongChatsPanel(keepFilter) {
+  closeComplaintPanel(); // 다른 모달이 열려 있으면 먼저 닫음
   const modal = document.getElementById('longChatsModal');
   if (!modal) return;
   // 필터 데이터에 longChats가 없거나 비어 있으면 원본 데이터로 폴백
@@ -1434,6 +1430,7 @@ function openLongChatsPanel(keepFilter) {
       </div>`;
   }
   modal.style.display = 'flex';
+  modal.setAttribute('aria-hidden', 'false');
 
   // 퀵 필터 칩 클릭 핸들러 — 클릭 시 필터 상태 토글 후 모달 재렌더
   const qfBar = document.getElementById('lcQuickFilters');
@@ -1456,6 +1453,7 @@ function openLongChatsPanel(keepFilter) {
 
 /* ─── Complaint Analysis Panel ─────────────────────────────────────────── */
 function openComplaintPanel() {
+  closeLongChatsPanel(); // 다른 모달이 열려 있으면 먼저 닫음
   const modal = document.getElementById('complaintModal');
   if (!modal) return;
   const src = lastFilteredData || lastData;
@@ -1534,15 +1532,16 @@ function openComplaintPanel() {
     </div>`;
 
   modal.style.display = 'flex';
+  modal.setAttribute('aria-hidden', 'false');
 }
 function closeComplaintPanel() {
   const m = document.getElementById('complaintModal');
-  if (m) m.style.display = 'none';
+  if (m) { m.style.display = 'none'; m.setAttribute('aria-hidden', 'true'); }
 }
 
 function closeLongChatsPanel() {
   const m = document.getElementById('longChatsModal');
-  if (m) m.style.display = 'none';
+  if (m) { m.style.display = 'none'; m.setAttribute('aria-hidden', 'true'); }
 }
 
 /* ─── Concentration / Manager Risk Strip ────────────────────────────── */
@@ -1861,7 +1860,12 @@ function renderGaugeGrid(d) {
   const topPct = topMgr ? Math.round(topMgr.count / mgrTotal * 100) : 0;
   setG('conc', topPct, topPct <= 40 ? 'gauge-fill--good' : topPct <= 60 ? 'gauge-fill--warn' : 'gauge-fill--danger');
   document.getElementById('gval-conc').textContent = topPct + '%';
-  document.getElementById('gsub-conc').textContent = topMgr ? `${dispMgrName(topMgr.name)} ${topMgr.count}건 · ${topPct}% · ${topPct > 70 ? '편중 주의' : topPct > 50 ? '모니터링' : '분산 양호'}` : '—';
+  const gsubConc = document.getElementById('gsub-conc');
+  if (gsubConc) {
+    gsubConc.innerHTML = topMgr
+      ? `<span data-tip="배정 처리 기준: ${topMgr.count}건 ÷ ${mgrTotal}건(배정 합계) × 100 = ${topPct}%&#10;봇·미배정·제외 담당자 제외 후 집계" tabindex="0" style="cursor:help">${dispMgrName(topMgr.name)} ${topMgr.count}건 · ${topPct}% · ${topPct > 70 ? '편중 주의' : topPct > 50 ? '모니터링' : '분산 양호'}</span>`
+      : '—';
+  }
   setB('conc', topPct <= 40 ? '양호' : topPct <= 60 ? '주의' : '위험', topPct <= 40 ? 'good' : topPct <= 60 ? 'warn' : 'danger');
 }
 
@@ -1900,7 +1904,7 @@ function renderSLA(d) {
       <div class="sla-meta"><div class="sla-label">${it.label}</div><div class="sla-target">목표 ${it.target}%</div></div>
       <div class="sla-bar-wrap"><div class="sla-bar-fill sla-${cls}" style="width:${Math.min(v.rate, 100)}%"></div><div class="sla-target-marker" style="left:${it.target}%"></div></div>
       <div class="sla-val sla-${cls}">${v.rate}%</div>
-      <div class="sla-count" tabindex="0" data-tip="분모: 종결(closed) 채팅 ${v.total}건 기준 · 진행 중(open) 제외 · ${it.label} 내 완료 ${v.count}건" style="cursor:help">${v.count}/${v.total} ⓘ</div>
+      <div class="sla-count" tabindex="0" data-tip="【SLA 분모 설명】&#10;기준: closed 채팅 ${v.total}건&#10;제외 항목: ① 진행 중(open) 채팅 ② 해결시간 측정 불가(봇 자동종결·시스템 메시지만 있는 채팅) ③ 해결시간 데이터 누락 건&#10;→ 총 채팅 수와 SLA 분모가 다를 수 있음&#10;${it.label} 내 완료: ${v.count}건 / ${v.total}건 기준" style="cursor:help">${v.count}/${v.total} ⓘ</div>
       <span class="sla-status sla-${cls}">${v.rate >= it.target ? '준수' : v.rate >= it.target * 0.7 ? '근접' : '미달'}</span>
     </div>`;
   }).join('');
@@ -2209,9 +2213,8 @@ function renderDiagnostics(d) {
   if (!el) return;
   const totalRows = calls.map((c) => `<tr><td>${c.label}</td><td><span class="diag-status ${c.ok ? 'ok' : 'fail'}">${c.ok ? 'OK' : 'FAIL'}</span></td><td class="num-r">${c.status}</td><td class="num-r">${c.ms}ms</td></tr>`).join('');
   const warnHtml = warns.length ? `<div class="diag-warns">${warns.map((w) => `<span class="diag-warn-tag">⚠ ${w}</span>`).join('')}</div>` : `<div class="diag-ok">✓ 모든 호출 성공</div>`;
-  const kvBadge = diag.kvEnabled ? '<span style="color:var(--teal);font-weight:700">✓ KV 활성</span>' : '<span style="color:var(--muted)">KV 미설정 (메모리 캐시만)</span>';
   // 캐시 히트 시: 서버 응답(totalMs≈0ms)과 원본 API 수집시간(paginationMs) 구분 표시
-  const cacheSourceLabel = diag.cacheSource === 'memory' ? '메모리' : diag.cacheSource === 'kv' ? 'KV' : (diag.cacheSource || 'mem');
+  const cacheSourceLabel = '메모리';
   const responseTimeLabel = diag.cacheHit
     ? `<span style="color:var(--teal)">캐시 응답</span> <span style="font-size:10px;color:var(--muted)">(원본 수집 ${diag.paginationMs || 0}ms)</span>`
     : `${diag.totalMs}ms`;
@@ -2227,7 +2230,7 @@ function renderDiagnostics(d) {
       <thead><tr><th>API 엔드포인트</th><th>상태</th><th class="num-r">HTTP</th><th class="num-r">응답시간</th></tr></thead>
       <tbody>${totalRows || '<tr><td colspan="4" class="diag-empty">호출 정보 없음</td></tr>'}</tbody>
     </table>
-    <div class="diag-note">v4.0 — KV 캐싱 (5분 TTL) · 부분 실패 허용 · 1000건 한도. ${kvBadge}</div>`;
+    <div class="diag-note">v4.0 — 메모리 캐시 (5분 TTL) · 부분 실패 허용 · 1000건 한도</div>`;
 }
 
 /* ─── Tabs ──────────────────────────────────────────────────────────── */
@@ -2641,6 +2644,12 @@ document.addEventListener('DOMContentLoaded', () => {
       // 기간 변경 시 집계 기준 안내 toast
       const rangeLabel = range === 'all' ? '전체 기간 (최대 500건)' : `최근 ${range}일`;
       showToast(`📅 ${rangeLabel} 기준 · 채널톡 API 집계 · 5분 캐시 적용`, 'info', 3200);
+      // 기간 전환 즉시 basis header를 업데이트하여 버튼 상태와 표시 기간이 일치하도록 함
+      const kpiHeaderEl = document.getElementById('kpiBasisHeader');
+      if (kpiHeaderEl) {
+        const newRangeText = range === 'all' ? '전체 기간' : `최근 ${range}일`;
+        kpiHeaderEl.innerHTML = `<span>📊 분석 기준</span><span style="font-weight:400;color:var(--muted)"><em>${newRangeText} · 조회 중…</em></span>`;
+      }
       triggerFullReload();
     });
   });

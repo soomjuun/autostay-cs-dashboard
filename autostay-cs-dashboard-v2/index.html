@@ -230,7 +230,7 @@
           <div class="gauge-label">FCR (1차 해결률) ⓘ</div>
           <div id="gsub-fcr" class="gauge-sub"></div>
         </div>
-        <div class="gauge-panel" data-tip="계산값 — 가장 많은 채팅을 처리한 담당자 1인의 점유율. 100%에 가까울수록 특정 담당자 의존 높음" tabindex="0" style="cursor:help">
+        <div class="gauge-panel" data-tip="【담당자 편중 — 배정 처리 기준】&#10;계산: 최다 처리 담당자 수 ÷ 배정된 담당자 처리 건 합계 × 100&#10;분모: 시스템·제외 담당자를 뺀 실제 배정 처리 건 합계 (봇/미배정 제외)&#10;※ KPI카드의 '전체 기준'과 분모가 달라 수치가 다를 수 있음" tabindex="0" style="cursor:help">
           <div class="gauge-panel-badge" id="gbadge-conc"></div>
           <div class="gauge-arc-wrap">
             <svg class="gauge-arc-svg" viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
@@ -239,7 +239,7 @@
             </svg>
             <div class="gauge-center"><div id="gval-conc" class="gauge-val">—</div></div>
           </div>
-          <div class="gauge-label">담당자 편중도 ⓘ</div>
+          <div class="gauge-label">담당자 편중 (처리 기준) ⓘ</div>
           <div id="gsub-conc" class="gauge-sub"></div>
         </div>
       </div>
@@ -520,7 +520,7 @@
     <!-- 진단 (col-12) -->
     <div class="cg-panel col-12 adv-panel">
       <div class="cg-panel-header">
-        <span class="cg-panel-title">🩺 API 진단 (Channel Talk Open API v5 + KV 캐싱)</span>
+        <span class="cg-panel-title">🩺 API 진단 (Channel Talk Open API v5 + 메모리 캐싱)</span>
         <span class="panel-badge adv-pb">Diagnostics</span>
       </div>
       <div id="diagPanel" class="diag-panel"></div>
@@ -528,7 +528,7 @@
   </section>
 
   <!-- 컴플레인 분석 모달 -->
-  <div id="complaintModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div id="complaintModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-hidden="true">
     <div class="modal-box">
       <div class="modal-header">
         <span>🔴 컴플레인 분석</span>
@@ -539,7 +539,7 @@
   </div>
 
   <!-- 장기 채팅 모달 -->
-  <div id="longChatsModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div id="longChatsModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-hidden="true">
     <div class="modal-box">
       <div class="modal-header">
         <span>🐢 8시간+ 해결 지연 채팅</span>
