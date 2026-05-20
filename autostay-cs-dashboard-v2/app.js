@@ -126,7 +126,9 @@ function chatTalkChannel() {
 function chatTalkUnassignedUrl() {
   const cid = getChannelId();
   if (!cid) return 'https://desk.channel.io';
-  return `https://desk.channel.io/#/channels/${cid}/team_chats?state=unassigned`;
+  // user_chats = 고객 상담 인박스 (team_chats는 내부 팀 채팅 — 오류 경로)
+  // state=unassigned = 담당자 미배정 필터 (Channel Talk Desk 인박스 필터 파라미터)
+  return `https://desk.channel.io/#/channels/${cid}/user_chats?state=unassigned`;
 }
 
 /* ─── C-2: 필터 시스템 ────────────────────────────────────────────────── */
@@ -297,8 +299,8 @@ function renderHeroAction(d, scoreObj) {
   if (unassigned > 0) {
     actions.push({
       type: 'danger',
-      title: `미배정 채팅 ${unassigned}건`,
-      cta: '채널톡에서 배정하기',
+      title: `미배정 상담 ${unassigned}건`,
+      cta: '채널톡 미배정 상담 보기',
       metric: unassigned + '건',
       rec: '담당자 즉시 배정',
       target: '30분 내',
@@ -682,8 +684,8 @@ function renderKPIs(d, scoreObj) {
   if (!grid) return;
   grid.innerHTML = `
     <div class="kpi-card a-${unassigned > 0 ? 'rose' : 'green'}" style="cursor:pointer" onclick="window.open('${chatTalkUnassignedUrl()}','_blank')"
-      data-tip="【미배정 채팅】&#10;출처: 채널톡 API 실시간 조회 (실데이터)&#10;정의: 담당자 미배정 상태인 채팅 수&#10;계산: API openChats 중 assigneeId=null 건&#10;분모: 전체 오픈 채팅 (필터 없음)&#10;기준: 현재 실시간 상태&#10;클릭 → 채널톡 미배정 큐로 이동" tabindex="0">
-      <div class="kpi-label">미배정 <span class="kpi-src-icon" data-tip="채널톡 실데이터 · API 실시간 조회" tabindex="0" style="cursor:help">ⓘ</span></div>
+      data-tip="【미배정 상담 (No Assignee)】&#10;출처: 채널톡 API 실시간 조회 (실데이터)&#10;정의: 현재 진행 중(opened) 상담 중 담당자(assigneeId)가 없는 건&#10;기준: 종결(closed) 상담 제외 · 현재 오픈 상담만&#10;※ Queue(자동배정 대기)와는 다른 개념: No assignee = 수동 배정 필요&#10;클릭 → 채널톡 인박스 미배정 목록으로 이동" tabindex="0">
+      <div class="kpi-label">미배정 <span class="kpi-src-icon" data-tip="채널톡 실데이터 · 현재 오픈 상담 기준 (No Assignee)" tabindex="0" style="cursor:help">ⓘ</span></div>
       <div class="kpi-value">${fmt(unassigned)}<span class="unit">건</span></div>
       <div class="kpi-meta">
         <span class="data-badge badge-real">실데이터</span>
