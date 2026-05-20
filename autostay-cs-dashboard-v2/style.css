@@ -84,6 +84,13 @@ canvas { display: block; }
 .loading-text {
   font-size: 12px; color: rgba(255,255,255,.6); font-weight: 500;
 }
+/* 기간 전환 중 이전 데이터 dimming */
+[data-period-loading="1"] {
+  opacity: 0.2;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+
 .loading-steps {
   display: flex; gap: 8px;
 }
@@ -2150,6 +2157,14 @@ button.hac-row-btn:focus-visible .hac-row {
   cursor: pointer; opacity: .55; font-weight: 700;
 }
 .filter-badge-x:hover { opacity: 1; }
+/* 필터 스코프 노트 내 칩 */
+.fsn-chip {
+  display: inline-flex; align-items: center;
+  font-size: 10px; font-weight: 600; padding: 1px 7px;
+  background: #fef3c7; color: #92400e;
+  border-radius: 10px; border: 1px solid #fde68a;
+  margin: 0 2px;
+}
 
 /* ─── 탭 컴포넌트 ─────────────────────────────────────────────────────── */
 .cg-tabs {
@@ -2551,6 +2566,30 @@ button.hac-row-btn:focus-visible .hac-row {
   background: linear-gradient(180deg, rgba(20,184,166,.05) 0%, rgba(0,0,0,.28) 100%);
 }
 .kpi-card.a-green .kpi-value { color: #5eead4; }
+.kpi-card.a-green:hover {
+  border-color: rgba(20,184,166,.5);
+  background: linear-gradient(180deg, rgba(20,184,166,.09) 0%, rgba(0,0,0,.4) 100%);
+}
+
+/* 클릭 가능 카드 스타일 통일 (P2-12) */
+/* — <a> 태그 카드: 링크 리셋 */
+a.kpi-card {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  cursor: pointer;
+}
+/* — onclick 속성이 있는 div 카드 */
+.kpi-card[onclick] {
+  cursor: pointer;
+}
+/* — 키보드 포커스 링 (a 및 tabindex 카드 모두) */
+.kpi-card:focus-visible,
+a.kpi-card:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 3px;
+  border-color: rgba(20,184,166,.5);
+}
 
 /* Hero meta — 컴팩트 */
 .hero-meta {

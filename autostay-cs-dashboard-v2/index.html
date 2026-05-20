@@ -288,15 +288,15 @@
     <div class="cg-panel col-12">
       <div class="cg-panel-header">
         <span class="cg-panel-title">🗂️ VOC 분석 (통합)</span>
-        <div id="vocTabs" class="cg-tabs">
-          <button class="cg-tab active" data-tab="voc-distribution">분포</button>
-          <button class="cg-tab" data-tab="voc-risk">리스크</button>
-          <button class="cg-tab" data-tab="voc-resolution">해결시간</button>
-          <button class="cg-tab" data-tab="voc-cooccur" data-tip="같은 채팅에서 함께 등장한 태그 쌍을 분석합니다. 복합 이슈 패턴과 연관 문의를 파악하는 데 활용하세요.">동반 이슈 <span class="tab-tip-icon" aria-hidden="true">ⓘ</span></button>
-          <button class="cg-tab" data-tab="voc-complaint">컴플레인 세분화</button>
+        <div id="vocTabs" class="cg-tabs" role="tablist" aria-label="VOC 분석 탭">
+          <button class="cg-tab active" data-tab="voc-distribution" role="tab" aria-selected="true" aria-controls="voc-distribution">분포</button>
+          <button class="cg-tab" data-tab="voc-risk" role="tab" aria-selected="false" aria-controls="voc-risk">리스크</button>
+          <button class="cg-tab" data-tab="voc-resolution" role="tab" aria-selected="false" aria-controls="voc-resolution">해결시간</button>
+          <button class="cg-tab" data-tab="voc-cooccur" role="tab" aria-selected="false" aria-controls="voc-cooccur">동반 이슈 <span class="tab-tip-icon" tabindex="0" style="cursor:help" data-tip="같은 채팅에서 함께 등장한 태그 쌍을 분석합니다. 복합 이슈 패턴과 연관 문의를 파악하는 데 활용하세요.">ⓘ</span></button>
+          <button class="cg-tab" data-tab="voc-complaint" role="tab" aria-selected="false" aria-controls="voc-complaint">컴플레인 세분화</button>
         </div>
       </div>
-      <div id="voc-distribution" class="cg-tab-pane active">
+      <div id="voc-distribution" class="cg-tab-pane active" role="tabpanel" aria-labelledby="voc-distribution-tab">
         <div class="voc-tab-grid">
           <div class="voc-tab-chart">
             <div class="cg-chart-wrap" style="height:280px"><canvas id="tagBarChart"></canvas></div>
@@ -304,17 +304,17 @@
           <div id="vocList" class="voc-list"></div>
         </div>
       </div>
-      <div id="voc-risk" class="cg-tab-pane">
+      <div id="voc-risk" class="cg-tab-pane" role="tabpanel" aria-labelledby="voc-risk-tab">
         <div id="vocRiskCards" class="voc-risk-cards-wrap"></div>
       </div>
-      <div id="voc-resolution" class="cg-tab-pane">
+      <div id="voc-resolution" class="cg-tab-pane" role="tabpanel" aria-labelledby="voc-resolution-tab">
         <div id="tagResTable" class="tag-res-table"></div>
       </div>
-      <div id="voc-cooccur" class="cg-tab-pane">
+      <div id="voc-cooccur" class="cg-tab-pane" role="tabpanel" aria-labelledby="voc-cooccur-tab">
         <div id="tagCooccurPanel" class="tag-cooccur-panel"></div>
       </div>
       <!-- B-3: 컴플레인 세분화 -->
-      <div id="voc-complaint" class="cg-tab-pane">
+      <div id="voc-complaint" class="cg-tab-pane" role="tabpanel" aria-labelledby="voc-complaint-tab">
         <div class="complaint-cat-grid">
           <div class="complaint-cat-summary" id="complaintCatSummary"></div>
           <div class="cg-chart-wrap" style="height:240px"><canvas id="complaintCatChart"></canvas></div>
@@ -333,14 +333,14 @@
     <div class="cg-panel col-12">
       <div class="cg-panel-header">
         <span class="cg-panel-title">👤 담당자 통합 분석</span>
-        <div id="mgrTabs" class="cg-tabs">
-          <button class="cg-tab active" data-tab="mgr-table">성과 테이블</button>
-          <button class="cg-tab" data-tab="mgr-quadrant">분면도</button>
-          <button class="cg-tab" data-tab="mgr-conc">집중도</button>
-          <button class="cg-tab" data-tab="mgr-frt">FRT 비교</button>
+        <div id="mgrTabs" class="cg-tabs" role="tablist" aria-label="담당자 분석 탭">
+          <button class="cg-tab active" data-tab="mgr-table" role="tab" aria-selected="true" aria-controls="mgr-table">성과 테이블</button>
+          <button class="cg-tab" data-tab="mgr-quadrant" role="tab" aria-selected="false" aria-controls="mgr-quadrant">분면도</button>
+          <button class="cg-tab" data-tab="mgr-conc" role="tab" aria-selected="false" aria-controls="mgr-conc">집중도</button>
+          <button class="cg-tab" data-tab="mgr-frt" role="tab" aria-selected="false" aria-controls="mgr-frt">FRT 비교</button>
         </div>
       </div>
-      <div id="mgr-table" class="cg-tab-pane active">
+      <div id="mgr-table" class="cg-tab-pane active" role="tabpanel" aria-labelledby="mgr-table-tab">
         <div id="mgrRiskStrip" class="mgr-risk-strip"></div>
         <div class="agent-content-grid">
           <div class="agent-table-area">
@@ -364,16 +364,16 @@
         </div>
         <div id="agentCards" class="agent-mobile-cards"></div>
       </div>
-      <div id="mgr-quadrant" class="cg-tab-pane">
+      <div id="mgr-quadrant" class="cg-tab-pane" role="tabpanel" aria-labelledby="mgr-quadrant-tab">
         <div class="cg-chart-wrap" style="height:340px"><canvas id="mgrQuadrantChart"></canvas></div>
         <div id="mgrQuadrantLegend" class="mgr-quadrant-legend"></div>
       </div>
-      <div id="mgr-conc" class="cg-tab-pane">
+      <div id="mgr-conc" class="cg-tab-pane" role="tabpanel" aria-labelledby="mgr-conc-tab">
         <div id="concRiskPanel" class="conc-risk-panel"></div>
         <div id="concRiskInterp" class="interp-note"></div>
         <div id="concAlert" class="conc-alert" style="display:none"></div>
       </div>
-      <div id="mgr-frt" class="cg-tab-pane">
+      <div id="mgr-frt" class="cg-tab-pane" role="tabpanel" aria-labelledby="mgr-frt-tab">
         <div id="mgrFrtTable" class="mgr-frt-table"></div>
       </div>
     </div>
@@ -528,22 +528,22 @@
   </section>
 
   <!-- 컴플레인 분석 모달 -->
-  <div id="complaintModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-hidden="true">
+  <div id="complaintModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="complaintModalTitle">
     <div class="modal-box">
       <div class="modal-header">
-        <span>🔴 컴플레인 분석</span>
-        <button class="modal-close" onclick="closeComplaintPanel()">✕</button>
+        <span id="complaintModalTitle">🔴 컴플레인 분석</span>
+        <button class="modal-close" onclick="closeComplaintPanel()" aria-label="모달 닫기">✕</button>
       </div>
       <div id="complaintBody" class="modal-body"></div>
     </div>
   </div>
 
   <!-- 장기 채팅 모달 -->
-  <div id="longChatsModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-hidden="true">
+  <div id="longChatsModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="longChatsModalTitle">
     <div class="modal-box">
       <div class="modal-header">
-        <span>🐢 8시간+ 해결 지연 채팅</span>
-        <button class="modal-close" onclick="document.getElementById('longChatsModal').style.display='none'">✕</button>
+        <span id="longChatsModalTitle">🐢 8시간+ 해결 지연 채팅</span>
+        <button class="modal-close" onclick="closeLongChatsPanel()" aria-label="모달 닫기">✕</button>
       </div>
       <div id="longChatsBody" class="modal-body"></div>
     </div>
