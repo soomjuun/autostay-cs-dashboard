@@ -691,7 +691,7 @@ function renderKPIs(d, scoreObj) {
         <span class="data-badge badge-real">실데이터</span>
         <span class="delta ${unassigned > 0 ? 'bad' : 'good'}">${unassigned > 0 ? '즉시 배정 ↗' : '없음'}</span>
       </div>
-      <div style="font-size:9.5px;color:var(--muted);margin-top:2px"><a href="${chatTalkUnassignedUrl()}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="color:inherit;text-decoration:underline">${unassigned > 0 ? '채널톡 미배정 큐 ↗' : '미배정 큐 URL 확인 ↗'}</a></div>
+      <div style="font-size:9.5px;color:var(--muted);margin-top:2px">${unassigned > 0 ? '카드 클릭 → 채널톡 미배정 큐 ↗' : '카드 클릭 → 미배정 큐 URL 확인 ↗'}</div>
     </div>
     <div class="kpi-card a-${openChats > 5 ? 'rose' : openChats > 0 ? 'amber' : 'green'}" style="cursor:pointer" onclick="window.open('${chatTalkChannel()}','_blank')"
       data-tip="【오픈 채팅】&#10;출처: 채널톡 API 실시간 조회 (실데이터)&#10;정의: 현재 진행 중인 미종결(open) 채팅 수&#10;계산: API status=opened 건수&#10;기준: 현재 실시간 상태 (기간 필터 무관)&#10;클릭 → 채널톡 채팅 목록으로 이동" tabindex="0">
