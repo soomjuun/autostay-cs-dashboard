@@ -683,7 +683,7 @@ function renderKPIs(d, scoreObj) {
   const grid = document.getElementById('kpiGrid');
   if (!grid) return;
   grid.innerHTML = `
-    <div class="kpi-card a-${unassigned > 0 ? 'rose' : 'green'}" style="cursor:pointer" onclick="window.open('${chatTalkUnassignedUrl()}','_blank')"
+    <div class="kpi-card a-${unassigned > 0 ? 'rose' : 'green'}" style="cursor:pointer" onclick="(function(){var a=document.createElement('a');a.href='${chatTalkUnassignedUrl()}';a.target='_blank';a.rel='noopener noreferrer';document.body.appendChild(a);a.click();document.body.removeChild(a);})()"
       data-tip="【미배정 상담 (No Assignee)】&#10;출처: 채널톡 API 실시간 조회 (실데이터)&#10;정의: 현재 진행 중(opened) 상담 중 담당자(assigneeId)가 없는 건&#10;기준: 종결(closed) 상담 제외 · 현재 오픈 상담만&#10;※ Queue(자동배정 대기)와는 다른 개념: No assignee = 수동 배정 필요&#10;클릭 → 채널톡 인박스 미배정 목록으로 이동" tabindex="0">
       <div class="kpi-label">미배정 <span class="kpi-src-icon" data-tip="채널톡 실데이터 · 현재 오픈 상담 기준 (No Assignee)" tabindex="0" style="cursor:help">ⓘ</span></div>
       <div class="kpi-value">${fmt(unassigned)}<span class="unit">건</span></div>
@@ -691,7 +691,7 @@ function renderKPIs(d, scoreObj) {
         <span class="data-badge badge-real">실데이터</span>
         <span class="delta ${unassigned > 0 ? 'bad' : 'good'}">${unassigned > 0 ? '즉시 배정 ↗' : '없음'}</span>
       </div>
-      ${unassigned > 0 ? `<div style="font-size:9.5px;color:var(--muted);margin-top:2px">클릭 → 채널톡 미배정 큐 (로그인 필요)</div>` : ''}
+      <div style="font-size:9.5px;color:var(--muted);margin-top:2px"><a href="${chatTalkUnassignedUrl()}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="color:inherit;text-decoration:underline">${unassigned > 0 ? '채널톡 미배정 큐 ↗' : '미배정 큐 URL 확인 ↗'}</a></div>
     </div>
     <div class="kpi-card a-${openChats > 5 ? 'rose' : openChats > 0 ? 'amber' : 'green'}" style="cursor:pointer" onclick="window.open('${chatTalkChannel()}','_blank')"
       data-tip="【오픈 채팅】&#10;출처: 채널톡 API 실시간 조회 (실데이터)&#10;정의: 현재 진행 중인 미종결(open) 채팅 수&#10;계산: API status=opened 건수&#10;기준: 현재 실시간 상태 (기간 필터 무관)&#10;클릭 → 채널톡 채팅 목록으로 이동" tabindex="0">
