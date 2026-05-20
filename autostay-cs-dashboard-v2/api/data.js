@@ -570,6 +570,10 @@ module.exports = async function handler(req, res) {
     };
 
     const openChats = openData.userChats || [];
+    // 미배정 집계 기준: 현재 오픈(진행 중) 상담 중 담당자(assigneeId)가 없는 건
+    // → Channel Talk 인박스 "미배정" 필터와 동일한 기준 (종결 채팅 제외)
+    // unassigned(구 변수): 종결 채팅 기준 집계이므로 사용하지 않음
+    const openUnassigned = openChats.filter((c) => !c.assigneeId).length;
     const channelInfo = channelData.channel || {};
 
     const result = {
@@ -593,7 +597,7 @@ module.exports = async function handler(req, res) {
       summary: {
         totalChats: processed,
         openChats: openChats.length,
-        unassignedChats: unassigned,
+        unassignedChats: openUnassigned,
         avgResolutionMin: avgRes,
         peakDay: peakEntry ? { label: peakEntry[0], count: peakEntry[1] } : null,
       },
