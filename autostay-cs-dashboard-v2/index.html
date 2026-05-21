@@ -104,14 +104,14 @@
   <div class="toolbar-strip">
     <div class="toolbar-inner">
       <div id="rangeTabs" class="range-tabs">
-        <button class="range-tab active" data-days="7">7일</button>
-        <button class="range-tab" data-days="14">14일</button>
-        <button class="range-tab" data-days="30">30일</button>
-        <button class="range-tab" data-days="all">전체</button>
+        <button class="range-tab active" data-days="7" aria-pressed="true">7일</button>
+        <button class="range-tab" data-days="14" aria-pressed="false">14일</button>
+        <button class="range-tab" data-days="30" aria-pressed="false">30일</button>
+        <button class="range-tab" data-days="all" aria-pressed="false">전체</button>
       </div>
       <div class="toolbar-actions">
         <!-- C-2: 필터 버튼 -->
-        <button id="filterBtn" class="toolbar-btn toolbar-btn--ghost">
+        <button id="filterBtn" class="toolbar-btn toolbar-btn--ghost" aria-expanded="false" aria-controls="filterDrawer" aria-haspopup="dialog">
           <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12l-4.5 6V14L7 12.5V9L2 3z"/></svg>
           필터 <span id="filterCount" class="filter-count" style="display:none">0</span>
         </button>

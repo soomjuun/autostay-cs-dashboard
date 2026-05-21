@@ -123,6 +123,12 @@ function chatTalkChannel() {
   const cid = getChannelId();
   return cid ? `https://desk.channel.io/#/channels/${cid}` : 'https://desk.channel.io';
 }
+function chatTalkOpenUrl() {
+  const cid = getChannelId();
+  if (!cid) return 'https://desk.channel.io';
+  // state=opened = 현재 진행 중(오픈) 상담 필터 (Channel Talk Desk 인박스 필터 파라미터)
+  return `https://desk.channel.io/#/channels/${cid}/user_chats?state=opened`;
+}
 function chatTalkUnassignedUrl() {
   const cid = getChannelId();
   if (!cid) return 'https://desk.channel.io';
@@ -176,25 +182,35 @@ function renderFilterDrawer(data) {
   const srcEl = document.getElementById('filterSrcList');
   if (!mgrEl || !tagEl || !srcEl) return;
 
-  const managers = (data.managers || []).filter((m) => !EXCLUDED_MANAGERS.includes(m.name) && m.count > 0);
-  mgrEl.innerHTML = managers.map((m) => {
-    const isActive = filterState.managers.has(m.id);
-    return `<span class="filter-chip ${isActive ? 'active' : ''}" role="button" aria-pressed="${isActive}" data-fkind="mgr" data-fval="${m.id}">${isActive ? '✓ ' : ''}${m.name.replace('오토스테이_','')}<span class="filter-chip-cnt">${m.count}</span></span>`;
-  }).join('');
+  // count > 0 조건 제거: 기간 내 건수가 없어도 담당자 칩 표시 (ID 불일치 방지)
+  const managers = (data.managers || []).filter((m) => !EXCLUDED_MANAGERS.some((ex) => m.name.includes(ex)));
+  if (managers.length === 0) {
+    mgrEl.innerHTML = '<span style="color:var(--muted);font-size:11px;padding:2px 4px">담당자 데이터 없음</span>';
+  } else {
+    mgrEl.innerHTML = managers.map((m) => {
+      const isActive = filterState.managers.has(m.id);
+      return `<span class="filter-chip ${isActive ? 'active' : ''}" role="button" aria-pressed="${isActive}" data-fkind="mgr" data-fval="${m.id}">${isActive ? '✓ ' : ''}${m.name.replace('오토스테이_','')}<span class="filter-chip-cnt">${m.count}</span></span>`;
+    }).join('');
+  }
 
   const tags = (data.tags?.labels || []).slice(0, 10);
-  tagEl.innerHTML = tags.map((t, i) => {
-    const isActive = filterState.tags.has(t);
-    return `<span class="filter-chip ${isActive ? 'active' : ''}" role="button" aria-pressed="${isActive}" data-fkind="tag" data-fval="${t}">${isActive ? '✓ ' : ''}#${t}<span class="filter-chip-cnt">${data.tags.values[i] || 0}</span></span>`;
-  }).join('');
+  if (tags.length === 0) {
+    tagEl.innerHTML = '<span style="color:var(--muted);font-size:11px;padding:2px 4px">태그 데이터 없음</span>';
+  } else {
+    tagEl.innerHTML = tags.map((t, i) => {
+      const isActive = filterState.tags.has(t);
+      return `<span class="filter-chip ${isActive ? 'active' : ''}" role="button" aria-pressed="${isActive}" data-fkind="tag" data-fval="${t}">${isActive ? '✓ ' : ''}#${t}<span class="filter-chip-cnt">${data.tags.values[i] || 0}</span></span>`;
+    }).join('');
+  }
 
   const srcMap = { native: '인앱', phone: '전화', other: '기타' };
-  srcEl.innerHTML = ['native', 'phone', 'other'].map((s) => {
+  const srcChips = ['native', 'phone', 'other'].map((s) => {
     const cnt = (data.sources || {})[s] || 0;
     if (cnt === 0) return '';
     const isActive = filterState.sources.has(s);
     return `<span class="filter-chip ${isActive ? 'active' : ''}" role="button" aria-pressed="${isActive}" data-fkind="src" data-fval="${s}">${isActive ? '✓ ' : ''}${srcMap[s]}<span class="filter-chip-cnt">${cnt}</span></span>`;
   }).join('');
+  srcEl.innerHTML = srcChips || '<span style="color:var(--muted);font-size:11px;padding:2px 4px">채널 데이터 없음</span>';
 
   // chip 클릭 핸들러 — 드로어 내부만 스코프
   const drawerEl = document.getElementById('filterDrawer');
@@ -365,11 +381,11 @@ function renderHeroAction(d, scoreObj) {
     actions.push({
       type: 'warn',
       title: `미해결 오픈 채팅 ${openChats}건`,
-      cta: '채널톡에서 확인하기',
+      cta: '오픈 상담 목록 보기',
       metric: openChats + '건',
       rec: '우선순위 검토',
       target: '오늘 중',
-      url: chatTalkChannel(),
+      url: chatTalkOpenUrl(),
     });
   }
 
@@ -402,7 +418,7 @@ function renderHeroAction(d, scoreObj) {
         <div class="hac-row-metric">${a.metric}</div>
       `;
       if (a.url) {
-        return `<a href="${a.url}" target="_blank" class="hac-row-link"><div class="hac-row ${a.type}">${inner}</div></a>`;
+        return `<a href="${a.url}" target="_blank" rel="noopener noreferrer" class="hac-row-link"><div class="hac-row ${a.type}">${inner}</div></a>`;
       } else if (a.onclick) {
         // button 래퍼: <a>와 동일한 hac-row-link 클래스로 커서·호버·키보드 접근성 보장
         return `<button class="hac-row-link hac-row-btn" type="button" onclick="${a.onclick}"><div class="hac-row ${a.type}">${inner}</div></button>`;
@@ -672,7 +688,12 @@ function renderKPIs(d, scoreObj) {
     const diagObj = d.diagnostics || {};
     const cacheTypeName = '메모리';
     const cacheTipText = '메모리 캐시 · 5분 TTL · 강제 갱신: 새로고침 버튼';
-    const sampledWarn = isSampled ? ` <span style="color:var(--amber);font-weight:700">⚠ 수집 상한(${limitVal}건) 도달 — 최근 ${limitVal}건 기준 집계</span>` : '';
+    const collectedTotal = dataNote.collected || totalChats;
+    const sampledWarn = isSampled
+      ? ` <span style="color:var(--amber);font-weight:700" data-tip="API 수집 한도(${limitVal}건)에 도달했습니다. 오래된 채팅은 집계에서 제외될 수 있습니다." tabindex="0" style="cursor:help">⚠ 수집 상한(${limitVal}건) 도달 — 최근 ${limitVal}건 기준 집계</span>`
+      : (collectedTotal < limitVal
+        ? ` <span style="color:var(--muted);font-size:10px" data-tip="전체 수집 ${collectedTotal}건 · API 한도(${limitVal}건) 미도달 → 기간을 늘려도 동일 건수가 표시될 수 있습니다" tabindex="0" style="cursor:help">전체 ${collectedTotal}건</span>`
+        : '');
     const paginMs = diagObj.paginationMs ? diagObj.paginationMs + 'ms' : '—';
     const cacheInfo = diagObj.cacheHit
       ? `<span data-tip="${cacheTypeName} 캐시 응답 (최대 5분 지연) · 원본 수집시간 ${paginMs} · 강제 갱신: 새로고침 버튼" style="color:var(--amber);margin-left:6px;cursor:help" tabindex="0">⚡ ${cacheTypeName} 캐시</span>`
@@ -681,7 +702,7 @@ function renderKPIs(d, scoreObj) {
       <span>📊 분석 기준</span>
       <span style="font-weight:400;color:#0d9488">
         ${currentDays === 'all' ? `최근 ${limitVal}건 한도` : `최근 ${currentDays}일`}
-        · <span data-tip="채널톡 API closed 상태 채팅 수 (완료 처리된 건만 집계)" tabindex="0" style="cursor:help">closed <strong>${totalChats}건</strong></span>
+        · <span data-tip="채널톡 API closed 상태 채팅 수 (완료 처리된 건만 집계)&#10;※ 기간을 바꿔도 동일 건수가 표시되는 경우, 모든 데이터가 선택 기간 내에 존재하는 것입니다" tabindex="0" style="cursor:help">closed <strong>${totalChats}건</strong></span>
         · <span data-tip="채널톡 Open API v5 실데이터 기준. 해결시간·FRT는 채팅 종료 후 계산값" tabindex="0" style="cursor:help">Channel Talk API</span>
         · <span data-tip="${cacheTipText}" tabindex="0" style="cursor:help">${cacheTypeName} 5분 캐시</span>
         · KST
@@ -704,15 +725,15 @@ function renderKPIs(d, scoreObj) {
       </div>
       <div style="font-size:9.5px;color:var(--muted);margin-top:2px">${unassigned > 0 ? '카드 클릭 → 채널톡 미배정 큐 ↗' : '카드 클릭 → 미배정 큐 URL 확인 ↗'}</div>
     </a>
-    <a class="kpi-card a-${openChats > 5 ? 'rose' : openChats > 0 ? 'amber' : 'green'}" href="${chatTalkChannel()}" target="_blank" rel="noopener noreferrer"
-      data-tip="【오픈 채팅】&#10;출처: 채널톡 API 실시간 조회 (실데이터)&#10;정의: 현재 진행 중인 미종결(open) 채팅 수&#10;계산: API status=opened 건수&#10;기준: 현재 실시간 상태 (기간 필터 무관)&#10;클릭 → 채널톡 채팅 목록으로 이동">
+    <a class="kpi-card a-${openChats > 5 ? 'rose' : openChats > 0 ? 'amber' : 'green'}" href="${chatTalkOpenUrl()}" target="_blank" rel="noopener noreferrer"
+      data-tip="【오픈 채팅】&#10;출처: 채널톡 API 실시간 조회 (실데이터)&#10;정의: 현재 진행 중인 미종결(open) 채팅 수&#10;계산: API status=opened 건수&#10;기준: 현재 실시간 상태 (기간 필터 무관)&#10;클릭 → 채널톡 인박스 오픈 채팅 목록으로 이동 (state=opened 필터)">
       <div class="kpi-label">오픈 채팅</div>
       <div class="kpi-value">${fmt(openChats)}<span class="unit">건</span></div>
       <div class="kpi-meta">
         <span class="data-badge badge-real">실데이터</span>
         <span class="delta ${openChats === 0 ? 'good' : openChats > 5 ? 'bad' : 'neutral'}">${openChats === 0 ? '없음' : '진행중'}</span>
       </div>
-      ${openChats > 0 ? '<div style="font-size:9.5px;color:var(--muted);margin-top:2px">클릭 → 채널톡 채팅 목록 ↗</div>' : ''}
+      ${openChats > 0 ? '<div style="font-size:9.5px;color:var(--muted);margin-top:2px">클릭 → 오픈 상담 목록 ↗</div>' : ''}
     </a>
     <div class="kpi-card a-${slow8h > 10 ? 'rose' : slow8h > 0 ? 'amber' : 'green'}" onclick="openLongChatsPanel()"
       data-tip="【8시간+ 해결시간】&#10;출처: 서버 계산값&#10;정의: 종결 채팅 중 해결시간 > 480분(8h) 케이스 수&#10;계산: closed 채팅의 resolutionMin > 480 건수&#10;분모: 해결시간 집계 가능한 closed 채팅 전체(${resTotal}건)&#10;비율: ${slow8hPct}% (${slow8h}/${resTotal})&#10;※ 오픈 대기중인 건이 아닌 완료된 채팅 기준" tabindex="0">
@@ -1334,7 +1355,7 @@ function openLongChatsPanel(keepFilter) {
 
   // 퀵 필터 칩 HTML 생성 헬퍼
   function lcChip(kind, val, label, isActive) {
-    return `<button class="lc-qf-chip${isActive ? ' active' : ''}" data-lckind="${kind}" data-lcval="${val}" type="button">${label}</button>`;
+    return `<button class="lc-qf-chip${isActive ? ' active' : ''}" data-lckind="${kind}" data-lcval="${val}" type="button" aria-pressed="${isActive ? 'true' : 'false'}">${label}</button>`;
   }
   const mgrChips = uniqueMgrs.map(id => lcChip('mgr', id, dispMgrName(mgrMap[id] || id), lcModalFilter.mgr === id)).join('');
   const tagChips = uniqueTags.map(t => lcChip('tag', t, '#' + t, lcModalFilter.tag === t)).join('');
@@ -1382,7 +1403,7 @@ function openLongChatsPanel(keepFilter) {
           ? safeTags.slice(0,3).map((t) => `<span class="long-tag">#${t}</span>`).join(' ')
           : '<span style="color:var(--muted);font-size:10px">태그 없음</span>';
         const linkHtml = url
-          ? `<a href="${url}" target="_blank" class="lc-card-link">채팅 보기 ↗</a>`
+          ? `<a href="${url}" target="_blank" rel="noopener noreferrer" class="lc-card-link">채팅 보기 ↗</a>`
           : '';
         return `<div class="lc-mobile-card">
           <div class="lc-card-top">
@@ -1414,11 +1435,11 @@ function openLongChatsPanel(keepFilter) {
       const humanTime = daysCnt >= 1 ? `${daysCnt}일 ${remHrs}시간` : `${totalHrs}시간 ${totalMins % 60}분`;
       const timeColor = totalMins > 2880 ? 'var(--rose)' : totalMins > 480 ? 'var(--amber)' : 'var(--text)';
       const url = chatTalkUrl(c.id);
-      const dateCell = url ? `<a href="${url}" target="_blank" class="cs-deeplink">${c.date || '—'} ↗</a>` : (c.date || '—');
+      const dateCell = url ? `<a href="${url}" target="_blank" rel="noopener noreferrer" class="cs-deeplink">${c.date || '—'} ↗</a>` : (c.date || '—');
       const channelTxt = srcMap[c.source] || c.source || '—';
       const statusTxt = statusMap[c.status] || c.status || '—';
       const statusStyle = c.status === 'closed' ? 'color:var(--teal-d)' : 'color:var(--amber)';
-      const linkCell = url ? `<a href="${url}" target="_blank" class="cs-deeplink" style="font-size:10.5px">채팅 보기 ↗</a>` : '—';
+      const linkCell = url ? `<a href="${url}" target="_blank" rel="noopener noreferrer" class="cs-deeplink" style="font-size:10.5px">채팅 보기 ↗</a>` : '—';
       return `<tr style="border-bottom:1px solid var(--border-soft)">
         <td style="padding:7px 8px;white-space:nowrap">${dateCell}</td>
         <td style="padding:7px 8px;color:${timeColor};font-weight:700;white-space:nowrap">${totalMins}분 <span style="color:var(--muted);font-size:10px;font-weight:400">(${humanTime})</span></td>
@@ -1528,7 +1549,7 @@ function openComplaintPanel() {
            <span class="cp-long-date">${c.date || '—'}</span>
            <span class="cp-long-mgr">${mgr}</span>
            <span class="cp-long-tags">${safeTags.map(t => '#'+t).join(' ') || '—'}</span>
-           ${url ? `<a href="${url}" target="_blank" class="cs-deeplink" style="font-size:10px">보기 ↗</a>` : ''}
+           ${url ? `<a href="${url}" target="_blank" rel="noopener noreferrer" class="cs-deeplink" style="font-size:10px">보기 ↗</a>` : ''}
          </div>`;
        }).join('')}
        ${longComplaint.length > 5 ? '<div style="text-align:center;margin-top:8px"><button class="ld-more-link" onclick="openLongChatsPanel()">▸ 전체 장기 지연 목록 보기</button></div>' : ''}
@@ -2360,10 +2381,12 @@ function initFilterDrawer() {
     requestAnimationFrame(() => {
       drawer.classList.add('is-open');
       renderFilterDrawer(lastData);
+      if (filterBtn) filterBtn.setAttribute('aria-expanded', 'true');
     });
   }
   function closeDrawer() {
     drawer.classList.remove('is-open');
+    if (filterBtn) filterBtn.setAttribute('aria-expanded', 'false');
     // 트랜지션 완료 후 최소화 (display:none 대신 max-height로 충분)
     setTimeout(() => {
       if (!drawer.classList.contains('is-open')) drawer.style.display = '';
@@ -2393,8 +2416,10 @@ function initFilterDrawer() {
 
 /* ─── Full Render ────────────────────────────────────────────────────── */
 function fullRender(data) {
-  // 기간 전환 시 적용된 stale dimming 해제
+  // 기간 전환 시 적용된 stale dimming / opacity 초기화
   document.querySelectorAll('[data-period-loading]').forEach(el => el.removeAttribute('data-period-loading'));
+  const heroMeta = document.getElementById('heroInlineMeta');
+  if (heroMeta) heroMeta.style.opacity = '';
   const scoreObj = computeHealthScore(data);
   const insights = generateInsights(data, scoreObj);
   safeRender(() => renderHealthScore(scoreObj, data), 'healthScore');
@@ -2698,8 +2723,9 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.range-tab').forEach(tabBtn => {
     tabBtn.addEventListener('click', () => {
       const range = tabBtn.dataset.days || tabBtn.dataset.range;
-      document.querySelectorAll('.range-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.range-tab').forEach(t => { t.classList.remove('active'); t.setAttribute('aria-pressed', 'false'); });
       tabBtn.classList.add('active');
+      tabBtn.setAttribute('aria-pressed', 'true');
       currentDays = range === 'all' ? 'all' : parseInt(range);
       // 기간 변경 시 집계 기준 안내 toast
       const rangeLabel = range === 'all' ? '전체 기간 (최대 500건)' : `최근 ${range}일`;
@@ -2710,11 +2736,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const newRangeText = range === 'all' ? '전체 기간' : `최근 ${range}일`;
         kpiHeaderEl.innerHTML = `<span>📊 분석 기준</span><span style="font-weight:400;color:var(--muted)"><em>${newRangeText} · 조회 중…</em></span>`;
       }
-      // 이전 기간 데이터가 잠깐 보이는 현상 방지: 핵심 지표 영역을 즉시 흐리게 처리
-      ['kpiGrid', 'heroInlineMeta', 'hacBody'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.setAttribute('data-period-loading', '1');
-      });
+      // 이전 기간 데이터 즉시 클리어 — 스켈레톤/빈 상태로 교체
+      clearPeriodUI(range);
       triggerFullReload();
     });
   });
@@ -2839,6 +2862,33 @@ function initTooltips() {
 }
 
 /* ─── Full Reload ───────────────────────────────────────────────────────────────── */
+/* ─── 기간 전환 시 이전 데이터 즉시 클리어 (P0) ──────────────────────── */
+function clearPeriodUI(range) {
+  // KPI 그리드: 스켈레톤 카드로 교체 (이전 기간 수치가 보이지 않도록)
+  const kpiGrid = document.getElementById('kpiGrid');
+  if (kpiGrid) {
+    const skeletonCard = `
+      <div class="kpi-card" style="opacity:.35;pointer-events:none">
+        <div style="background:rgba(255,255,255,.09);border-radius:4px;height:9px;width:55%;margin-bottom:11px"></div>
+        <div style="background:rgba(255,255,255,.13);border-radius:6px;height:26px;width:45%;margin-bottom:9px"></div>
+        <div style="background:rgba(255,255,255,.06);border-radius:3px;height:8px;width:65%"></div>
+      </div>`;
+    kpiGrid.innerHTML = skeletonCard.repeat(6);
+  }
+  // 오늘 처리할 일: 로딩 메시지로 교체
+  const hacBody = document.getElementById('hacBody');
+  if (hacBody) {
+    const rl = range === 'all' ? '전체 기간' : `최근 ${range}일`;
+    hacBody.innerHTML = `<div style="padding:14px 16px;text-align:center;color:var(--muted);font-size:12px">🔄 ${rl} 데이터 불러오는 중…</div>`;
+  }
+  // hero 인라인 메타 숨김
+  const heroMeta = document.getElementById('heroInlineMeta');
+  if (heroMeta) heroMeta.style.opacity = '0.2';
+  // filterScopeNote 숨김 (기간 전환 시 이전 필터 안내 불일치 방지)
+  const scopeNote = document.getElementById('filterScopeNote');
+  if (scopeNote) scopeNote.style.display = 'none';
+}
+
 function triggerFullReload() {
   const ov = document.getElementById('loadingOverlay');
   if (ov) { ov.style.opacity = '1'; ov.style.display = 'flex'; }
