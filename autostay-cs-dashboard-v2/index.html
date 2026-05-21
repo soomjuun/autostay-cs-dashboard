@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>[OPS] 채널톡 CS 대시보드</title>
+  <title>CS 대시보드</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
@@ -14,8 +14,7 @@
 <div id="loadingOverlay" class="loading-overlay">
   <div class="loading-inner">
     <div class="loading-logo">
-      <span class="loading-logo-icon">📊</span>
-      <span class="loading-logo-text">[OPS] 채널톡 CS</span>
+      <span class="loading-logo-text">CS 대시보드</span>
     </div>
     <div class="loading-bar-wrap">
       <div id="loadProgressBar" class="loading-bar-fill"></div>
@@ -32,11 +31,11 @@
 
 <!-- 배너 -->
 <div id="errBanner" class="global-banner global-banner--error" style="display:none">
-  <span class="banner-icon">⚠️</span>
+  <span class="banner-icon"></span>
   <span class="banner-msg">데이터를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</span>
 </div>
 <div id="sampleNoteBanner" class="global-banner global-banner--warn" style="display:none">
-  <span class="banner-icon">ℹ️</span>
+  <span class="banner-icon"></span>
   <span class="banner-msg"></span>
 </div>
 
@@ -50,11 +49,11 @@
       <div class="hero-top">
         <div class="hero-copy">
           <div class="hero-eyebrow">
-            <span>[OPS] · CHANNEL TALK INTELLIGENCE</span>
+            <span>CHANNEL TALK · CS INTELLIGENCE</span>
             <span class="hero-version-pill">v4.0</span>
           </div>
-          <h1 class="hero-title">[OPS] 채널톡 CS 대시보드</h1>
-          <p class="hero-desc">채널톡 실데이터 · CS 운영 · SLA · VOC · 담당자 성과 통합 분석</p>
+          <h1 class="hero-title">오늘 CS 상태</h1>
+          <p class="hero-desc">CS 운영 · SLA · VOC · 담당자 성과 통합 분석</p>
 
           <!-- 인라인 메타: 컴팩트 1줄 -->
           <div id="heroInlineMeta" class="hero-inline-meta">
@@ -72,7 +71,6 @@
         <div class="hero-focus">
           <div id="heroActionCard" class="hero-action-card">
             <div class="hac-header">
-              <span class="hac-icon">🎯</span>
               <span class="hac-title">지금 즉시 처리</span>
               <span id="hacGrade" class="hac-grade">—</span>
             </div>
@@ -256,7 +254,7 @@
     <!-- Row 1: 트렌드(col-8) + 히트맵(col-4) -->
     <div class="cg-panel col-8">
       <div class="cg-panel-header">
-        <span class="cg-panel-title">📈 일별 채팅 트렌드</span>
+        <span class="cg-panel-title">일별 채팅 트렌드</span>
         <span id="trendBadge" class="panel-badge"></span>
         <div id="trendLegend" class="trend-legend"></div>
       </div>
@@ -271,7 +269,7 @@
     </div>
 
     <div class="cg-panel col-4">
-      <div class="cg-panel-header"><span class="cg-panel-title">🗓️ 요일·시간 히트맵</span></div>
+      <div class="cg-panel-header"><span class="cg-panel-title">요일·시간 히트맵</span></div>
       <div class="heatmap-scroll-wrap">
         <div id="heatmap" class="heatmap"></div>
       </div>
@@ -287,7 +285,7 @@
     <!-- A-1: VOC 통합 탭 (col-12) -->
     <div class="cg-panel col-12">
       <div class="cg-panel-header">
-        <span class="cg-panel-title">🗂️ VOC 분석 (통합)</span>
+        <span class="cg-panel-title">VOC 분석</span>
         <div id="vocTabs" class="cg-tabs" role="tablist" aria-label="VOC 분석 탭">
           <button class="cg-tab active" data-tab="voc-distribution" role="tab" aria-selected="true" aria-controls="voc-distribution">분포</button>
           <button class="cg-tab" data-tab="voc-risk" role="tab" aria-selected="false" aria-controls="voc-risk">리스크</button>
@@ -325,14 +323,14 @@
 
     <!-- 카테고리 (col-12) -->
     <div class="cg-panel col-12">
-      <div class="cg-panel-header"><span class="cg-panel-title">📂 문의 카테고리 분석</span></div>
+      <div class="cg-panel-header"><span class="cg-panel-title">문의 카테고리 분석</span></div>
       <div id="categoryBars" class="category-bars"></div>
     </div>
 
     <!-- A-1: Manager 통합 탭 (col-12) -->
     <div class="cg-panel col-12">
       <div class="cg-panel-header">
-        <span class="cg-panel-title">👤 담당자 통합 분석</span>
+        <span class="cg-panel-title">담당자 분석</span>
         <div id="mgrTabs" class="cg-tabs" role="tablist" aria-label="담당자 분석 탭">
           <button class="cg-tab active" data-tab="mgr-table" role="tab" aria-selected="true" aria-controls="mgr-table">성과 테이블</button>
           <button class="cg-tab" data-tab="mgr-quadrant" role="tab" aria-selected="false" aria-controls="mgr-quadrant">분면도</button>
@@ -380,7 +378,7 @@
 
     <!-- Row: 해결시간(col-6) + 장기지연(col-6) -->
     <div class="cg-panel col-6">
-      <div class="cg-panel-header"><span class="cg-panel-title">⏱️ 해결시간 분포</span></div>
+      <div class="cg-panel-header"><span class="cg-panel-title">해결시간 분포</span></div>
       <div id="resSummary" class="res-summary"></div>
       <div id="resList" class="res-list"></div>
       <div id="avgResNote" class="avg-res-note"></div>
@@ -388,23 +386,23 @@
     </div>
 
     <div class="cg-panel col-6">
-      <div class="cg-panel-header"><span class="cg-panel-title">🐢 8시간+ 장기 지연</span></div>
+      <div class="cg-panel-header"><span class="cg-panel-title">장기지연 상담</span></div>
       <div id="longDelayPanel" class="long-delay-panel"></div>
     </div>
 
     <!-- Row: 자동화(col-5) + 운영(col-4) + 채널(col-3) -->
     <div class="cg-panel col-5">
-      <div class="cg-panel-header"><span class="cg-panel-title">🤖 자동화 효과</span></div>
+      <div class="cg-panel-header"><span class="cg-panel-title">자동화 효과</span></div>
       <div id="botPanel" class="bot-panel"></div>
     </div>
 
     <div class="cg-panel col-4">
-      <div class="cg-panel-header"><span class="cg-panel-title">🏢 CS 운영 현황</span></div>
+      <div class="cg-panel-header"><span class="cg-panel-title">CS 운영 현황</span></div>
       <div id="groupPanel" class="group-panel"></div>
     </div>
 
     <div class="cg-panel col-3">
-      <div class="cg-panel-header"><span class="cg-panel-title">📡 채널 분포</span></div>
+      <div class="cg-panel-header"><span class="cg-panel-title">채널 분포</span></div>
       <div class="cg-chart-wrap" style="height:160px"><canvas id="channelChart"></canvas></div>
       <div id="channelStats" class="channel-stats"></div>
     </div>
@@ -415,19 +413,21 @@
        ADVANCED INTELLIGENCE
   ════════════════════════════════════════════════════════ -->
   <section class="adv-section-wrap">
-    <div class="adv-section-banner">
-      <span class="adv-banner-icon">⚡</span>
+    <div class="adv-section-banner collapse-toggle" data-target="advContent" role="button" tabindex="0" aria-expanded="false" aria-controls="advContent">
       <div class="adv-banner-text">
         <div class="adv-banner-title">고도화 분석 (Advanced Intelligence)</div>
         <div class="adv-banner-sub">SLA · FRT · FCR · 시간대 부하 · 채널 성능 · 에이징 · 이상치 · 반복 문의</div>
       </div>
       <span class="adv-banner-version">v4.0</span>
+      <span class="adv-toggle" aria-hidden="true">▸</span>
     </div>
+
+    <div id="advContent" class="hidden">
 
     <!-- WoW + SLA -->
     <div class="cg-panel col-12 adv-panel">
       <div class="cg-panel-header">
-        <span class="cg-panel-title">📊 기간 비교 & SLA 준수율</span>
+        <span class="cg-panel-title">기간 비교 & SLA 준수율</span>
         <span class="panel-badge adv-pb">Period-over-Period</span>
       </div>
       <div class="adv-grid-12">
@@ -439,7 +439,7 @@
     <!-- B-2: FCR + 반복 문의 + FRT 카드 -->
     <div class="cg-panel col-12 adv-panel">
       <div class="cg-panel-header">
-        <span class="cg-panel-title">🔁 첫응답 / 재오픈 / 반복문의</span>
+        <span class="cg-panel-title">첫응답 / 재오픈 / 반복문의</span>
         <span class="panel-badge adv-pb">FRT · FCR · Repeat</span>
       </div>
       <div id="fcrPanel" class="fcr-panel"></div>
@@ -448,7 +448,7 @@
     <!-- 시간대(col-7) + 요일(col-5) -->
     <div class="cg-panel col-7 adv-panel">
       <div class="cg-panel-header">
-        <span class="cg-panel-title">⏱️ 시간대 부하 곡선 (24h)</span>
+        <span class="cg-panel-title">시간대 부하 곡선 (24h)</span>
         <span class="panel-badge adv-pb">Hour-of-Day</span>
       </div>
       <div class="cg-chart-wrap" style="height:200px"><canvas id="hourLoadChart"></canvas></div>
@@ -457,7 +457,7 @@
 
     <div class="cg-panel col-5 adv-panel">
       <div class="cg-panel-header">
-        <span class="cg-panel-title">📅 요일별 부하 분포</span>
+        <span class="cg-panel-title">요일별 부하 분포</span>
         <span class="panel-badge adv-pb">Weekday</span>
       </div>
       <div id="weekdayLoadPanel" class="weekday-load-panel"></div>
@@ -467,7 +467,7 @@
     <!-- 백분위(col-6) + 에이징(col-6) -->
     <div class="cg-panel col-6 adv-panel">
       <div class="cg-panel-header">
-        <span class="cg-panel-title">📐 해결시간 백분위수 (P50/P75/P90/P95)</span>
+        <span class="cg-panel-title">해결시간 백분위수 (P50/P75/P90/P95)</span>
         <span class="panel-badge adv-pb">Percentile</span>
       </div>
       <div id="percentilePanel" class="percentile-panel"></div>
@@ -475,7 +475,7 @@
 
     <div class="cg-panel col-6 adv-panel">
       <div class="cg-panel-header">
-        <span class="cg-panel-title">🐢 에이징 파이프라인 (8h+ 세분화)</span>
+        <span class="cg-panel-title">에이징 파이프라인 (8h+ 세분화)</span>
         <span class="panel-badge adv-pb">Aging</span>
       </div>
       <div id="agingPipeline" class="aging-pipeline"></div>
@@ -484,7 +484,7 @@
     <!-- 채널성능(col-6) + 이상치(col-6) -->
     <div class="cg-panel col-6 adv-panel">
       <div class="cg-panel-header">
-        <span class="cg-panel-title">📡 채널별 성능 비교</span>
+        <span class="cg-panel-title">채널별 성능 비교</span>
         <span class="panel-badge adv-pb">Channel × Resolution</span>
       </div>
       <div id="sourcePerfPanel" class="source-perf-panel"></div>
@@ -492,7 +492,7 @@
 
     <div class="cg-panel col-6 adv-panel">
       <div class="cg-panel-header">
-        <span class="cg-panel-title">🚨 이상치 탐지 (Z-score ≥ 1.8σ)</span>
+        <span class="cg-panel-title">이상치 탐지 (Z-score ≥ 1.8σ)</span>
         <span class="panel-badge adv-pb">Anomaly</span>
       </div>
       <div id="anomalyPanel" class="anomaly-panel"></div>
@@ -501,7 +501,7 @@
     <!-- Forecast(col-6) + Comp Trend(col-6) -->
     <div class="cg-panel col-6 adv-panel">
       <div class="cg-panel-header">
-        <span class="cg-panel-title">🔮 볼륨 모멘텀 & 다음날 투영</span>
+        <span class="cg-panel-title">볼륨 모멘텀 & 다음날 투영</span>
         <span class="panel-badge adv-pb">Forecast</span>
       </div>
       <div id="forecastPanel" class="forecast-panel"></div>
@@ -509,7 +509,7 @@
 
     <div class="cg-panel col-6 adv-panel">
       <div class="cg-panel-header">
-        <span class="cg-panel-title">⚠️ 일별 컴플레인 비율 추이</span>
+        <span class="cg-panel-title">일별 컴플레인 비율 추이</span>
         <span class="panel-badge adv-pb">Complaint Rate</span>
       </div>
       <div class="cg-chart-wrap" style="height:200px"><canvas id="complaintTrendChart"></canvas></div>
@@ -520,18 +520,20 @@
     <!-- 진단 (col-12) -->
     <div class="cg-panel col-12 adv-panel">
       <div class="cg-panel-header">
-        <span class="cg-panel-title">🩺 API 진단 (Channel Talk Open API v5 + 메모리 캐싱)</span>
+        <span class="cg-panel-title">API 진단 (Channel Talk Open API v5 + 메모리 캐싱)</span>
         <span class="panel-badge adv-pb">Diagnostics</span>
       </div>
       <div id="diagPanel" class="diag-panel"></div>
     </div>
+
+    </div><!-- /advContent -->
   </section>
 
   <!-- 컴플레인 분석 모달 -->
   <div id="complaintModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="complaintModalTitle">
     <div class="modal-box">
       <div class="modal-header">
-        <span id="complaintModalTitle">🔴 컴플레인 분석</span>
+        <span id="complaintModalTitle">컴플레인 분석</span>
         <button class="modal-close" onclick="closeComplaintPanel()" aria-label="모달 닫기">✕</button>
       </div>
       <div id="complaintBody" class="modal-body"></div>
@@ -542,7 +544,7 @@
   <div id="longChatsModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="longChatsModalTitle">
     <div class="modal-box">
       <div class="modal-header">
-        <span id="longChatsModalTitle">🐢 8시간+ 해결 지연 채팅</span>
+        <span id="longChatsModalTitle">장기지연 상담</span>
         <button class="modal-close" onclick="closeLongChatsPanel()" aria-label="모달 닫기">✕</button>
       </div>
       <div id="longChatsBody" class="modal-body"></div>
@@ -551,7 +553,7 @@
 
   <!-- 푸터 -->
   <footer class="footer-note">
-    <span>[OPS] 채널톡 CS 대시보드 · 데이터 출처: Channel Talk Open API v5</span>
+    <span>CS 대시보드 · 데이터 출처: Channel Talk Open API v5</span>
     <span class="footer-sep">·</span>
     <span>자동 새로고침 5분 간격</span>
     <span class="footer-sep">·</span>
