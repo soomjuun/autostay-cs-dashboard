@@ -148,9 +148,9 @@ function applyFilters(data) {
   if (activeFilterCount() === 0) return data;
   const out = JSON.parse(JSON.stringify(data));
 
-  // longChats 필터링
+  // longChats 필터링 — manager ID는 String으로 정규화 (filterState는 문자열 Set)
   out.longChats = (data.longChats || []).filter((c) => {
-    if (filterState.managers.size && !filterState.managers.has(c.assigneeId || '_unassigned')) return false;
+    if (filterState.managers.size && !filterState.managers.has(String(c.assigneeId || '_unassigned'))) return false;
     if (filterState.tags.size && !c.tags.some((t) => filterState.tags.has(t))) return false;
     if (filterState.sources.size && !filterState.sources.has(c.source)) return false;
     return true;
@@ -159,7 +159,7 @@ function applyFilters(data) {
   // managers 필터링 (선택된 담당자만)
   if (filterState.managers.size) {
     out.managers = (data.managers || []).filter((m) =>
-      filterState.managers.has(m.id) || m.count === 0
+      filterState.managers.has(String(m.id)) || m.count === 0
     );
   }
 
@@ -182,15 +182,36 @@ function renderFilterDrawer(data) {
   const srcEl = document.getElementById('filterSrcList');
   if (!mgrEl || !tagEl || !srcEl) return;
 
-  // count > 0 조건 제거: 기간 내 건수가 없어도 담당자 칩 표시 (ID 불일치 방지)
-  const managers = (data.managers || []).filter((m) => !EXCLUDED_MANAGERS.some((ex) => m.name.includes(ex)));
-  if (managers.length === 0) {
+  // 담당자 칩: count>0 우선 표시, 0건은 토글 접기
+  const allMgrs = (data.managers || []).filter((m) => !EXCLUDED_MANAGERS.some((ex) => m.name.includes(ex)));
+  const activeMgrs = allMgrs.filter((m) => m.count > 0);
+  const zeroMgrs = allMgrs.filter((m) => m.count === 0);
+  if (allMgrs.length === 0) {
     mgrEl.innerHTML = '<span style="color:var(--muted);font-size:11px;padding:2px 4px">담당자 데이터 없음</span>';
   } else {
-    mgrEl.innerHTML = managers.map((m) => {
-      const isActive = filterState.managers.has(m.id);
-      return `<span class="filter-chip ${isActive ? 'active' : ''}" role="button" aria-pressed="${isActive}" data-fkind="mgr" data-fval="${m.id}">${isActive ? '✓ ' : ''}${m.name.replace('오토스테이_','')}<span class="filter-chip-cnt">${m.count}</span></span>`;
+    // 항상 String(m.id)로 정규화 — HTML dataset은 항상 문자열 반환
+    const chipHtml = (list) => list.map((m) => {
+      const sid = String(m.id);
+      const isActive = filterState.managers.has(sid);
+      return `<button type="button" class="filter-chip${isActive ? ' active' : ''}" aria-pressed="${isActive}" data-fkind="mgr" data-fval="${sid}">${isActive ? '✓ ' : ''}${m.name.replace('오토스테이_', '')}<span class="filter-chip-cnt">${m.count}</span></button>`;
     }).join('');
+    const zeroToggleId = 'mgrZeroToggle';
+    const zeroHiddenId = 'mgrZeroList';
+    const zeroSection = zeroMgrs.length > 0
+      ? `<button type="button" id="${zeroToggleId}" style="font-size:10.5px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px 4px;text-decoration:underline dotted" aria-expanded="false">0건 담당자 보기 (+${zeroMgrs.length})</button><span id="${zeroHiddenId}" style="display:none">${chipHtml(zeroMgrs)}</span>`
+      : '';
+    mgrEl.innerHTML = chipHtml(activeMgrs) + zeroSection;
+    // 0건 토글 핸들러
+    const toggleBtn = mgrEl.querySelector(`#${zeroToggleId}`);
+    const hiddenEl = mgrEl.querySelector(`#${zeroHiddenId}`);
+    if (toggleBtn && hiddenEl) {
+      toggleBtn.onclick = () => {
+        const isOpen = hiddenEl.style.display !== 'none';
+        hiddenEl.style.display = isOpen ? 'none' : 'inline';
+        toggleBtn.textContent = isOpen ? `0건 담당자 보기 (+${zeroMgrs.length})` : `0건 담당자 숨기기`;
+        toggleBtn.setAttribute('aria-expanded', String(!isOpen));
+      };
+    }
   }
 
   const tags = (data.tags?.labels || []).slice(0, 10);
@@ -199,7 +220,7 @@ function renderFilterDrawer(data) {
   } else {
     tagEl.innerHTML = tags.map((t, i) => {
       const isActive = filterState.tags.has(t);
-      return `<span class="filter-chip ${isActive ? 'active' : ''}" role="button" aria-pressed="${isActive}" data-fkind="tag" data-fval="${t}">${isActive ? '✓ ' : ''}#${t}<span class="filter-chip-cnt">${data.tags.values[i] || 0}</span></span>`;
+      return `<button type="button" class="filter-chip${isActive ? ' active' : ''}" aria-pressed="${isActive}" data-fkind="tag" data-fval="${t}">${isActive ? '✓ ' : ''}#${t}<span class="filter-chip-cnt">${data.tags.values[i] || 0}</span></button>`;
     }).join('');
   }
 
@@ -208,25 +229,10 @@ function renderFilterDrawer(data) {
     const cnt = (data.sources || {})[s] || 0;
     if (cnt === 0) return '';
     const isActive = filterState.sources.has(s);
-    return `<span class="filter-chip ${isActive ? 'active' : ''}" role="button" aria-pressed="${isActive}" data-fkind="src" data-fval="${s}">${isActive ? '✓ ' : ''}${srcMap[s]}<span class="filter-chip-cnt">${cnt}</span></span>`;
+    return `<button type="button" class="filter-chip${isActive ? ' active' : ''}" aria-pressed="${isActive}" data-fkind="src" data-fval="${s}">${isActive ? '✓ ' : ''}${srcMap[s]}<span class="filter-chip-cnt">${cnt}</span></button>`;
   }).join('');
   srcEl.innerHTML = srcChips || '<span style="color:var(--muted);font-size:11px;padding:2px 4px">채널 데이터 없음</span>';
-
-  // chip 클릭 핸들러 — 드로어 내부만 스코프
-  const drawerEl = document.getElementById('filterDrawer');
-  (drawerEl || document).querySelectorAll('.filter-chip').forEach((chip) => {
-    chip.onclick = () => {
-      const kind = chip.dataset.fkind;
-      const val = chip.dataset.fval;
-      const set = kind === 'mgr' ? filterState.managers : kind === 'tag' ? filterState.tags : filterState.sources;
-      if (set.has(val)) set.delete(val); else set.add(val);
-      const nowActive = set.has(val);
-      chip.classList.toggle('active');
-      chip.setAttribute('aria-pressed', String(chip.classList.contains('active')));
-      updateFilterBadges();
-      applyFilteredRender();
-    };
-  });
+  // ※ 칩 클릭 이벤트는 initFilterDrawer의 위임 핸들러가 담당 (재렌더 후에도 동작)
 }
 
 function updateFilterBadges() {
@@ -241,7 +247,7 @@ function updateFilterBadges() {
   if (total === 0) { badgeEl.style.display = 'none'; return; }
   badgeEl.style.display = 'flex';
   const mgrMap = {};
-  (lastData?.managers || []).forEach((m) => { mgrMap[m.id] = m.name.replace('오토스테이_',''); });
+  (lastData?.managers || []).forEach((m) => { mgrMap[String(m.id)] = m.name.replace('오토스테이_',''); });
   const srcMap = { native: '인앱', phone: '전화', other: '기타' };
   const badges = [];
   filterState.managers.forEach((id) => badges.push({ kind: 'mgr', val: id, label: `담당: ${mgrMap[id] || id}` }));
@@ -285,7 +291,7 @@ function applyFilteredRender() {
     scopeEl.style.display = 'block';
     // 적용된 필터 목록 생성
     const mgrMap = {};
-    (lastData?.managers || []).forEach((m) => { mgrMap[m.id] = m.name.replace('오토스테이_',''); });
+    (lastData?.managers || []).forEach((m) => { mgrMap[String(m.id)] = m.name.replace('오토스테이_',''); });
     const srcMap = { native: '인앱', phone: '전화', other: '기타' };
     const filterLabels = [];
     filterState.managers.forEach((id) => filterLabels.push(`<span class="fsn-chip">담당: ${mgrMap[id] || id}</span>`));
@@ -2405,6 +2411,23 @@ function initFilterDrawer() {
     updateFilterBadges();
     applyFilteredRender();
   };
+  // ── 필터 칩 이벤트 위임 ──────────────────────────────────────────────
+  // renderFilterDrawer가 재호출(재렌더)되어도 이 핸들러 하나로 모든 칩 커버
+  drawer.addEventListener('click', (e) => {
+    const chip = e.target.closest('button.filter-chip[data-fkind]');
+    if (!chip) return;
+    e.stopPropagation(); // 외부 클릭 닫기 핸들러 방지
+    const kind = chip.dataset.fkind;
+    const val  = chip.dataset.fval; // dataset은 항상 문자열 — String() 불필요
+    const set  = kind === 'mgr' ? filterState.managers : kind === 'tag' ? filterState.tags : filterState.sources;
+    if (set.has(val)) { set.delete(val); } else { set.add(val); }
+    const nowActive = set.has(val);
+    chip.classList.toggle('active', nowActive);
+    chip.setAttribute('aria-pressed', String(nowActive));
+    updateFilterBadges();
+    applyFilteredRender();
+  });
+
   // 필터 외부 클릭 시 닫기
   document.addEventListener('click', (e) => {
     if (!drawer.classList.contains('is-open')) return;
@@ -2499,6 +2522,13 @@ function render() {
     const data = await fetchData();
     if (!data) return;
     lastData = data;
+    // 캐시/직접조회 여부에 따라 오버레이 텍스트 분리 (혼란 방지)
+    const loadText2 = document.getElementById('loadText');
+    if (loadText2) {
+      loadText2.textContent = data.diagnostics?.cacheHit
+        ? '캐시 데이터 적용 중…'
+        : 'API 조회 완료 · 화면 구성 중…';
+    }
     setStep('lstep-api', true); setStep('lstep-charts'); setProgress(45);
     safeRender(() => updateBanner(data), 'banner');
     setProgress(60);
@@ -2893,7 +2923,7 @@ function triggerFullReload() {
   const ov = document.getElementById('loadingOverlay');
   if (ov) { ov.style.opacity = '1'; ov.style.display = 'flex'; }
   const loadText = document.getElementById('loadText');
-  if (loadText) loadText.textContent = '채널톡 데이터 수집 중…';
+  if (loadText) loadText.textContent = '데이터 불러오는 중…'; // 캐시/직접조회 여부는 응답 후 업데이트
   ['lstep-conn','lstep-api','lstep-charts','lstep-done'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.classList.remove('active','done');
