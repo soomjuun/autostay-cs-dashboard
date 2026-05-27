@@ -148,6 +148,37 @@
     </div>
   </div>
 
+  <!-- 모바일 필터 바텀시트 (≤430px) — position:fixed, body 레벨 -->
+  <div id="filterBottomSheet" class="fbs-overlay" aria-hidden="true" role="dialog" aria-modal="true" aria-label="필터">
+    <div class="fbs-sheet">
+      <div class="fbs-handle"></div>
+      <div class="fbs-header">
+        <span class="fbs-title">필터</span>
+        <button id="fbsCloseBtn" class="fbs-close" aria-label="닫기">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M12.7 3.3a1 1 0 0 0-1.4 0L8 6.6 4.7 3.3a1 1 0 0 0-1.4 1.4L6.6 8l-3.3 3.3a1 1 0 1 0 1.4 1.4L8 9.4l3.3 3.3a1 1 0 0 0 1.4-1.4L9.4 8l3.3-3.3a1 1 0 0 0 0-1.4z"/></svg>
+        </button>
+      </div>
+      <div class="fbs-body">
+        <div class="filter-group">
+          <label class="filter-label">담당자</label>
+          <div id="bsMgrList" class="filter-chip-list"></div>
+        </div>
+        <div class="filter-group">
+          <label class="filter-label">태그</label>
+          <div id="bsTagList" class="filter-chip-list"></div>
+        </div>
+        <div class="filter-group">
+          <label class="filter-label">채널</label>
+          <div id="bsSrcList" class="filter-chip-list"></div>
+        </div>
+      </div>
+      <div class="fbs-footer">
+        <button id="fbsClearBtn" class="fbs-btn-clear">초기화</button>
+        <button id="fbsApplyBtn" class="fbs-btn-apply">적용</button>
+      </div>
+    </div>
+  </div>
+
   <div class="basis-row">
     <div id="kpiBasisHeader" class="kpi-basis-header"></div>
     <div id="filterBadgeRow" class="filter-badge-row" style="display:none"></div>
@@ -376,18 +407,28 @@
       </div>
     </div>
 
-    <!-- Row: 해결시간(col-6) + 장기지연(col-6) -->
-    <div class="cg-panel col-6">
-      <div class="cg-panel-header"><span class="cg-panel-title">해결시간 분포</span></div>
-      <div id="resSummary" class="res-summary"></div>
-      <div id="resList" class="res-list"></div>
-      <div id="avgResNote" class="avg-res-note"></div>
-      <div id="resInterpNote" class="interp-note"></div>
-    </div>
-
-    <div class="cg-panel col-6">
-      <div class="cg-panel-header"><span class="cg-panel-title">장기지연 상담</span></div>
-      <div id="longDelayPanel" class="long-delay-panel"></div>
+    <!-- 해결시간 통합 탭 (col-12) -->
+    <div class="cg-panel col-12">
+      <div class="cg-panel-header">
+        <span class="cg-panel-title">해결시간 분석</span>
+        <div id="resTabs" class="cg-tabs" role="tablist" aria-label="해결시간 분석 탭">
+          <button class="cg-tab active" data-tab="res-dist" role="tab" aria-selected="true" aria-controls="res-dist">분포</button>
+          <button class="cg-tab" data-tab="res-longdelay" role="tab" aria-selected="false" aria-controls="res-longdelay">장기지연</button>
+          <button class="cg-tab" data-tab="res-percentile" role="tab" aria-selected="false" aria-controls="res-percentile">백분위</button>
+        </div>
+      </div>
+      <div id="res-dist" class="cg-tab-pane active" role="tabpanel" aria-labelledby="res-dist-tab">
+        <div id="resSummary" class="res-summary"></div>
+        <div id="resList" class="res-list"></div>
+        <div id="avgResNote" class="avg-res-note"></div>
+        <div id="resInterpNote" class="interp-note"></div>
+      </div>
+      <div id="res-longdelay" class="cg-tab-pane" role="tabpanel" aria-labelledby="res-longdelay-tab">
+        <div id="longDelayPanel" class="long-delay-panel"></div>
+      </div>
+      <div id="res-percentile" class="cg-tab-pane" role="tabpanel" aria-labelledby="res-percentile-tab">
+        <div id="percentilePanel" class="percentile-panel"></div>
+      </div>
     </div>
 
     <!-- Row: 자동화(col-5) + 운영(col-4) + 채널(col-3) -->
@@ -464,15 +505,7 @@
       <div id="bizHoursSplit" class="biz-hours-split"></div>
     </div>
 
-    <!-- 백분위(col-6) + 에이징(col-6) -->
-    <div class="cg-panel col-6 adv-panel">
-      <div class="cg-panel-header">
-        <span class="cg-panel-title">해결시간 백분위수 (P50/P75/P90/P95)</span>
-        <span class="panel-badge adv-pb">Percentile</span>
-      </div>
-      <div id="percentilePanel" class="percentile-panel"></div>
-    </div>
-
+    <!-- 에이징(col-6) — 백분위는 해결시간 탭으로 이동 -->
     <div class="cg-panel col-6 adv-panel">
       <div class="cg-panel-header">
         <span class="cg-panel-title">에이징 파이프라인 (8h+ 세분화)</span>
@@ -517,13 +550,30 @@
       <div id="complaintTrendInterp" class="interp-note"></div>
     </div>
 
-    <!-- 진단 (col-12) -->
+    <!-- 진단 탭 (col-12) -->
     <div class="cg-panel col-12 adv-panel">
       <div class="cg-panel-header">
-        <span class="cg-panel-title">API 진단 (Channel Talk Open API v5 + 메모리 캐싱)</span>
+        <span class="cg-panel-title">진단</span>
         <span class="panel-badge adv-pb">Diagnostics</span>
+        <div id="diagTabs" class="cg-tabs" role="tablist" aria-label="진단 탭">
+          <button class="cg-tab active" data-tab="diag-api" role="tab" aria-selected="true" aria-controls="diag-api">API 상태</button>
+          <button class="cg-tab" data-tab="diag-cache" role="tab" aria-selected="false" aria-controls="diag-cache">캐시</button>
+          <button class="cg-tab" data-tab="diag-limit" role="tab" aria-selected="false" aria-controls="diag-limit">수집 한도</button>
+          <button class="cg-tab" data-tab="diag-csv" role="tab" aria-selected="false" aria-controls="diag-csv">CSV 기준</button>
+        </div>
       </div>
-      <div id="diagPanel" class="diag-panel"></div>
+      <div id="diag-api" class="cg-tab-pane active" role="tabpanel" aria-labelledby="diag-api-tab">
+        <div id="diagPanel" class="diag-panel"></div>
+      </div>
+      <div id="diag-cache" class="cg-tab-pane" role="tabpanel" aria-labelledby="diag-cache-tab">
+        <div id="diagCachePanel" class="diag-cache-panel"></div>
+      </div>
+      <div id="diag-limit" class="cg-tab-pane" role="tabpanel" aria-labelledby="diag-limit-tab">
+        <div id="diagLimitPanel" class="diag-limit-panel"></div>
+      </div>
+      <div id="diag-csv" class="cg-tab-pane" role="tabpanel" aria-labelledby="diag-csv-tab">
+        <div id="diagCsvPanel" class="diag-csv-panel"></div>
+      </div>
     </div>
 
     </div><!-- /advContent -->
