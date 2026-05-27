@@ -333,7 +333,7 @@ function renderHeroAction(d, scoreObj) {
     actions.push({
       type: 'danger',
       title: `미배정 상담 ${unassigned}건`,
-      cta: '채널톡 미배정 상담 보기',
+      cta: '미배정 큐 보기',
       metric: unassigned + '건',
       rec: '담당자 즉시 배정',
       target: '30분 내',
@@ -344,9 +344,9 @@ function renderHeroAction(d, scoreObj) {
     actions.push({
       type: slow8h > 10 ? 'danger' : 'warn',
       title: `장기 지연 ${slow8h}건 (8시간+)`,
-      cta: '지연 목록 확인하기',
+      cta: '장기지연 보기',
       metric: slow8h + '건',
-      rec: '최장 지연 건 우선 회수',
+      rec: '오래 지연된 상담부터 확인하세요',
       target: '오늘 중',
       onclick: 'openLongChatsPanel(); return false;',
     });
@@ -355,9 +355,9 @@ function renderHeroAction(d, scoreObj) {
     actions.push({
       type: 'danger',
       title: `컴플레인 ${complaintCount}건 (${complaintPct}%)`,
-      cta: '원인 분석하기',
+      cta: '컴플레인 원인 보기',
       metric: complaintCount + '건',
-      rec: '원인 파악 후 즉시 대응',
+      rec: '원인을 확인하세요',
       target: '오늘 중',
       onclick: 'openComplaintPanel(); return false;',
     });
@@ -365,7 +365,7 @@ function renderHeroAction(d, scoreObj) {
     actions.push({
       type: 'warn',
       title: `컴플레인 ${complaintCount}건 (${complaintPct}%)`,
-      cta: '원인 모니터링하기',
+      cta: '컴플레인 추이 보기',
       metric: complaintCount + '건',
       rec: '추이 주시',
       target: '이번 주',
@@ -376,7 +376,7 @@ function renderHeroAction(d, scoreObj) {
     actions.push({
       type: 'warn',
       title: `${dispMgrName(topMgr.name)} 처리 편중`,
-      cta: '담당자 재배정 검토',
+      cta: '담당자 현황 보기',
       metric: topPct + '%',
       rec: '채팅 재배분 검토',
       target: '이번 주',
@@ -387,7 +387,7 @@ function renderHeroAction(d, scoreObj) {
     actions.push({
       type: 'warn',
       title: `미해결 오픈 채팅 ${openChats}건`,
-      cta: '오픈 상담 목록 보기',
+      cta: '오픈 상담 보기',
       metric: openChats + '건',
       rec: '우선순위 검토',
       target: '오늘 중',
@@ -418,8 +418,8 @@ function renderHeroAction(d, scoreObj) {
         <div class="hac-row-num">${i + 1}</div>
         <div class="hac-row-body">
           <div class="hac-row-title">${a.title}</div>
-          ${a.rec ? `<div class="hac-row-rec">권장: ${a.rec}${a.target ? `<span class="hac-row-target"> · ${a.target}</span>` : ''}</div>` : ''}
-          ${isClickable ? `<div class="hac-row-cta">${a.cta} <span class="hac-arrow">→</span></div>` : ''}
+          ${a.rec ? `<div class="hac-row-rec">${a.rec}${a.target ? `<span class="hac-row-target"> · ${a.target}</span>` : ''}</div>` : ''}
+          ${isClickable ? `<div class="hac-row-cta">${a.cta}</div>` : ''}
         </div>
         <div class="hac-row-metric">${a.metric}</div>
       `;
@@ -698,7 +698,7 @@ function renderKPIs(d, scoreObj) {
     const sampledWarn = isSampled
       ? ` <span style="color:var(--amber);font-weight:700" data-tip="API 수집 한도(${limitVal}건)에 도달했습니다. 오래된 채팅은 집계에서 제외될 수 있습니다." tabindex="0" style="cursor:help">⚠ 수집 상한(${limitVal}건) 도달 — 최근 ${limitVal}건 기준 집계</span>`
       : (collectedTotal < limitVal
-        ? ` <span style="color:var(--muted);font-size:10px" data-tip="전체 수집 ${collectedTotal}건 · API 한도(${limitVal}건) 미도달 → 기간을 늘려도 동일 건수가 표시될 수 있습니다" tabindex="0" style="cursor:help">전체 ${collectedTotal}건</span>`
+        ? ` <span style="color:var(--muted);font-size:10px" data-tip="전체 수집 ${collectedTotal}건 · API 한도(${limitVal}건) 미도달 → 기간을 늘려도 동일 건수가 표시될 수 있습니다" tabindex="0" style="cursor:help">전체 수집 ${collectedTotal}건</span>`
         : '');
     const paginMs = diagObj.paginationMs ? diagObj.paginationMs + 'ms' : '—';
     const cacheInfo = diagObj.cacheHit
@@ -708,7 +708,7 @@ function renderKPIs(d, scoreObj) {
       <span>분석 기준</span>
       <span style="font-weight:400;color:#0d9488">
         ${currentDays === 'all' ? `최근 ${limitVal}건 한도` : `최근 ${currentDays}일`}
-        · <span data-tip="채널톡 API closed 상태 채팅 수 (완료 처리된 건만 집계)&#10;※ 기간을 바꿔도 동일 건수가 표시되는 경우, 모든 데이터가 선택 기간 내에 존재하는 것입니다" tabindex="0" style="cursor:help">closed <strong>${totalChats}건</strong></span>
+        · <span data-tip="채널톡 API closed 상태 채팅 수 (완료 처리된 건만 집계)&#10;※ 기간을 바꿔도 동일 건수가 표시되는 경우, 모든 데이터가 선택 기간 내에 존재하는 것입니다" tabindex="0" style="cursor:help">기간 내 <strong>${totalChats}건</strong></span>
         · <span data-tip="채널톡 Open API v5 실데이터 기준. 해결시간·FRT는 채팅 종료 후 계산값" tabindex="0" style="cursor:help">Channel Talk API</span>
         · <span data-tip="${cacheTipText}" tabindex="0" style="cursor:help">${cacheTypeName} 5분 캐시</span>
         · KST
@@ -729,7 +729,6 @@ function renderKPIs(d, scoreObj) {
         <span class="data-badge badge-real">실데이터</span>
         <span class="delta ${unassigned > 0 ? 'bad' : 'good'}">${unassigned > 0 ? '즉시 배정 ↗' : '없음'}</span>
       </div>
-      <div style="font-size:9.5px;color:var(--muted);margin-top:2px">${unassigned > 0 ? '카드 클릭 → 채널톡 미배정 큐 ↗' : '카드 클릭 → 미배정 큐 URL 확인 ↗'}</div>
     </a>
     <a class="kpi-card a-${openChats > 5 ? 'rose' : openChats > 0 ? 'amber' : 'green'}" href="${chatTalkOpenUrl()}" target="_blank" rel="noopener noreferrer"
       data-tip="【오픈 채팅】&#10;출처: 채널톡 API 실시간 조회 (실데이터)&#10;정의: 현재 진행 중인 미종결(open) 채팅 수&#10;계산: API status=opened 건수&#10;기준: 현재 실시간 상태 (기간 필터 무관)&#10;클릭 → 채널톡 인박스 오픈 채팅 목록으로 이동 (state=opened 필터)">
@@ -739,7 +738,6 @@ function renderKPIs(d, scoreObj) {
         <span class="data-badge badge-real">실데이터</span>
         <span class="delta ${openChats === 0 ? 'good' : openChats > 5 ? 'bad' : 'neutral'}">${openChats === 0 ? '없음' : '진행중'}</span>
       </div>
-      ${openChats > 0 ? '<div style="font-size:9.5px;color:var(--muted);margin-top:2px">클릭 → 오픈 상담 목록 ↗</div>' : ''}
     </a>
     <div class="kpi-card a-${slow8h > 10 ? 'rose' : slow8h > 0 ? 'amber' : 'green'}" onclick="openLongChatsPanel()"
       data-tip="【8시간+ 해결시간】&#10;출처: 서버 계산값&#10;정의: 종결 채팅 중 해결시간 > 480분(8h) 케이스 수&#10;계산: closed 채팅의 resolutionMin > 480 건수&#10;분모: 해결시간 집계 가능한 closed 채팅 전체(${resTotal}건)&#10;비율: ${slow8hPct}% (${slow8h}/${resTotal})&#10;※ 오픈 대기중인 건이 아닌 완료된 채팅 기준" tabindex="0">
@@ -749,7 +747,7 @@ function renderKPIs(d, scoreObj) {
         <span class="data-badge badge-calc">계산값</span>
         <span class="delta ${slow8h === 0 ? 'good' : slow8h > 10 ? 'bad' : 'neutral'}">${slow8hPct}%</span>
       </div>
-      <div style="font-size:9.5px;color:var(--muted);margin-top:2px">클릭 → 장기지연 목록 상세보기</div>
+      <div style="font-size:9.5px;color:var(--muted);margin-top:2px">장기지연 보기</div>
     </div>
     <div class="kpi-card a-${complaintPct >= 15 ? 'rose' : complaintPct >= 8 ? 'amber' : 'green'}" onclick="openComplaintPanel()"
       data-tip="【컴플레인율】&#10;출처: 채널톡 태그 실데이터&#10;정의: '컴플레인' 포함 태그가 붙은 채팅 비율&#10;계산: 컴플레인 태그 채팅 수 / 전체 closed 채팅 수 × 100&#10;분모: summary.totalChats (${totalChats}건)&#10;※ 한 채팅에 여러 컴플레인 태그 가능 → 태그 기준 집계&#10;클릭 → 유형별 원인 분석" tabindex="0">
@@ -759,7 +757,7 @@ function renderKPIs(d, scoreObj) {
         <span class="data-badge badge-real">실데이터</span>
         <span class="delta ${complaintPct >= 15 ? 'bad' : complaintPct >= 8 ? 'neutral' : 'good'}">${complaintPct >= 15 ? '즉시 대응' : complaintPct >= 8 ? '모니터링' : '양호'}</span>
       </div>
-      <div style="font-size:9.5px;color:var(--muted);margin-top:2px">클릭 → 유형별 원인 분석</div>
+      <div style="font-size:9.5px;color:var(--muted);margin-top:2px">컴플레인 원인 보기</div>
     </div>
     <div class="kpi-card a-${topPct > 80 ? 'rose' : topPct > 60 ? 'amber' : 'green'}" onclick="_gotoTab('mgr-conc')"
       data-tip="【담당자 편중 — 전체 기준】&#10;출처: 서버 계산값&#10;계산: 최다 처리 담당자 수 ÷ 전체 closed 채팅 수 × 100&#10;분모: summary.totalChats (${totalChats}건, 봇·미배정 포함)&#10;최다 처리: ${topMgr ? dispMgrName(topMgr.name) + ' (' + topMgr.count + '건)' : '—'}&#10;제외 담당자: ${EXCLUDED_MANAGERS.join(', ')}&#10;※ 게이지의 '처리 기준'은 배정 건만 분모로 사용해 수치가 다를 수 있음&#10;클릭 → 담당자 집중도 탭" tabindex="0">
@@ -770,7 +768,6 @@ function renderKPIs(d, scoreObj) {
         <span class="delta ${topPct > 80 ? 'bad' : topPct > 60 ? 'neutral' : 'good'}">${topPct > 80 ? '과부하' : topPct > 60 ? '주의' : '분산 양호'}</span>
       </div>
       <div class="kpi-meta" style="margin-top:2px"><span style="font-size:10px;color:var(--muted)">${topMgr ? dispMgrName(topMgr.name) : '—'}</span></div>
-      <div style="font-size:9.5px;color:var(--muted);margin-top:2px">클릭 → 담당자 집중도 분석</div>
     </div>
   `;
 }
@@ -1372,7 +1369,7 @@ function openLongChatsPanel(keepFilter) {
   const termNote = `<div style="font-size:10.5px;color:var(--muted);background:var(--bg2);border-radius:6px;padding:6px 10px;margin-bottom:8px;line-height:1.6">
     <strong>용어 안내</strong> · <span style="color:var(--rose)">장기지연</span>: 종결(closed) 채팅 중 해결시간 8시간+ 초과 건 &nbsp;·&nbsp; <span style="color:var(--amber)">미해결</span>: 현재 진행 중(open) 채팅 &nbsp;·&nbsp; <span style="color:var(--text)">담당자 없음</span>: 해당 채팅 종결 시 배정 기록 없음 (KPI 미배정과 다름)
   </div>`;
-  const sortLabel = `<div class="lc-sort-label">해결시간 기준 내림차순</div>`;
+  const sortLabel = `<div class="lc-sort-label">가장 오래 지연된 상담부터 확인하세요</div>`;
   const filterBar = hasQfOptions ? `
     <div class="lc-qf-bar" id="lcQuickFilters">
       ${mgrChips ? `<div class="lc-qf-group"><span class="lc-qf-label">담당자</span>${mgrChips}</div>` : ''}
@@ -1867,14 +1864,14 @@ function renderGaugeGrid(d) {
   setG('quick', quickPct, quickPct >= 70 ? 'gauge-fill--good' : quickPct >= 50 ? 'gauge-fill--warn' : 'gauge-fill--danger');
   document.getElementById('gval-quick').textContent = quickPct + '%';
   document.getElementById('gsub-quick').textContent = `${quick}건 / ${total}건`;
-  document.getElementById('gsub-quick').setAttribute('data-tip', `분모: 종결(closed) 채팅 ${total}건 기준 — 진행 중·미응답 제외`);
+  document.getElementById('gsub-quick').setAttribute('data-tip', `분모: 해결시간 집계 가능한 closed 상담 ${total}건 기준&#10;(봇 자동처리·미응답·해결시간 미집계 건 제외)&#10;※ 전체 closed ${d.summary?.totalChats || ''}건과 다를 수 있음`);
   setB('quick', quickPct >= 70 ? '양호' : quickPct >= 50 ? '주의' : '위험', quickPct >= 70 ? 'good' : quickPct >= 50 ? 'warn' : 'danger');
 
   // 8h+
   setG('slow', slowPct, slowPct <= 10 ? 'gauge-fill--good' : slowPct <= 25 ? 'gauge-fill--warn' : 'gauge-fill--danger');
   document.getElementById('gval-slow').textContent = slowPct + '%';
-  document.getElementById('gsub-slow').textContent = `${slow8h}건 종결 기준`;
-  document.getElementById('gsub-slow').setAttribute('data-tip', `종결 완료된 채팅 중 해결시간 8시간 초과 건수 — 현재 오픈 대기 건수와 다름`);
+  document.getElementById('gsub-slow').textContent = `${slow8h}건 / ${total}건`;
+  document.getElementById('gsub-slow').setAttribute('data-tip', `분모: 해결시간 집계 가능한 closed 상담 ${total}건 기준&#10;(봇 자동처리·미응답·해결시간 미집계 건 제외)&#10;현재 오픈 대기 중인 건과는 별개`);
   setB('slow', slowPct <= 10 ? '양호' : slowPct <= 25 ? '주의' : '위험', slowPct <= 10 ? 'good' : slowPct <= 25 ? 'warn' : 'danger');
 
   // FRT (B-1)
@@ -1897,6 +1894,7 @@ function renderGaugeGrid(d) {
     setG('fcr', fcr.fcrRate, fcr.fcrRate >= 90 ? 'gauge-fill--good' : fcr.fcrRate >= 75 ? 'gauge-fill--warn' : 'gauge-fill--danger');
     document.getElementById('gval-fcr').textContent = fcr.fcrRate + '%';
     document.getElementById('gsub-fcr').textContent = `재오픈 ${fcr.reopenedCount}건`;
+    document.getElementById('gsub-fcr').setAttribute('data-tip', `분모: 기간 내 최초 종결(closed) 상담 전체 기준&#10;재오픈: 종결 후 동일 사용자가 24시간 내 채팅 재개한 건수&#10;(봇 처리·미응답으로 자동 종결된 건 포함)`);
     setB('fcr', fcr.fcrRate >= 90 ? '양호' : fcr.fcrRate >= 75 ? '주의' : '위험', fcr.fcrRate >= 90 ? 'good' : fcr.fcrRate >= 75 ? 'warn' : 'danger');
   }
 
@@ -2442,6 +2440,15 @@ function fullRender(data) {
   document.querySelectorAll('[data-period-loading]').forEach(el => el.removeAttribute('data-period-loading'));
   const heroMeta = document.getElementById('heroInlineMeta');
   if (heroMeta) heroMeta.style.opacity = '';
+  // clearPeriodUI 에서 dim된 섹션 복원
+  [
+    document.querySelector('.health-gauge-row'),
+    document.querySelector('.chart-master-grid'),
+    document.getElementById('insightsStrip'),
+    document.getElementById('kpiBasisHeader'),
+  ].forEach(el => {
+    if (el) { el.style.opacity = ''; el.style.pointerEvents = ''; }
+  });
   const scoreObj = computeHealthScore(data);
   const insights = generateInsights(data, scoreObj);
   safeRender(() => renderHealthScore(scoreObj, data), 'healthScore');
@@ -2924,6 +2931,15 @@ function clearPeriodUI(range) {
   // hero 인라인 메타 숨김
   const heroMeta = document.getElementById('heroInlineMeta');
   if (heroMeta) heroMeta.style.opacity = '0.2';
+  // 게이지·차트·인사이트 섹션 dim (이전 기간 수치가 눈에 띄지 않도록)
+  [
+    document.querySelector('.health-gauge-row'),
+    document.querySelector('.chart-master-grid'),
+    document.getElementById('insightsStrip'),
+    document.getElementById('kpiBasisHeader'),
+  ].forEach(el => {
+    if (el) { el.style.opacity = '0.2'; el.style.pointerEvents = 'none'; }
+  });
   // filterScopeNote 숨김 (기간 전환 시 이전 필터 안내 불일치 방지)
   const scopeNote = document.getElementById('filterScopeNote');
   if (scopeNote) scopeNote.style.display = 'none';
