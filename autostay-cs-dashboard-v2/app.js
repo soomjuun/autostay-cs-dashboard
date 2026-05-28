@@ -709,12 +709,31 @@ function renderKPIs(d, scoreObj) {
     const _sampledNote = isSampled
       ? ` <span style="color:var(--amber);font-weight:700;font-size:10px" data-tip="API 수집 한도(${limitVal}건)에 도달했습니다. 오래된 채팅은 집계에서 제외될 수 있습니다." tabindex="0" style="cursor:help">⚠ 수집 상한</span>`
       : '';
+    // 실제 데이터 날짜 범위 포매팅 (processedMinAt/processedMaxAt → YYYY-MM-DD KST)
+    const _fmtDateFull = (ts) => {
+      if (!ts) return null;
+      const d2 = new Date(ts + 9 * 3600 * 1000); // KST
+      const y = d2.getUTCFullYear();
+      const m = String(d2.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(d2.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+    const _minDate = _fmtDateFull(dataNote.processedMinAt);
+    const _maxDate = _fmtDateFull(dataNote.processedMaxAt);
+    const _dateRangeStr = (_minDate && _maxDate)
+      ? (_minDate === _maxDate ? _minDate : `${_minDate} ~ ${_maxDate}`)
+      : null;
+
     // 기간 필터 무관 — 수집 전체가 현재 기간 내에 포함된 경우 안내
     const _allInPeriod = !isSampled && dataNote.collected > 0 && dataNote.collected === dataNote.processed;
+    const _dateRangeTip = _dateRangeStr ? `&#10;실제 포함 기간: ${_dateRangeStr}` : '';
     const _samePeriodsNote = _allInPeriod
       ? ` · <span style="color:var(--muted);font-size:10px;cursor:help"
-            data-tip="전체 closed 채팅이 ${dataNote.collected}건이며, 선택 기간(${currentDays === 'all' ? '전체' : `최근 ${currentDays}일`}) 내에 모두 포함됩니다.&#10;&#10;→ 14일·30일·전체 탭을 전환해도 동일한 결과가 표시되는 것이 정상입니다.&#10;→ API 수집 한도(${limitVal}건) 미도달 · 실제 데이터 ${dataNote.collected}건뿐&#10;&#10;현재 요청 파라미터: days=${currentDays}"
+            data-tip="전체 closed 채팅이 ${dataNote.collected}건이며, 선택 기간(${currentDays === 'all' ? '전체' : `최근 ${currentDays}일`}) 내에 모두 포함됩니다.&#10;&#10;→ 14일·30일·전체 탭을 전환해도 동일한 결과가 표시되는 것이 정상입니다.&#10;→ API 수집 한도(${limitVal}건) 미도달 · 실제 데이터 ${dataNote.collected}건뿐${_dateRangeTip}&#10;&#10;현재 요청 파라미터: days=${currentDays}"
             tabindex="0">기간별 동일 결과 ⓘ</span>`
+      : '';
+    const _dateRangeNote = _dateRangeStr
+      ? ` <span style="color:var(--muted);font-size:10px" data-tip="수집된 채팅의 실제 날짜 범위 (KST 기준)" tabindex="0" style="cursor:help">${_dateRangeStr}</span>`
       : '';
     kpiBasisHeaderEl.innerHTML = `
       <span>분석 기준</span>
@@ -722,7 +741,7 @@ function renderKPIs(d, scoreObj) {
         ${currentDays === 'all' ? `최근 ${limitVal}건 한도` : `최근 ${currentDays}일`}
         · <strong>${totalChats}건</strong> 기준
         <span data-tip="${_basisDetailLines}" tabindex="0" style="cursor:help;color:var(--muted);font-weight:400"> ⓘ</span>
-      </span>${cacheInfo}${_sampledNote}${_samePeriodsNote}`;
+      </span>${_dateRangeNote}${cacheInfo}${_sampledNote}${_samePeriodsNote}`;
   }
 
   const grid = document.getElementById('kpiGrid');
@@ -845,7 +864,15 @@ function renderTrend(d) {
     }
   });
   const trendEl = document.getElementById('trendChart');
-  if (trendEl) trendEl.setAttribute('aria-label', `일별 채팅 추이 차트, ${dailyTrend.labels.length}일 기간, 합계 ${dailyTrend.values.reduce((a,b)=>a+b,0)}건, 일평균 ${Math.round(avg)}건`);
+  if (trendEl) {
+    // aria-label: 합계는 summary.totalChats(=processed) 기준으로 화면 수치와 일치시킴
+    const _ariaTotal = summary.totalChats || 0;
+    const _ariaSpan = dailyTrend.labels.length;
+    const _ariaLabel = currentDays === 'all'
+      ? `일별 채팅 추이 차트, 전체 수집 ${_ariaTotal}건 기준, 실제 포함 기간 ${_ariaSpan}일, 일평균 ${Math.round(avg)}건`
+      : `일별 채팅 추이 차트, 최근 ${currentDays}일 기간 중 ${_ariaSpan}일 데이터, 합계 ${_ariaTotal}건, 일평균 ${Math.round(avg)}건`;
+    trendEl.setAttribute('aria-label', _ariaLabel);
+  }
   renderPeakAnalysis(d.peakAnalysis, d.managers || []);
 }
 
@@ -1537,7 +1564,7 @@ function openComplaintPanel() {
   const tags  = src.tags || { labels: [], values: [] };
   const ct    = src.complaintTrend || { labels: [], total: [], complaints: [] };
 
-  // 컴플레인 태그 필터링
+  // 컴플레인 태그 필터링 (유형별 막대 표시용 — 태그 기반)
   const complaintItems = (tags.labels || []).reduce((acc, lbl, i) => {
     if (lbl.includes('컴플레인')) {
       acc.push({ label: lbl, count: tags.values[i] || 0 });
@@ -1545,8 +1572,17 @@ function openComplaintPanel() {
     return acc;
   }, []).sort((a, b) => b.count - a.count);
 
-  const totalComplaints = complaintItems.reduce((s, x) => s + x.count, 0);
-  const complaintPct = Math.round(totalComplaints / total * 100);
+  // 총 컴플레인 건수/비율: complaintTrend 기반(= computeHealthScore와 동일 기준)
+  // → 태그 합산이 아닌 "컴플레인 태그 보유 채팅 수" 기준이므로 KPI 카드 수치와 일치
+  let totalComplaints, complaintBase;
+  if (ct.complaints && ct.complaints.length > 0) {
+    totalComplaints = ct.complaints.reduce((a, b) => a + b, 0);
+    complaintBase = ct.total.reduce((a, b) => a + b, 0) || total;
+  } else {
+    totalComplaints = complaintItems.reduce((s, x) => s + x.count, 0);
+    complaintBase = total;
+  }
+  const complaintPct = Math.round(totalComplaints / complaintBase * 100);
   const maxCount = complaintItems[0]?.count || 1;
 
   // 트렌드 방향
@@ -2351,7 +2387,10 @@ function renderDiagnostics(d) {
     const _fmtTs = (ts) => {
       if (!ts) return null;
       const d2 = new Date(ts + 9 * 3600 * 1000); // KST
-      return `${d2.getMonth() + 1}/${d2.getDate()}`;
+      const y = d2.getUTCFullYear();
+      const mo = String(d2.getUTCMonth() + 1).padStart(2, '0');
+      const dy = String(d2.getUTCDate()).padStart(2, '0');
+      return `${y}-${mo}-${dy}`;
     };
     let dateRangeStr = '—';
     if (dn.processedMinAt && dn.processedMaxAt) {
@@ -3286,6 +3325,24 @@ function clearPeriodUI(range) {
   // filterScopeNote 숨김 (기간 전환 시 이전 필터 안내 불일치 방지)
   const scopeNote = document.getElementById('filterScopeNote');
   if (scopeNote) scopeNote.style.display = 'none';
+
+  // 게이지 수치 텍스트 즉시 '—'로 초기화 (이전 기간 수치가 dim 아래 잔존하지 않도록)
+  ['gval-quick','gval-slow','gval-frt','gval-fcr','gval-conc'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '—';
+  });
+  ['gsub-quick','gsub-slow','gsub-frt','gsub-fcr'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '—';
+  });
+  const gsubConc = document.getElementById('gsub-conc');
+  if (gsubConc) gsubConc.innerHTML = '—';
+
+  // 트렌드 요약 수치 초기화
+  ['trendTotal','trendPeak','trendPeakDay','trendAvg','trendOpen'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '—';
+  });
 }
 
 function triggerFullReload() {
