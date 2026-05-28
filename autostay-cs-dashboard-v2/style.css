@@ -62,6 +62,8 @@ canvas { display: block; }
   position: fixed; inset: 0; z-index: 9999;
   background: var(--surface);
   display: flex; align-items: center; justify-content: center;
+  transition: opacity .35s ease;
+  will-change: opacity;
 }
 .loading-inner {
   display: flex; flex-direction: column; align-items: center; gap: 18px;
@@ -104,6 +106,19 @@ canvas { display: block; }
 }
 .lstep.active {
   background: var(--teal-s); color: var(--teal);
+}
+
+/* 스켈레톤 카드 shimmer 애니메이션 */
+@keyframes skeleton-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position:  400px 0; }
+}
+.skeleton-card {
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: .5; }
+  50%       { opacity: .9; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
@@ -229,6 +244,26 @@ canvas { display: block; }
 .hgc-basis {
   font-size: 10px; color: var(--subtle); margin-top: 4px;
 }
+.hgc-deduct-btn {
+  margin-top: 8px; font-size: 11px; color: var(--teal);
+  font-weight: 600; padding: 4px 8px; border-radius: 8px;
+  border: 1px solid var(--teal); background: transparent; cursor: pointer;
+  width: 100%;
+}
+.hgc-deduct-detail {
+  margin-top: 6px; padding: 8px;
+  background: var(--bg); border-radius: 8px;
+  border: 1px solid var(--border);
+}
+.hdd-row {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 11px; padding: 3px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.hdd-row:last-child { border-bottom: none; }
+.hdd-label { color: var(--muted); }
+.hdd-val { font-weight: 700; }
+.hdd-total .hdd-label { font-weight: 700; color: var(--text); }
 
 /* — KPI 스트립 — */
 .hero-kpi-strip {
@@ -243,6 +278,25 @@ canvas { display: block; }
 @media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 600px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
 
+/* 보조 KPI: repeat(3,1fr)로 primary와 카드 폭 일치 — 2카드가 첫 2열만 채움 */
+.kpi-grid--secondary { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 600px) { .kpi-grid--secondary { grid-template-columns: repeat(2, 1fr); } }
+
+/* 미배정 0건 — 운영 정상 컴팩트 카드 */
+.kpi-card-ok {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 10px 12px; border-radius: 10px;
+  background: var(--bg); border: 1px solid var(--border-soft);
+  text-decoration: none; cursor: pointer;
+}
+.kco-label { font-size: 11px; color: var(--muted); font-weight: 500; }
+.kco-body { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.kco-val { font-size: 14px; font-weight: 700; color: var(--green); }
+.kco-badge {
+  font-size: 10px; padding: 2px 7px; border-radius: 10px;
+  background: var(--green); color: #fff; font-weight: 600;
+}
+
 /* Toss-style white KPI cards */
 .kpi-card {
   background: var(--surface);
@@ -250,6 +304,7 @@ canvas { display: block; }
   border-radius: 16px; padding: 16px 18px;
   transition: box-shadow .15s;
   box-shadow: none;
+  display: flex; flex-direction: column;
 }
 .kpi-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.06); }
 
@@ -2413,8 +2468,8 @@ button.hac-row-btn:focus-visible .hac-row {
 /* hero 영역 primary KPI: 카드 3개 → 3열 고정 */
 .hero-kpi-strip .kpi-grid { grid-template-columns: repeat(3, 1fr); }
 
-/* 보조 KPI: 카드 2개 → 2열 고정 */
-.kpi-grid--secondary { grid-template-columns: repeat(2, 1fr); }
+/* 보조 KPI: repeat(3,1fr)로 primary와 카드 폭 일치 */
+.kpi-grid--secondary { grid-template-columns: repeat(3, 1fr); }
 
 /* ─── 보조 KPI strip ─────────────────────────────────────────── */
 .secondary-kpi-strip {
@@ -2441,6 +2496,7 @@ button.hac-row-btn:focus-visible .hac-row {
   padding: 16px 18px;
   transition: box-shadow .15s;
   position: relative;
+  display: flex; flex-direction: column;
 }
 .kpi-card:hover {
   box-shadow: 0 2px 8px rgba(0,0,0,.06);
@@ -2612,11 +2668,17 @@ button.ld-more-link:hover {
 /* ACTION QUEUE (운영 액션 큐 헤더)                                            */
 /* ══════════════════════════════════════════════════════════════════════════ */
 .aq-header {
-  font-size: 13px; font-weight: 700; color: var(--text);
   padding: 6px 8px 8px;
-  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  display: flex; flex-direction: column; gap: 5px;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 8px; letter-spacing: -.01em;
+  margin-bottom: 8px;
+}
+.aq-title-row {
+  font-size: 12px; font-weight: 700; color: var(--text);
+  letter-spacing: -.01em;
+}
+.aq-chips-row {
+  display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
 }
 .aq-header .aq-sep { color: var(--border); margin: 0 2px; font-weight: 400; }
 .aq-total {

@@ -407,7 +407,7 @@ function renderHeroAction(d, scoreObj) {
     const warnCount   = actions.filter(a => a.type === 'warn').length;
     const totalCount = urgentCount + warnCount;
     const queueHeader = totalCount > 0
-      ? `<div class="aq-header"><span style="color:#fff;font-weight:900">오늘 처리할 일</span> <span class="aq-total">${totalCount}건</span>${urgentCount > 0 ? '<span class="aq-sep"> · </span><span class="aq-urgent">즉시 ' + urgentCount + '건</span>' : ''}<span class="aq-sep"> · </span><span class="aq-warn">확인 ${warnCount}건</span></div>`
+      ? `<div class="aq-header"><div class="aq-title-row">오늘 처리할 일</div><div class="aq-chips-row"><span class="aq-total">${totalCount}건</span>${urgentCount > 0 ? '<span class="aq-urgent">즉시 ' + urgentCount + '건</span>' : ''}<span class="aq-warn">확인 ${warnCount}건</span></div></div>`
       : `<div class="aq-header aq-ok">오늘 즉시 조치 필요 없음</div>`;
     hacBody.innerHTML = queueHeader + top3.map((a, i) => {
       const isClickable = !!(a.url || a.onclick);
@@ -504,7 +504,7 @@ function computeHealthScore(d) {
 function getGrade(score) {
   if (score >= 80) return { grade: 'A', label: '양호', color: '#15803d' };
   if (score >= 65) return { grade: 'B', label: '보통', color: '#b45309' };
-  if (score >= 50) return { grade: 'C', label: '주의', color: '#dc2626' };
+  if (score >= 50) return { grade: 'C', label: '주의', color: '#b45309' };
   return { grade: 'D', label: '위험', color: '#be123c' };
 }
 
@@ -542,9 +542,37 @@ function renderHealthScore(scoreObj, d) {
     if (totalDeduct === 0) {
       ss.innerHTML = '<span style="color:var(--green);font-weight:700">✓ 감점 없음</span>';
     } else {
-      ss.innerHTML = `총 -${totalDeduct}점 / 100점`;
+      ss.innerHTML = `<span title="컴플레인율·장기지연율·담당자 편중도를 기준으로 감점됩니다" style="cursor:help">감점 ${totalDeduct}점 <span style="color:var(--muted);font-size:10px;font-weight:400">ⓘ</span></span>`;
     }
   }
+  // 감점 내역 버튼/상세
+  const deductBtn = document.getElementById('healthDeductBtn');
+  const deductDetail = document.getElementById('healthDeductDetail');
+  if (deductBtn && deductDetail) {
+    const totalDeduct2 = deductComplaint + deductSlow + deductConc;
+    if (totalDeduct2 > 0) {
+      deductBtn.style.display = 'block';
+      const rows = [];
+      if (deductComplaint > 0) rows.push(`<div class="hdd-row"><span class="hdd-label">컴플레인율 ${complaintPct}%</span><span class="hdd-val" style="color:var(--rose)">-${deductComplaint}점</span></div>`);
+      if (deductSlow > 0) rows.push(`<div class="hdd-row"><span class="hdd-label">장기지연율 ${slowPct}%</span><span class="hdd-val" style="color:var(--amber)">-${deductSlow}점</span></div>`);
+      if (deductConc > 0) rows.push(`<div class="hdd-row"><span class="hdd-label">담당자 편중 ${topPct}%</span><span class="hdd-val" style="color:var(--amber)">-${deductConc}점</span></div>`);
+      rows.push(`<div class="hdd-row hdd-total"><span class="hdd-label">총 감점</span><span class="hdd-val" style="color:var(--rose)">-${totalDeduct2}점</span></div>`);
+      deductDetail.innerHTML = rows.join('');
+      deductDetail.style.display = 'none';
+    } else {
+      deductBtn.style.display = 'none';
+      deductDetail.style.display = 'none';
+    }
+  }
+}
+
+function toggleHealthDeduct() {
+  const btn = document.getElementById('healthDeductBtn');
+  const detail = document.getElementById('healthDeductDetail');
+  if (!detail) return;
+  const isOpen = detail.style.display !== 'none';
+  detail.style.display = isOpen ? 'none' : 'block';
+  if (btn) btn.textContent = isOpen ? '감점 내역 보기' : '감점 내역 닫기';
 }
 
 /* ─── Insights / Alert (기존 유지) ──────────────────────────────────── */
@@ -555,25 +583,25 @@ function generateInsights(d, scoreObj) {
   const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
   const managers = (d.managers || []).filter((m) => !EXCLUDED_MANAGERS.includes(m.name));
   const complaintPct = scoreObj.complaintPct;
-  if (complaintPct >= 15) insights.push({ type: 'danger', icon: '위험', text: `컴플레인 ${complaintPct}% — 즉각 대응 필요` });
-  else if (complaintPct >= 8) insights.push({ type: 'warn', icon: '주의', text: `컴플레인 ${complaintPct}% — 모니터링` });
+  if (complaintPct >= 15) insights.push({ type: 'danger', icon: '위험', short: `컴플레인 ${complaintPct}%`, detail: `컴플레인 비율 ${complaintPct}% — 즉각 대응 필요 (기준: 15% 이상)` });
+  else if (complaintPct >= 8) insights.push({ type: 'warn', icon: '주의', short: `컴플레인 ${complaintPct}%`, detail: `컴플레인 비율 ${complaintPct}% — 모니터링 권장 (기준: 8% 이상)` });
   if (managers.length > 0) {
     const topPct = Math.round((managers[0].count || 0) / total * 100);
     const topName = dispMgrName(managers[0].name);
-    if (topPct > 80) insights.push({ type: 'danger', icon: '위험', text: `${topName} 처리 집중도 ${topPct}%` });
-    else if (topPct > 60) insights.push({ type: 'warn', icon: '주의', text: `${topName} 처리 집중도 ${topPct}%` });
+    if (topPct > 80) insights.push({ type: 'danger', icon: '위험', short: `${topName} ${topPct}%`, detail: `${topName} 처리 집중도 ${topPct}% — 과부하 위험, 즉시 재배정 검토` });
+    else if (topPct > 60) insights.push({ type: 'warn', icon: '주의', short: `${topName} ${topPct}%`, detail: `${topName} 처리 집중도 ${topPct}% — 편중 주의` });
   }
   const slowPct = Math.round((rb['8시간+'] || 0) / resTotal * 100);
-  if (slowPct > 30) insights.push({ type: 'warn', icon: '지연', text: `8h+ 해결 ${slowPct}%` });
+  if (slowPct > 30) insights.push({ type: 'warn', icon: '지연', short: `8h+ ${slowPct}%`, detail: `8시간 초과 해결 ${slowPct}% — 장기지연 비율 높음` });
   // FRT 인사이트
   if (d.frtStats && d.frtStats.median > 30) {
-    insights.push({ type: 'warn', icon: 'FRT', text: `첫 응답 P50 ${fmtMin(d.frtStats.median)} — 응답 속도 개선 필요` });
+    insights.push({ type: 'warn', icon: 'FRT', short: `P50 ${fmtMin(d.frtStats.median)}`, detail: `첫 응답 중앙값 ${fmtMin(d.frtStats.median)} — 30분 초과, 응답 속도 개선 필요` });
   } else if (d.frtStats && d.frtStats.median <= 5) {
-    insights.push({ type: 'good', icon: 'FRT', text: `첫 응답 P50 ${fmtMin(d.frtStats.median)} — 신속 대응 양호` });
+    insights.push({ type: 'good', icon: 'FRT', short: `P50 ${fmtMin(d.frtStats.median)}`, detail: `첫 응답 중앙값 ${fmtMin(d.frtStats.median)} — 신속 대응 양호` });
   }
   // FCR
   if (d.fcrStats && d.fcrStats.fcrRate < 80) {
-    insights.push({ type: 'warn', icon: 'FCR', text: `1차 해결률 ${d.fcrStats.fcrRate}% — 재오픈 ${d.fcrStats.reopenedCount}건` });
+    insights.push({ type: 'warn', icon: 'FCR', short: `FCR ${d.fcrStats.fcrRate}%`, detail: `1차 해결률 ${d.fcrStats.fcrRate}% — 재오픈 ${d.fcrStats.reopenedCount}건` });
   }
   return insights;
 }
@@ -584,9 +612,9 @@ function renderInsights(insights) {
   if (!insights.length) { strip.style.display = 'none'; return; }
   strip.style.display = 'flex';
   strip.innerHTML = `<div class="insights-label">자동 인사이트</div>` + insights.map((ins) => `
-    <div class="insight-chip ${ins.type}">
+    <div class="insight-chip ${ins.type}" data-tip="${ins.detail || ins.short}" tabindex="0" role="status" aria-label="${ins.detail || ins.short}">
       <span class="insight-icon insight-label-badge">${ins.icon}</span>
-      <span>${ins.text}</span>
+      <span>${ins.short || ins.text}</span>
     </div>`).join('');
 }
 
@@ -660,6 +688,7 @@ function renderKPIs(d, scoreObj) {
   const totalChats = summary.totalChats || 1;
   const openChats = summary.openChats || 0;
   const unassigned = summary.unassignedChats || 0;
+  const longChatOpenCount = (d.longChats || []).length;
   const rb = d.resolutionBuckets || {};
   const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
   const slow8h = rb['8시간+'] || 0;
@@ -772,15 +801,20 @@ function renderKPIs(d, scoreObj) {
   const _c5 = topPct > 80 ? 'rose' : topPct > 60 ? 'amber' : 'green';
 
   const kpiCards = [
-    { sev: _kpiSev(_c1), html: `<a class="kpi-card a-${_c1}" href="${chatTalkUnassignedUrl()}" target="_blank" rel="noopener noreferrer"
-      data-tip="【미배정 상담 (No Assignee)】&#10;출처: 채널톡 API 실시간 조회 (실데이터)&#10;정의: 현재 진행 중(opened) 상담 중 담당자(assigneeId)가 없는 건&#10;기준: 종결(closed) 상담 제외 · 현재 오픈 상담만&#10;※ Queue(자동배정 대기)와는 다른 개념: No assignee = 수동 배정 필요&#10;클릭 → 채널톡 인박스 미배정 목록으로 이동">
-      <div class="kpi-label">미배정 <span class="kpi-src-icon" data-tip="채널톡 실데이터 · 현재 오픈 상담 기준 (No Assignee)" tabindex="0" style="cursor:help">ⓘ</span></div>
-      <div class="kpi-value">${fmt(unassigned)}<span class="unit">건</span></div>
-      <div class="kpi-meta">
-        <span class="data-badge badge-real">실데이터</span>
-        <span class="delta ${unassigned > 0 ? 'bad' : 'good'}">${unassigned > 0 ? '즉시 배정 ↗' : '없음'}</span>
-      </div>
-    </a>` },
+    { sev: _kpiSev(_c1), html: unassigned === 0
+      ? `<a class="kpi-card-ok" href="${chatTalkUnassignedUrl()}" target="_blank" rel="noopener noreferrer" title="미배정 상담 없음 — 클릭하여 채널톡 확인">
+          <div class="kco-label">미배정</div>
+          <div class="kco-body"><span class="kco-val">없음</span><span class="kco-badge">운영 정상</span></div>
+        </a>`
+      : `<a class="kpi-card a-${_c1}" href="${chatTalkUnassignedUrl()}" target="_blank" rel="noopener noreferrer"
+          data-tip="【미배정 상담 (No Assignee)】&#10;출처: 채널톡 API 실시간 조회 (실데이터)&#10;정의: 현재 진행 중(opened) 상담 중 담당자(assigneeId)가 없는 건&#10;기준: 종결(closed) 상담 제외 · 현재 오픈 상담만&#10;※ Queue(자동배정 대기)와는 다른 개념: No assignee = 수동 배정 필요&#10;클릭 → 채널톡 인박스 미배정 목록으로 이동">
+          <div class="kpi-label">미배정 <span class="kpi-src-icon" data-tip="채널톡 실데이터 · 현재 오픈 상담 기준 (No Assignee)" tabindex="0" style="cursor:help">ⓘ</span></div>
+          <div class="kpi-value">${fmt(unassigned)}<span class="unit">건</span></div>
+          <div class="kpi-meta">
+            <span class="data-badge badge-real">실데이터</span>
+            <span class="delta bad">즉시 배정 ↗</span>
+          </div>
+        </a>` },
     { sev: _kpiSev(_c2), html: `<a class="kpi-card a-${_c2}" href="${chatTalkOpenUrl()}" target="_blank" rel="noopener noreferrer"
       data-tip="【오픈 채팅】&#10;출처: 채널톡 API 실시간 조회 (실데이터)&#10;정의: 현재 진행 중인 미종결(open) 채팅 수&#10;계산: API status=opened 건수&#10;기준: 현재 실시간 상태 (기간 필터 무관)&#10;클릭 → 채널톡 인박스 오픈 채팅 목록으로 이동 (state=opened 필터)">
       <div class="kpi-label">오픈 채팅</div>
@@ -789,6 +823,10 @@ function renderKPIs(d, scoreObj) {
         <span class="data-badge badge-real">실데이터</span>
         <span class="delta ${openChats === 0 ? 'good' : openChats > 5 ? 'bad' : 'neutral'}">${openChats === 0 ? '없음' : '진행중'}</span>
       </div>
+      ${openChats > 0 ? `<div style="font-size:9px;margin-top:4px;display:flex;gap:8px;flex-wrap:wrap">
+        ${unassigned > 0 ? `<span style="color:var(--rose)">미배정 ${unassigned}건</span>` : '<span style="color:var(--green)">전원 배정</span>'}
+        ${longChatOpenCount > 0 ? `<span style="color:var(--amber)">장기오픈 ${longChatOpenCount}건</span>` : ''}
+      </div>` : ''}
     </a>` },
     { sev: _kpiSev(_c3), html: `<div class="kpi-card a-${_c3}" onclick="openLongChatsPanel()"
       data-tip="【8시간+ 해결시간】&#10;출처: 서버 계산값&#10;정의: 종결 채팅 중 해결시간 > 480분(8h) 케이스 수&#10;계산: closed 채팅의 resolutionMin > 480 건수&#10;분모: 해결시간 집계 가능한 closed 채팅 전체(${resTotal}건)&#10;비율: ${slow8hPct}% (${slow8h}/${resTotal})&#10;※ 오픈 대기중인 건이 아닌 완료된 채팅 기준" tabindex="0">
@@ -796,9 +834,9 @@ function renderKPIs(d, scoreObj) {
       <div class="kpi-value">${fmt(slow8h)}<span class="unit">건</span></div>
       <div class="kpi-meta">
         <span class="data-badge badge-calc">계산값</span>
-        <span class="delta ${slow8h === 0 ? 'good' : slow8h > 10 ? 'bad' : 'neutral'}">${slow8hPct}%</span>
+        <span class="delta ${slow8h === 0 ? 'good' : slow8h > 10 ? 'bad' : 'neutral'}">${slow8h}/${resTotal}건 · ${slow8hPct}%</span>
       </div>
-      <div style="font-size:9.5px;color:var(--muted);margin-top:2px">장기지연 보기</div>
+      <div style="font-size:9.5px;color:var(--muted);margin-top:auto;padding-top:6px">장기지연 보기</div>
     </div>` },
     { sev: _kpiSev(_c4), html: `<div class="kpi-card a-${_c4}" onclick="openComplaintPanel()"
       data-tip="【컴플레인율 — 채팅 단위】&#10;출처: 채널톡 태그 실데이터&#10;정의: 컴플레인 관련 태그가 붙은 고유 채팅 수 비율&#10;계산: 컴플레인 채팅 수 ÷ 전체 closed 채팅 수 × 100&#10;분모: summary.totalChats (${totalChats}건)&#10;★ 채팅 1건 = 1회 카운트 (태그 중복 집계 없음)&#10;※ VOC #컴플레인 수치는 태그 발생 횟수 기준이므로 수치 상이&#10;클릭 → 유형별 원인 분석" tabindex="0">
@@ -808,11 +846,11 @@ function renderKPIs(d, scoreObj) {
         <span class="data-badge badge-real">실데이터</span>
         <span class="delta ${complaintPct >= 15 ? 'bad' : complaintPct >= 8 ? 'neutral' : 'good'}">${complaintPct >= 15 ? '즉시 대응' : complaintPct >= 8 ? '모니터링' : '양호'}</span>
       </div>
-      <div style="font-size:9.5px;color:var(--muted);margin-top:2px">채팅 기준 · 원인 보기</div>
+      <div style="font-size:9.5px;color:var(--muted);margin-top:auto;padding-top:6px">컴플레인 원인 보기</div>
     </div>` },
     { sev: _kpiSev(_c5), html: `<div class="kpi-card a-${_c5}" onclick="_gotoTab('mgr-conc')"
       data-tip="【담당자 편중 — 전체 기준】&#10;출처: 서버 계산값&#10;계산: 최다 처리 담당자 수 ÷ 전체 closed 채팅 수 × 100&#10;분모: summary.totalChats (${totalChats}건, 봇·미배정 포함)&#10;최다 처리: ${topMgr ? dispMgrName(topMgr.name) + ' (' + topMgr.count + '건)' : '—'}&#10;제외 담당자: ${EXCLUDED_MANAGERS.join(', ')}&#10;※ 게이지의 '처리 기준'은 배정 건만 분모로 사용해 수치가 다를 수 있음&#10;클릭 → 담당자 집중도 탭" tabindex="0">
-      <div class="kpi-label">담당자 편중</div>
+      <div class="kpi-label">담당자 편중 <span style="font-size:9px;font-weight:400;color:var(--muted)">(전체 기준)</span></div>
       <div class="kpi-value">${topPct}<span class="unit">%</span></div>
       <div class="kpi-meta">
         <span class="data-badge badge-calc">계산값</span>
@@ -820,7 +858,7 @@ function renderKPIs(d, scoreObj) {
       </div>
       <div class="kpi-meta" style="margin-top:2px">
         <span style="font-size:10px;color:var(--muted)">${topMgr ? dispMgrName(topMgr.name) : '—'}</span>
-        <span style="font-size:9.5px;color:var(--muted);margin-left:4px" data-tip="분모: 전체 closed 채팅 ${totalChats}건 (봇·미배정 포함)&#10;게이지는 배정 담당자 합계를 분모로 사용 → 수치 차이 발생" tabindex="0" style="cursor:help">전체 기준</span>
+        <span style="font-size:9.5px;color:var(--muted);margin-left:4px" data-tip="분모: 전체 closed 채팅 ${totalChats}건 (봇·미배정 포함)&#10;게이지는 배정 담당자 합계를 분모로 사용 → 수치 차이 발생" tabindex="0" style="cursor:help">ⓘ</span>
       </div>
     </div>` },
   ];
@@ -866,20 +904,24 @@ function renderTrend(d) {
     <span class="trend-legend-item"><span style="width:22px;height:3px;border-top:2px solid #6d28d9;display:inline-block"></span>7일이동평균</span>`;
 
   if (charts.trend) charts.trend.destroy();
+  const _mob = window.innerWidth <= 430;
   charts.trend = new Chart(document.getElementById('trendChart').getContext('2d'), {
     type: 'bar',
     data: {
       labels: dailyTrend.labels,
       datasets: [
-        { label: '종료 채팅', data: dailyTrend.values, backgroundColor: dailyTrend.values.map((v) => v >= peak * 0.8 ? '#be123c' : v >= peak * 0.45 ? '#0f766e' : '#14b8a6'), borderRadius: 3, order: 2 },
+        { label: '종료 채팅', data: dailyTrend.values, backgroundColor: dailyTrend.values.map((v) => v >= peak * 0.8 ? '#be123c' : v >= peak * 0.45 ? '#0f766e' : '#14b8a6'), borderRadius: _mob ? 2 : 3, order: 2 },
         { label: '활성일 평균', data: Array(dailyTrend.labels.length).fill(avg), type: 'line', borderColor: '#f59e0b', borderWidth: 1.5, borderDash: [5, 4], pointRadius: 0, fill: false, order: 1 },
-        { label: '7일 이동평균', data: ma7, type: 'line', borderColor: '#6d28d9', borderWidth: 2, pointRadius: 0, fill: false, tension: 0.35, order: 0 },
+        ...(_mob ? [] : [{ label: '7일 이동평균', data: ma7, type: 'line', borderColor: '#6d28d9', borderWidth: 2, pointRadius: 0, fill: false, tension: 0.35, order: 0 }]),
       ],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1c1917', padding: 10, cornerRadius: 7 } },
-      scales: { x: { grid: { display: false }, ticks: { font: { size: 10 }, maxTicksLimit: 12 } }, y: { grid: { color: '#f1efe8' }, ticks: { font: { size: 11 }, callback: (v) => v + '건' }, beginAtZero: true } }
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: _mob ? 9 : 10 }, maxRotation: _mob ? 0 : 50, maxTicksLimit: _mob ? 7 : 12 } },
+        y: { grid: { color: '#f1efe8' }, ticks: { font: { size: _mob ? 9 : 11 }, callback: (v) => v + '건' }, beginAtZero: true }
+      }
     }
   });
   const trendEl = document.getElementById('trendChart');
@@ -890,9 +932,12 @@ function renderTrend(d) {
     const _ariaSpan = (_dn.processedMinAt && _dn.processedMaxAt)
       ? Math.max(1, Math.round((_dn.processedMaxAt - _dn.processedMinAt) / (86400 * 1000)) + 1)
       : activeVals.length;
+    const _ariaMinD = _dn.processedMinAt ? (() => { const d2 = new Date(_dn.processedMinAt + 9*3600*1000); return `${d2.getUTCFullYear()}-${String(d2.getUTCMonth()+1).padStart(2,'0')}-${String(d2.getUTCDate()).padStart(2,'0')}`; })() : null;
+    const _ariaMaxD = _dn.processedMaxAt ? (() => { const d2 = new Date(_dn.processedMaxAt + 9*3600*1000); return `${d2.getUTCFullYear()}-${String(d2.getUTCMonth()+1).padStart(2,'0')}-${String(d2.getUTCDate()).padStart(2,'0')}`; })() : null;
+    const _ariaRange = (_ariaMinD && _ariaMaxD) ? `, 표시 구간 ${_ariaMinD}~${_ariaMaxD}` : '';
     const _ariaLabel = currentDays === 'all'
-      ? `일별 채팅 추이 차트, 전체 수집 ${_ariaTotal}건 기준, 실제 포함 기간 ${_ariaSpan}일, 일평균 ${Math.round(avg)}건`
-      : `일별 채팅 추이 차트, 최근 ${currentDays}일 기간 중 실제 ${_ariaSpan}일 데이터, 합계 ${_ariaTotal}건, 일평균 ${Math.round(avg)}건`;
+      ? `일별 채팅 추이 차트, 전체 수집 ${_ariaTotal}건 기준${_ariaRange}, 일평균 ${Math.round(avg)}건`
+      : `일별 채팅 추이 차트, 최근 ${currentDays}일 기준${_ariaRange}, 합계 ${_ariaTotal}건, 일평균 ${Math.round(avg)}건`;
     trendEl.setAttribute('aria-label', _ariaLabel);
   }
   renderPeakAnalysis(d.peakAnalysis, d.managers || []);
@@ -1017,11 +1062,15 @@ function renderTagBar(d) {
   if (!el) return;
   if (charts.cat) charts.cat.destroy();
   const total = summary.totalChats || 1;
+  const tagLabels10 = tags.labels.slice(0, 10);
+  const tagBarColors = tagLabels10.map((lbl) =>
+    lbl.includes('컴플레인') ? '#f43f5e' : '#CBD5E1'
+  );
   charts.cat = new Chart(el.getContext('2d'), {
     type: 'bar',
     data: {
-      labels: tags.labels.slice(0, 10),
-      datasets: [{ data: tags.values.slice(0, 10), backgroundColor: COLORS, borderRadius: 4 }]
+      labels: tagLabels10,
+      datasets: [{ data: tags.values.slice(0, 10), backgroundColor: tagBarColors, borderRadius: 4 }]
     },
     options: {
       indexAxis: 'y', responsive: true, maintainAspectRatio: false,
@@ -1247,7 +1296,7 @@ function renderCategoryBars(d) {
     const hasChildren = showChildren && childEntries.length > 0;
     return `
     <div class="cat-parent-row${hasChildren ? ' cat-expandable' : ''}" ${hasChildren ? `onclick="toggleCatChildren('${catId}')" aria-expanded="false"` : ''}>
-      <div class="cat-parent-label">${cat.label}${hasChildren ? '<span class="cat-chevron" id="' + catId + '-chev">▶</span>' : ''}</div>
+      <div class="cat-parent-label">${cat.label}${hasChildren ? '<span class="cat-chevron" id="' + catId + '-chev" aria-hidden="true"> ›</span>' : ''}</div>
       <div class="cat-parent-bar-wrap"><div class="cat-parent-bar" style="width:${Math.max(cat.count / maxCount * 100, 3)}%;background:${cat.color}"></div></div>
       <div class="cat-parent-count">${cat.count}건<span class="cat-parent-pct"> ${Math.round(cat.count / total * 100)}%</span></div>
     </div>
@@ -1278,7 +1327,7 @@ function toggleCatChildren(id) {
   if (!wrap) return;
   const isOpen = wrap.style.display !== 'none';
   wrap.style.display = isOpen ? 'none' : 'block';
-  if (chev) chev.textContent = isOpen ? '▶' : '▼';
+  if (chev) chev.textContent = isOpen ? ' ›' : ' ∨';
   if (row) row.setAttribute('aria-expanded', String(!isOpen));
 }
 
@@ -1332,14 +1381,14 @@ function renderResolution(d) {
     resSummary.innerHTML = `
       <div class="res-big ${quickPct >= 50 ? 'good' : quickPct >= 30 ? 'warn' : 'bad'}"><div class="res-big-val">${quickPct}%</div><div class="res-big-lbl">30분 내 해결률</div></div>
       <div class="res-big ${slowPct <= 20 ? 'good' : slowPct <= 40 ? 'warn' : 'bad'}"><div class="res-big-val">${slowPct}%</div><div class="res-big-lbl">8시간+ 장기</div></div>
-      <div class="res-big"><div class="res-big-val">${d.summary.avgResolutionMin ?? '—'}</div><div class="res-big-lbl">평균(분)</div></div>`;
+      <div class="res-big"><div class="res-big-val" style="font-size:18px">${fmtMin(d.summary.avgResolutionMin)}</div><div class="res-big-lbl">평균 해결<br><span style="font-size:9px;color:var(--muted);font-weight:400">고객 미응답 포함</span></div></div>`;
   }
   const buckets = [
     { label: '0~5분', val: rb['0~5분'] || 0, cls: 'ok', note: '즉시' },
     { label: '5~30분', val: rb['5~30분'] || 0, cls: 'ok', note: '신속' },
     { label: '30분~2시간', val: rb['30분~2시간'] || 0, cls: 'warn', note: '일반' },
     { label: '2~8시간', val: rb['2~8시간'] || 0, cls: 'warn', note: '지연' },
-    { label: '8시간+', val: rb['8시간+'] || 0, cls: 'bad', note: '비동기' },
+    { label: '8시간+', val: rb['8시간+'] || 0, cls: 'bad', note: '8시간 초과' },
   ];
   const resList = document.getElementById('resList');
   if (resList) {
@@ -1353,7 +1402,7 @@ function renderResolution(d) {
     }).join('');
   }
   const note = document.getElementById('avgResNote');
-  if (note) note.textContent = d.summary.avgResolutionMin != null ? `전체 평균 ${d.summary.avgResolutionMin}분 · 비동기 채팅 특성상 고객 미응답 시간 포함` : '데이터 없음';
+  if (note) note.textContent = d.summary.avgResolutionMin != null ? `전체 평균 ${fmtMin(d.summary.avgResolutionMin)} · 고객 미응답 포함 (비동기 채널 특성)` : '데이터 없음';
 
   // P2.12 자동 해석 — 해결시간 분포
   const resInterpEl = document.getElementById('resInterpNote');
@@ -1754,7 +1803,7 @@ function renderMgrRiskStrip(d) {
 function agentComment(m, rank) {
   if (!m.count) return '<span class="agent-comment off">비활성</span>';
   if (m.avgResolutionMin != null && m.avgResolutionMin > 600)
-    return '<span class="agent-comment warn" data-tip="평균 해결시간 ' + m.avgResolutionMin + '분 — 10시간 초과">해결 지연</span>';
+    return '<span class="agent-comment warn" data-tip="평균 해결시간 ' + fmtMin(m.avgResolutionMin) + ' — 10시간 초과">해결 지연</span>';
   const cRatio = m.count > 0 ? (m.complaintHandled || 0) / m.count : 0;
   if (cRatio > 0.20)
     return '<span class="agent-comment warn" data-tip="처리 건 중 컴플레인 ' + Math.round(cRatio*100) + '%">컴플레인 多</span>';
@@ -1786,7 +1835,7 @@ function renderManagers(d) {
       const tcColor = m.touchScore > 50 ? 'var(--teal)' : m.touchScore > 20 ? '#b45309' : 'var(--muted)';
       const rankClass = rank === 0 ? 'r1' : rank === 1 ? 'r2' : rank === 2 ? 'r3' : 'rn';
       const frtDisplay = isActive && m.medianFrtMin != null ? fmtMin(m.medianFrtMin) : '—';
-      const resDisplay = isActive && m.avgResolutionMin != null ? `${m.avgResolutionMin}분` : '—';
+      const resDisplay = isActive && m.avgResolutionMin != null ? fmtMin(m.avgResolutionMin) : '—';
       const comment = agentComment(m, rank);
       return `<tr style="${!isActive ? 'opacity:.45' : ''}">
         <td style="text-align:center"><span class="agent-rank ${rankClass}">${isActive ? rank + 1 : '—'}</span></td>
@@ -1845,7 +1894,7 @@ function renderManagers(d) {
   }
 
   const note = document.getElementById('agentTblNote');
-  if (note) note.textContent = '※ FRT (P50): 첫 응답까지 걸린 시간의 중앙값 / 평균해결: 처리 건 실측값';
+  if (note) note.textContent = '※ FRT (P50): 첫 응답까지 걸린 시간의 중앙값 / 평균해결: 처리 건 실측값, 고객 미응답 시간 포함 / 운영점수: 처리량·FRT·해결시간·컴플레인을 반영한 내부 운영 점수';
 }
 
 /* ─── B-1: Manager FRT 비교 테이블 ──────────────────────────────────── */
@@ -1907,7 +1956,7 @@ function renderBotsGroups(d) {
       <div class="ops-stat-row">
         <div class="ops-stat-cell"><div class="ops-stat-val" style="color:var(--rose)">${openChats}</div><div class="ops-stat-lbl">대기 중</div></div>
         <div class="ops-stat-cell"><div class="ops-stat-val" style="color:var(--teal)">${closedChats}</div><div class="ops-stat-lbl">처리 완료</div></div>
-        <div class="ops-stat-cell"><div class="ops-stat-val" style="color:var(--amber)">${avgRes}<span style="font-size:12px">분</span></div><div class="ops-stat-lbl">평균 해결</div></div>
+        <div class="ops-stat-cell"><div class="ops-stat-val" style="color:var(--amber)">${fmtMin(avgRes)}</div><div class="ops-stat-lbl">평균 해결</div></div>
       </div>
       <div class="ops-section-title">유입 채널</div>
       <div class="ops-channel-list">
@@ -2260,11 +2309,76 @@ function renderComplaintTrend(d) {
     data: {
       labels: t.labels,
       datasets: [
-        { label: '컴플레인 건수', data: t.complaints, backgroundColor: '#fecaca', borderColor: '#be123c', borderWidth: 1, yAxisID: 'y' },
-        { label: '컴플레인율 (%)', data: rates, type: 'line', borderColor: '#be123c', borderWidth: 2, tension: 0.3, pointRadius: 2, fill: false, yAxisID: 'y1' },
+        {
+          label: '컴플레인 건수 (좌축)',
+          data: t.complaints,
+          backgroundColor: 'rgba(252,165,165,0.45)',
+          borderColor: 'rgba(190,18,60,0.3)',
+          borderWidth: 1,
+          borderRadius: 3,
+          yAxisID: 'y',
+          order: 2,
+        },
+        {
+          label: '컴플레인율 % (우축)',
+          data: rates,
+          type: 'line',
+          borderColor: '#991b1b',
+          borderWidth: 2.5,
+          tension: 0.35,
+          pointRadius: 4,
+          pointBackgroundColor: '#991b1b',
+          pointBorderColor: '#fff',
+          pointBorderWidth: 2,
+          pointHoverRadius: 6,
+          fill: false,
+          yAxisID: 'y1',
+          order: 1,
+        },
       ]
     },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, position: 'top', labels: { font: { size: 10 } } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 9 }, maxTicksLimit: 12 } }, y: { position: 'left', grid: { color: '#f1efe8' }, ticks: { callback: (v) => v + '건' }, beginAtZero: true }, y1: { position: 'right', grid: { display: false }, ticks: { callback: (v) => v + '%' }, beginAtZero: true, max: 100 } } }
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top',
+          labels: { font: { size: 10 }, usePointStyle: true, pointStyleWidth: 12, padding: 12 },
+        },
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+          backgroundColor: '#1c1917',
+          padding: 10,
+          cornerRadius: 7,
+          callbacks: {
+            label: (ctx) => ctx.dataset.yAxisID === 'y'
+              ? `건수: ${ctx.parsed.y}건`
+              : `비율: ${ctx.parsed.y}%`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { font: { size: 9 }, maxTicksLimit: 12 },
+        },
+        y: {
+          position: 'left',
+          grid: { color: '#f1efe8' },
+          ticks: { callback: (v) => v + '건', font: { size: 9 } },
+          beginAtZero: true,
+        },
+        y1: {
+          position: 'right',
+          grid: { display: false },
+          ticks: { callback: (v) => v + '%', font: { size: 9 } },
+          beginAtZero: true,
+          max: 100,
+        },
+      },
+    },
   });
   const totalCom = t.complaints.reduce((a, b) => a + b, 0);
   const _avgRate = t.total.reduce((a,b)=>a+b,0) > 0 ? Math.round(totalCom / t.total.reduce((a,b)=>a+b,0) * 100) : 0;
@@ -2285,18 +2399,26 @@ function renderComplaintTrend(d) {
   const peakLabel = t.labels[peakIdx] || '—';
   const peakCnt   = t.complaints[peakIdx] || 0;
 
-  // 최근 7일 평균율
+  // 최근 7일 평균율 및 직전 7일 비교
   const recentN = Math.min(7, t.complaints.length);
   const recentCom = t.complaints.slice(-recentN).reduce((a, b) => a + b, 0);
   const recentAll = t.total.slice(-recentN).reduce((a, b) => a + b, 0) || 1;
   const recentRate = Math.round(recentCom / recentAll * 100);
+  const prevN = Math.min(7, Math.max(0, t.complaints.length - recentN));
+  const prevCom = prevN > 0 ? t.complaints.slice(-recentN - prevN, -recentN).reduce((a, b) => a + b, 0) : 0;
+  const prevAll = prevN > 0 ? (t.total.slice(-recentN - prevN, -recentN).reduce((a, b) => a + b, 0) || 1) : 1;
+  const prevRate = prevN > 0 ? Math.round(prevCom / prevAll * 100) : null;
+  const rateDiff = prevRate !== null ? recentRate - prevRate : null;
+  const rateDiffSign = rateDiff !== null ? (rateDiff > 0 ? '+' : '') : '';
+  const rateDiffStyle = rateDiff === null ? 'color:var(--muted)' : rateDiff > 2 ? 'color:var(--rose);font-weight:700' : rateDiff < -2 ? 'color:var(--teal-d);font-weight:700' : 'color:var(--muted)';
+  const rateDiffLabel = rateDiff !== null ? `${rateDiffSign}${rateDiff}%p` : '—';
 
   const kvEl = document.getElementById('complaintTrendKV');
   if (kvEl) kvEl.innerHTML = `
     <div class="ct-kv"><span class="ct-lbl">총 컴플레인</span><span class="ct-val">${totalCom}건</span></div>
     <div class="ct-kv"><span class="ct-lbl">전체 비율</span><span class="ct-val ${overallRate >= 15 ? 'danger' : overallRate >= 8 ? 'warn' : 'good'}">${overallRate}%</span></div>
     <div class="ct-kv"><span class="ct-lbl">최근 ${recentN}일 평균</span><span class="ct-val ${recentRate >= 15 ? 'danger' : recentRate >= 8 ? 'warn' : 'good'}">${recentRate}%</span></div>
-    <div class="ct-kv"><span class="ct-lbl">추이</span><span class="ct-val" style="${trendStyle}">${trendIcon} ${Math.abs(trendPct)}%</span></div>
+    <div class="ct-kv"><span class="ct-lbl">직전 ${recentN}일 대비</span><span class="ct-val" style="${rateDiffStyle}">${rateDiffLabel}</span></div>
     <div class="ct-kv"><span class="ct-lbl">피크 날짜</span><span class="ct-val">${peakLabel} (${peakCnt}건)</span></div>`;
 
   // P2.12 자동 해석 요약
@@ -2941,8 +3063,12 @@ function render() {
     }
     setTimeout(() => {
       const ov = document.getElementById('loadingOverlay');
-      if (ov) { ov.style.opacity = '0'; setTimeout(() => { ov.style.display = 'none'; }, 350); }
-    }, 400);
+      if (ov) {
+        ov.style.opacity = '0';
+        // display:none after transition completes (matches .35s CSS transition)
+        setTimeout(() => { ov.style.display = 'none'; }, 380);
+      }
+    }, 600); // 600ms: Chart.js canvas 초기 렌더링 완료 후 전환
     const eb = document.getElementById('errBanner');
     if (eb) eb.style.display = 'none';
     scheduleRefresh();
@@ -3342,26 +3468,16 @@ function initTooltips() {
 /* ─── 기간 전환 시 이전 데이터 즉시 클리어 (P0) ──────────────────────── */
 function clearPeriodUI(range) {
   // KPI 그리드: 스켈레톤 카드로 교체 (이전 기간 수치가 보이지 않도록)
+  const _skCard = `
+    <div class="kpi-card skeleton-card" style="pointer-events:none">
+      <div style="background:var(--border);border-radius:4px;height:9px;width:55%;margin-bottom:11px"></div>
+      <div style="background:#e8eaed;border-radius:6px;height:26px;width:45%;margin-bottom:9px"></div>
+      <div style="background:var(--border);border-radius:3px;height:8px;width:65%"></div>
+    </div>`;
   const kpiGrid = document.getElementById('kpiGrid');
-  if (kpiGrid) {
-    const skeletonCard = `
-      <div class="kpi-card" style="opacity:.35;pointer-events:none">
-        <div style="background:rgba(255,255,255,.09);border-radius:4px;height:9px;width:55%;margin-bottom:11px"></div>
-        <div style="background:rgba(255,255,255,.13);border-radius:6px;height:26px;width:45%;margin-bottom:9px"></div>
-        <div style="background:rgba(255,255,255,.06);border-radius:3px;height:8px;width:65%"></div>
-      </div>`;
-    kpiGrid.innerHTML = skeletonCard.repeat(3);
-  }
+  if (kpiGrid) kpiGrid.innerHTML = _skCard.repeat(3);
   const kpiGridSec = document.getElementById('kpiGridSecondary');
-  if (kpiGridSec) {
-    const skeletonCard = `
-      <div class="kpi-card" style="opacity:.35;pointer-events:none">
-        <div style="background:rgba(255,255,255,.09);border-radius:4px;height:9px;width:55%;margin-bottom:11px"></div>
-        <div style="background:rgba(255,255,255,.13);border-radius:6px;height:26px;width:45%;margin-bottom:9px"></div>
-        <div style="background:rgba(255,255,255,.06);border-radius:3px;height:8px;width:65%"></div>
-      </div>`;
-    kpiGridSec.innerHTML = skeletonCard.repeat(2);
-  }
+  if (kpiGridSec) kpiGridSec.innerHTML = _skCard.repeat(2);
   // 오늘 처리할 일: 로딩 메시지로 교체
   const hacBody = document.getElementById('hacBody');
   if (hacBody) {
