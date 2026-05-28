@@ -28,6 +28,7 @@ let lastFilteredData = null;
 let currentDays = 7; // 초기값: HTML에서 7일 탭이 active 상태이므로 일치
 let refreshTimer = null;
 let lastSuccessTime = null;
+let forceRefreshRequested = false; // 사용자가 새로고침 버튼 직접 클릭 시 true
 
 // C-2: 필터 상태
 const filterState = {
@@ -299,7 +300,10 @@ function applyFilteredRender() {
     filterState.tags.forEach((t) => filterLabels.push(`<span class="fsn-chip">#${t}</span>`));
     filterState.sources.forEach((s) => filterLabels.push(`<span class="fsn-chip">채널: ${srcMap[s] || s}</span>`));
     const _scopeTip = '반영: 담당자 테이블 · 태그 VOC · 장기지연 목록&#10;미반영: 요약 KPI · 추이 차트 · SLA (전체 원천 데이터 기준)';
-    scopeEl.innerHTML = `<span style="font-weight:700">필터 ${count}개 적용 중</span> ${filterLabels.join('')} · 적용 범위 <span data-tip="${_scopeTip}" tabindex="0" style="cursor:help;color:var(--muted)">ⓘ</span>`;
+    scopeEl.innerHTML = `<span style="font-weight:700">필터 ${count}개 적용 중</span> ${filterLabels.join('')}`
+      + ` · <span style="color:var(--teal)">적용: 담당자표·VOC·장기지연</span>`
+      + ` · <span style="color:var(--muted)">미적용: KPI·차트·SLA</span>`
+      + ` <span data-tip="${_scopeTip}" tabindex="0" style="cursor:help;color:var(--muted)">ⓘ</span>`;
   } else {
     scopeEl.style.display = 'none';
   }
@@ -735,13 +739,25 @@ function renderKPIs(d, scoreObj) {
     const _dateRangeNote = _dateRangeStr
       ? ` <span style="color:var(--muted);font-size:10px" data-tip="수집된 채팅의 실제 날짜 범위 (KST 기준)" tabindex="0" style="cursor:help">${_dateRangeStr}</span>`
       : '';
+    // 기간 선택과 실제 데이터 범위 불일치 경고 (선택 기간 >> 실제 데이터 스팬)
+    const _periodMismatchNote = (() => {
+      if (currentDays === 'all' || !dataNote.processedMinAt || !dataNote.processedMaxAt) return '';
+      const expectedStartMs = Date.now() - currentDays * 86400 * 1000;
+      const actualStartMs = dataNote.processedMinAt;
+      const missingDays = Math.round((actualStartMs - expectedStartMs) / (86400 * 1000));
+      if (missingDays < 2) return ''; // 2일 미만 차이는 정상 범위
+      const actualSpanDays = Math.max(1, Math.round((dataNote.processedMaxAt - dataNote.processedMinAt) / (86400 * 1000)) + 1);
+      return ` · <span style="color:var(--amber);font-size:10px;cursor:help"
+        data-tip="최근 ${currentDays}일 선택 / 실제 수집 범위: ${_dateRangeStr || '?'} (${actualSpanDays}일치)&#10;약 ${missingDays}일 이전 데이터 없음 — API 수집 시작 이전 기간&#10;한도 미도달 · 수집된 전체 데이터를 정상 반영 중"
+        tabindex="0">기간 부족 ${actualSpanDays}/${currentDays}일 ⓘ</span>`;
+    })();
     kpiBasisHeaderEl.innerHTML = `
       <span>분석 기준</span>
       <span style="font-weight:400;color:#0d9488">
         ${currentDays === 'all' ? `최근 ${limitVal}건 한도` : `최근 ${currentDays}일`}
         · <strong>${totalChats}건</strong> 기준
         <span data-tip="${_basisDetailLines}" tabindex="0" style="cursor:help;color:var(--muted);font-weight:400"> ⓘ</span>
-      </span>${_dateRangeNote}${cacheInfo}${_sampledNote}${_samePeriodsNote}`;
+      </span>${_dateRangeNote}${_periodMismatchNote}${cacheInfo}${_sampledNote}${_samePeriodsNote}`;
   }
 
   const grid = document.getElementById('kpiGrid');
@@ -785,14 +801,14 @@ function renderKPIs(d, scoreObj) {
       <div style="font-size:9.5px;color:var(--muted);margin-top:2px">장기지연 보기</div>
     </div>` },
     { sev: _kpiSev(_c4), html: `<div class="kpi-card a-${_c4}" onclick="openComplaintPanel()"
-      data-tip="【컴플레인율】&#10;출처: 채널톡 태그 실데이터&#10;정의: '컴플레인' 포함 태그가 붙은 채팅 비율&#10;계산: 컴플레인 태그 채팅 수 / 전체 closed 채팅 수 × 100&#10;분모: summary.totalChats (${totalChats}건)&#10;※ 한 채팅에 여러 컴플레인 태그 가능 → 태그 기준 집계&#10;클릭 → 유형별 원인 분석" tabindex="0">
+      data-tip="【컴플레인율 — 채팅 단위】&#10;출처: 채널톡 태그 실데이터&#10;정의: 컴플레인 관련 태그가 붙은 고유 채팅 수 비율&#10;계산: 컴플레인 채팅 수 ÷ 전체 closed 채팅 수 × 100&#10;분모: summary.totalChats (${totalChats}건)&#10;★ 채팅 1건 = 1회 카운트 (태그 중복 집계 없음)&#10;※ VOC #컴플레인 수치는 태그 발생 횟수 기준이므로 수치 상이&#10;클릭 → 유형별 원인 분석" tabindex="0">
       <div class="kpi-label">컴플레인율</div>
       <div class="kpi-value">${complaintPct}<span class="unit">%</span></div>
       <div class="kpi-meta">
         <span class="data-badge badge-real">실데이터</span>
         <span class="delta ${complaintPct >= 15 ? 'bad' : complaintPct >= 8 ? 'neutral' : 'good'}">${complaintPct >= 15 ? '즉시 대응' : complaintPct >= 8 ? '모니터링' : '양호'}</span>
       </div>
-      <div style="font-size:9.5px;color:var(--muted);margin-top:2px">컴플레인 원인 보기</div>
+      <div style="font-size:9.5px;color:var(--muted);margin-top:2px">채팅 기준 · 원인 보기</div>
     </div>` },
     { sev: _kpiSev(_c5), html: `<div class="kpi-card a-${_c5}" onclick="_gotoTab('mgr-conc')"
       data-tip="【담당자 편중 — 전체 기준】&#10;출처: 서버 계산값&#10;계산: 최다 처리 담당자 수 ÷ 전체 closed 채팅 수 × 100&#10;분모: summary.totalChats (${totalChats}건, 봇·미배정 포함)&#10;최다 처리: ${topMgr ? dispMgrName(topMgr.name) + ' (' + topMgr.count + '건)' : '—'}&#10;제외 담당자: ${EXCLUDED_MANAGERS.join(', ')}&#10;※ 게이지의 '처리 기준'은 배정 건만 분모로 사용해 수치가 다를 수 있음&#10;클릭 → 담당자 집중도 탭" tabindex="0">
@@ -802,7 +818,10 @@ function renderKPIs(d, scoreObj) {
         <span class="data-badge badge-calc">계산값</span>
         <span class="delta ${topPct > 80 ? 'bad' : topPct > 60 ? 'neutral' : 'good'}">${topPct > 80 ? '과부하' : topPct > 60 ? '주의' : '분산 양호'}</span>
       </div>
-      <div class="kpi-meta" style="margin-top:2px"><span style="font-size:10px;color:var(--muted)">${topMgr ? dispMgrName(topMgr.name) : '—'}</span></div>
+      <div class="kpi-meta" style="margin-top:2px">
+        <span style="font-size:10px;color:var(--muted)">${topMgr ? dispMgrName(topMgr.name) : '—'}</span>
+        <span style="font-size:9.5px;color:var(--muted);margin-left:4px" data-tip="분모: 전체 closed 채팅 ${totalChats}건 (봇·미배정 포함)&#10;게이지는 배정 담당자 합계를 분모로 사용 → 수치 차이 발생" tabindex="0" style="cursor:help">전체 기준</span>
+      </div>
     </div>` },
   ];
   // 보조 KPI (index 0=미배정, index 4=담당자편중) → secondary grid 분리
@@ -1022,10 +1041,15 @@ function renderVOC(d) {
     const cls = pct >= 15 ? 'rising' : pct >= 8 ? 'warn-r' : '';
     const ctx = VOC_CONTEXTS[lbl] || '관련 문의';
     const trendHtml = pct >= 15 ? '<span class="voc-trend up">비율 상위</span>' : pct >= 8 ? '<span class="voc-trend up" style="background:var(--amber-bg);color:var(--amber)">주목</span>' : '<span class="voc-trend flat">일반</span>';
+    // 컴플레인 태그: 태그 발생 횟수 기준임을 안내 (KPI 카드는 채팅 단위 기준이라 수치 상이)
+    const isComplaintTag = lbl.includes('컴플레인');
+    const basisNote = isComplaintTag
+      ? `<span style="font-size:9px;color:var(--muted);margin-left:4px" data-tip="태그 발생 횟수 기준 (동일 채팅에 복수 태그 가능)&#10;상단 컴플레인율 KPI는 채팅 단위 기준이므로 수치 다를 수 있음" tabindex="0" style="cursor:help">태그 횟수 기준</span>`
+      : '';
     return `
       <div class="voc-item ${cls}">
         <div>
-          <div class="voc-keyword">#${lbl} ${trendHtml}</div>
+          <div class="voc-keyword">#${lbl} ${trendHtml}${basisNote}</div>
           <div class="voc-context">${ctx}</div>
         </div>
         <div class="voc-count">총 <strong>${cnt}</strong>건</div>
@@ -1978,7 +2002,7 @@ function renderGaugeGrid(d) {
   const gsubConc = document.getElementById('gsub-conc');
   if (gsubConc) {
     gsubConc.innerHTML = topMgr
-      ? `<span data-tip="배정 처리 기준: ${topMgr.count}건 ÷ ${mgrTotal}건(배정 합계) × 100 = ${topPct}%&#10;봇·미배정·제외 담당자 제외 후 집계" tabindex="0" style="cursor:help">${dispMgrName(topMgr.name)} ${topMgr.count}건 · ${topPct}% · ${topPct > 70 ? '편중 주의' : topPct > 50 ? '모니터링' : '분산 양호'}</span>`
+      ? `<span data-tip="【배정 처리 기준】&#10;${topMgr.count}건 ÷ ${mgrTotal}건(배정 담당자 합계) × 100 = ${topPct}%&#10;봇·미배정·제외 담당자 제외 후 집계&#10;※ 상단 KPI 카드는 전체 채팅 분모 사용 → 수치 상이" tabindex="0" style="cursor:help">${dispMgrName(topMgr.name)} ${topMgr.count}건 · <strong>${topPct}%</strong> <span style="font-size:9.5px;color:var(--muted)">(배정 기준)</span> · ${topPct > 70 ? '편중 주의' : topPct > 50 ? '모니터링' : '분산 양호'}</span>`
       : '—';
   }
   setB('conc', topPct <= 40 ? '양호' : topPct <= 60 ? '주의' : '위험', topPct <= 40 ? 'good' : topPct <= 60 ? 'warn' : 'danger');
@@ -2719,6 +2743,8 @@ function initFilterDrawer() {
     const scopeEl = document.getElementById('filterScopeNote');
     if (scopeEl) scopeEl.style.display = 'none';
     lastFilteredData = null;
+    // 즉시 대시보드를 원본 데이터로 복원 (완료 버튼 없이 해제 가능)
+    if (lastData) fullRender(lastData);
   };
   if (fbsApplyBtn) fbsApplyBtn.onclick = () => {
     applyFilteredRender();
@@ -2860,7 +2886,7 @@ function _nowHHMM() {
 
 function render() {
   return (async () => { try {
-    _setRefreshStatus('조회 중…', 'loading');
+    _setRefreshStatus(forceRefreshRequested ? '강제 갱신 중…' : '조회 중…', 'loading');
     setStep('lstep-api'); setProgress(20);
     const data = await fetchData();
     if (!data) return;
@@ -2868,9 +2894,13 @@ function render() {
     // 캐시/직접조회 여부에 따라 오버레이 텍스트 분리 (혼란 방지)
     const loadText2 = document.getElementById('loadText');
     if (loadText2) {
-      loadText2.textContent = data.diagnostics?.cacheHit
-        ? '캐시 데이터 적용 중…'
-        : 'API 조회 완료 · 화면 구성 중…';
+      if (forceRefreshRequested && data.diagnostics?.cacheHit) {
+        loadText2.textContent = '서버 캐시 응답 · 화면 구성 중…';
+      } else if (data.diagnostics?.cacheHit) {
+        loadText2.textContent = '캐시 데이터 적용 중…';
+      } else {
+        loadText2.textContent = 'API 조회 완료 · 화면 구성 중…';
+      }
     }
     setStep('lstep-api', true); setStep('lstep-charts'); setProgress(45);
     safeRender(() => updateBanner(data), 'banner');
@@ -2879,7 +2909,14 @@ function render() {
     setProgress(100);
     setStep('lstep-charts', true); setStep('lstep-done', true);
     const hhmm = _nowHHMM();
-    if (data.diagnostics?.cacheHit) {
+    const wasForced = forceRefreshRequested;
+    forceRefreshRequested = false; // 플래그 리셋
+    if (wasForced && data.diagnostics?.cacheHit) {
+      // 사용자가 새로고침 눌렀지만 서버가 캐시 응답한 경우
+      _setRefreshStatus('서버 캐시 응답 · TTL 내 동일 데이터 · ' + hhmm, 'cache');
+    } else if (wasForced) {
+      _setRefreshStatus('강제 갱신 완료 · ' + hhmm, 'ok');
+    } else if (data.diagnostics?.cacheHit) {
       _setRefreshStatus('기간 내 동일 집계 (캐시) · ' + hhmm, 'cache');
     } else {
       _setRefreshStatus('갱신 완료 · ' + hhmm, 'ok');
@@ -2893,7 +2930,9 @@ function render() {
     scheduleRefresh();
   } catch (e) {
     console.error('Render error:', e);
-    _setRefreshStatus('API 실패 ⚠', 'error');
+    const wasForced2 = forceRefreshRequested;
+    forceRefreshRequested = false; // 오류 시에도 플래그 리셋
+    _setRefreshStatus(wasForced2 ? '강제 갱신 실패 ⚠' : 'API 실패 ⚠', 'error');
     const eb2 = document.getElementById('errBanner');
     if (eb2) { eb2.style.display = 'flex'; eb2.innerHTML = `<span class="banner-icon"></span><span class="banner-msg">데이터 로드 실패: ${e.message}</span><button onclick="triggerFullReload()" style="margin-left:auto;background:#fff;border:1px solid #be123c;border-radius:4px;padding:3px 10px;font-size:12px;cursor:pointer;color:#be123c;font-weight:700;flex-shrink:0">재시도</button>`; }
     const ov2 = document.getElementById('loadingOverlay');
@@ -3089,11 +3128,16 @@ function downloadCSV() {
 
   const rangeStr = currentDays === 'all' ? 'all' : `${currentDays}d`;
   const filterSuffix = activeFilterCount() > 0 ? `-filtered` : '';
-  const csvFilename = `OPS-channeltalk-${rangeStr}${filterSuffix}-${new Date().toISOString().slice(0,10)}.csv`;
+  // 파일명: 기간·필터·생성시각(YYYYMMDD-HHMM) 포함
+  const _now = new Date();
+  const _dateStr = _now.toISOString().slice(0, 10).replace(/-/g, '');
+  const _hhmm = String(_now.getHours()).padStart(2, '0') + String(_now.getMinutes()).padStart(2, '0');
+  const csvFilename = `OPS-channeltalk-${rangeStr}${filterSuffix}-${_dateStr}-${_hhmm}.csv`;
   _triggerCSV(lines, csvFilename);
   const dlRangeLabel = currentDays === 'all' ? '전체 기간' : `최근 ${currentDays}일`;
-  const dlFilterLabel = activeFilterCount() > 0 ? ` · 필터 ${activeFilterCount()}개 적용` : ' · 필터 없음';
-  showToast(`CSV 저장 완료 · ${dlRangeLabel}${dlFilterLabel}`, 'success', 5000);
+  const dlFilterLabel = activeFilterCount() > 0 ? ` · 필터 ${activeFilterCount()}개` : '';
+  const dlRowCount = lastData.summary?.totalChats ?? '?';
+  showToast(`CSV ${dlRowCount}건 내보내기 완료 · ${dlRangeLabel}${dlFilterLabel}`, 'success', 5000);
 }
 
 /* ─── Collapsibles ──────────────────────────────────────────────────── */
@@ -3335,21 +3379,16 @@ function clearPeriodUI(range) {
     const el = document.getElementById(id);
     if (el) el.textContent = '—';
   });
-  const gsubConc = document.getElementById('gsub-conc');
-  if (gsubConc) gsubConc.innerHTML = '—';
-
-  // 트렌드 요약 수치 초기화
-  ['trendTotal','trendPeak','trendPeakDay','trendAvg','trendOpen'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = '—';
-  });
+  const gsubConc = document.getElementById('gsubConc');
+  if (gsubConc) gsubConc.textContent = '—';
 }
 
 function triggerFullReload() {
+  forceRefreshRequested = true; // 사용자 수동 클릭 표시
   const ov = document.getElementById('loadingOverlay');
   if (ov) { ov.style.opacity = '1'; ov.style.display = 'flex'; }
   const loadText = document.getElementById('loadText');
-  if (loadText) loadText.textContent = '데이터 불러오는 중…'; // 캐시/직접조회 여부는 응답 후 업데이트
+  if (loadText) loadText.textContent = '강제 갱신 중…';
   ['lstep-conn','lstep-api','lstep-charts','lstep-done'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.classList.remove('active','done');

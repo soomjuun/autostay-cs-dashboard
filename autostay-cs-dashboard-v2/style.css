@@ -2919,7 +2919,14 @@ button.ld-more-link:hover {
   .toolbar-strip { overflow: hidden; }
   .range-tabs { flex-shrink: 0; gap: 3px; }
   .range-tab { font-size: 11px; padding: 4px 10px; }
-  .toolbar-actions { flex-shrink: 0; }
+  .toolbar-actions {
+    flex-shrink: 0;
+    position: sticky;
+    right: 0;
+    background: var(--surface);
+    box-shadow: -6px 0 10px rgba(0,0,0,.10);
+    z-index: 1;
+  }
   .toolbar-btn { font-size: 11px; padding: 4px 10px; }
 
   /* ── Filter drawer: 패딩 축소 ────────────────────────────────────────── */
@@ -2998,20 +3005,30 @@ button.ld-more-link:hover {
     cursor: pointer;
     user-select: none;
     padding-right: 4px;
+    flex-wrap: nowrap;
   }
+  /* 탭 포함 패널 헤더: 탭 가로 스크롤 허용 */
+  .cg-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    min-width: 0;
+  }
+  .cg-tabs::-webkit-scrollbar { display: none; }
   .cg-panel-header::after {
     content: '›';
     font-size: 17px;
     line-height: 1;
     color: var(--muted);
     display: inline-block;
-    transform: rotate(90deg);
+    transform: rotate(0deg);
     transition: transform 0.2s ease;
     flex-shrink: 0;
     margin-left: 2px;
   }
-  .cg-panel.mob-collapsed .cg-panel-header::after {
-    transform: rotate(0deg);
+  .cg-panel:not(.mob-collapsed) .cg-panel-header::after {
+    transform: rotate(90deg);
   }
   .cg-panel.mob-collapsed > :not(.cg-panel-header) {
     display: none !important;
@@ -3028,13 +3045,13 @@ button.ld-more-link:hover {
     line-height: 1;
     color: var(--muted);
     display: inline-block;
-    transform: rotate(90deg);
+    transform: rotate(0deg);
     transition: transform 0.2s ease;
     flex-shrink: 0;
     margin-left: auto;
   }
-  .section-wrap.mob-collapsed .section-header::after {
-    transform: rotate(0deg);
+  .section-wrap:not(.mob-collapsed) .section-header::after {
+    transform: rotate(90deg);
   }
   .section-wrap.mob-collapsed > :not(.section-header) {
     display: none !important;
