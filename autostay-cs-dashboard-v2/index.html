@@ -148,6 +148,12 @@
     </div>
   </div>
 
+  <!-- 보조 KPI strip: 미배정·담당자편중 — 툴바 아래, 폴드 밖 -->
+  <div class="secondary-kpi-strip">
+    <div class="secondary-kpi-label">운영 참고 지표</div>
+    <div id="kpiGridSecondary" class="kpi-grid kpi-grid--secondary"></div>
+  </div>
+
   <!-- 모바일 필터 바텀시트 (≤430px) — position:fixed, body 레벨 -->
   <div id="filterBottomSheet" class="fbs-overlay" aria-hidden="true" role="dialog" aria-modal="true" aria-label="필터">
     <div class="fbs-sheet">
@@ -295,7 +301,7 @@
         <div class="pkv-item"><span class="pkv-lbl">활성일 평균</span><span id="trendAvg" class="pkv-val">—</span></div>
         <div class="pkv-item"><span class="pkv-lbl">미해결</span><span id="trendOpen" class="pkv-val pkv-warn">—</span></div>
       </div>
-      <div class="cg-chart-wrap" style="height:220px"><canvas id="trendChart"></canvas></div>
+      <div class="cg-chart-wrap" style="height:220px"><canvas id="trendChart" role="img" aria-label="일별 채팅 추이 차트"></canvas></div>
       <div id="peakAnalysisPanel" class="peak-analysis-panel" style="display:none"></div>
     </div>
 
@@ -328,7 +334,7 @@
       <div id="voc-distribution" class="cg-tab-pane active" role="tabpanel" aria-labelledby="voc-distribution-tab">
         <div class="voc-tab-grid">
           <div class="voc-tab-chart">
-            <div class="cg-chart-wrap" style="height:280px"><canvas id="tagBarChart"></canvas></div>
+            <div class="cg-chart-wrap" style="height:280px"><canvas id="tagBarChart" role="img" aria-label="태그별 분포 차트"></canvas></div>
           </div>
           <div id="vocList" class="voc-list"></div>
         </div>
@@ -346,7 +352,7 @@
       <div id="voc-complaint" class="cg-tab-pane" role="tabpanel" aria-labelledby="voc-complaint-tab">
         <div class="complaint-cat-grid">
           <div class="complaint-cat-summary" id="complaintCatSummary"></div>
-          <div class="cg-chart-wrap" style="height:240px"><canvas id="complaintCatChart"></canvas></div>
+          <div class="cg-chart-wrap" style="height:240px"><canvas id="complaintCatChart" role="img" aria-label="컴플레인 카테고리 추이 차트"></canvas></div>
         </div>
         <div id="complaintCatNote" class="complaint-cat-note"></div>
       </div>
@@ -394,7 +400,7 @@
         <div id="agentCards" class="agent-mobile-cards"></div>
       </div>
       <div id="mgr-quadrant" class="cg-tab-pane" role="tabpanel" aria-labelledby="mgr-quadrant-tab">
-        <div class="cg-chart-wrap" style="height:340px"><canvas id="mgrQuadrantChart"></canvas></div>
+        <div class="cg-chart-wrap" style="height:340px"><canvas id="mgrQuadrantChart" role="img" aria-label="담당자 성과 사분면 차트"></canvas></div>
         <div id="mgrQuadrantLegend" class="mgr-quadrant-legend"></div>
       </div>
       <div id="mgr-conc" class="cg-tab-pane" role="tabpanel" aria-labelledby="mgr-conc-tab">
@@ -444,7 +450,7 @@
 
     <div class="cg-panel col-3">
       <div class="cg-panel-header"><span class="cg-panel-title">채널 분포</span></div>
-      <div class="cg-chart-wrap" style="height:160px"><canvas id="channelChart"></canvas></div>
+      <div class="cg-chart-wrap" style="height:160px"><canvas id="channelChart" role="img" aria-label="채널별 분포 차트"></canvas></div>
       <div id="channelStats" class="channel-stats"></div>
     </div>
 
@@ -492,7 +498,7 @@
         <span class="cg-panel-title">시간대 부하 곡선 (24h)</span>
         <span class="panel-badge adv-pb">Hour-of-Day</span>
       </div>
-      <div class="cg-chart-wrap" style="height:200px"><canvas id="hourLoadChart"></canvas></div>
+      <div class="cg-chart-wrap" style="height:200px"><canvas id="hourLoadChart" role="img" aria-label="시간대별 부하 차트"></canvas></div>
       <div id="hourLoadKV" class="hour-load-kv"></div>
     </div>
 
@@ -545,7 +551,7 @@
         <span class="cg-panel-title">일별 컴플레인 비율 추이</span>
         <span class="panel-badge adv-pb">Complaint Rate</span>
       </div>
-      <div class="cg-chart-wrap" style="height:200px"><canvas id="complaintTrendChart"></canvas></div>
+      <div class="cg-chart-wrap" style="height:200px"><canvas id="complaintTrendChart" role="img" aria-label="컴플레인 추이 차트"></canvas></div>
       <div id="complaintTrendKV" class="complaint-trend-kv"></div>
       <div id="complaintTrendInterp" class="interp-note"></div>
     </div>

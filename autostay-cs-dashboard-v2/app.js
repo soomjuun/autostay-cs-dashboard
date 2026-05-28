@@ -245,7 +245,7 @@ function updateFilterBadges() {
     countEl.textContent = total;
   }
   if (!badgeEl) return;
-  if (total === 0) { badgeEl.style.display = 'none'; return; }
+  if (total === 0) { badgeEl.innerHTML = ''; badgeEl.style.display = 'none'; return; }
   badgeEl.style.display = 'flex';
   const mgrMap = {};
   (lastData?.managers || []).forEach((m) => { mgrMap[String(m.id)] = m.name.replace('오토스테이_',''); });
@@ -779,8 +779,15 @@ function renderKPIs(d, scoreObj) {
       <div class="kpi-meta" style="margin-top:2px"><span style="font-size:10px;color:var(--muted)">${topMgr ? dispMgrName(topMgr.name) : '—'}</span></div>
     </div>` },
   ];
-  kpiCards.sort((a, b) => b.sev - a.sev);
-  grid.innerHTML = kpiCards.map(c => c.html).join('');
+  // 보조 KPI (index 0=미배정, index 4=담당자편중) → secondary grid 분리
+  const _secIdxSet = new Set([0, 4]);
+  const primaryCards = kpiCards.filter((_, i) => !_secIdxSet.has(i));
+  const secondaryCards = kpiCards.filter((_, i) => _secIdxSet.has(i));
+  primaryCards.sort((a, b) => b.sev - a.sev);
+  secondaryCards.sort((a, b) => b.sev - a.sev);
+  grid.innerHTML = primaryCards.map(c => c.html).join('');
+  const kpiGridSec = document.getElementById('kpiGridSecondary');
+  if (kpiGridSec) kpiGridSec.innerHTML = secondaryCards.map(c => c.html).join('');
 }
 
 /* ─── Trend ──────────────────────────────────────────────────────────── */
@@ -830,6 +837,8 @@ function renderTrend(d) {
       scales: { x: { grid: { display: false }, ticks: { font: { size: 10 }, maxTicksLimit: 12 } }, y: { grid: { color: '#f1efe8' }, ticks: { font: { size: 11 }, callback: (v) => v + '건' }, beginAtZero: true } }
     }
   });
+  const trendEl = document.getElementById('trendChart');
+  if (trendEl) trendEl.setAttribute('aria-label', `일별 채팅 추이 차트, ${dailyTrend.labels.length}일 기간, 합계 ${dailyTrend.values.reduce((a,b)=>a+b,0)}건, 일평균 ${Math.round(avg)}건`);
   renderPeakAnalysis(d.peakAnalysis, d.managers || []);
 }
 
@@ -964,6 +973,8 @@ function renderTagBar(d) {
       scales: { x: { grid: { color: '#f1efe8' }, ticks: { font: { size: 10 } } }, y: { grid: { display: false }, ticks: { font: { size: 10 } } } }
     }
   });
+  const topTag = tags.labels[0] || '-';
+  el.setAttribute('aria-label', `태그별 분포 차트, 상위 ${Math.min(tags.labels.length, 10)}개 태그, 1위: ${topTag} ${tags.values[0] || 0}건`);
 }
 
 function renderVOC(d) {
@@ -1219,7 +1230,8 @@ function renderChannel(d) {
   const bgColors = ['#0f766e', '#1d4ed8'];
   if ((sources.other || 0) > 0) { labels.push('기타'); values.push(sources.other); bgColors.push('#a8a29e'); }
   if (charts.ch) charts.ch.destroy();
-  charts.ch = new Chart(document.getElementById('channelChart').getContext('2d'), {
+  const chCanvasEl = document.getElementById('channelChart');
+  charts.ch = new Chart(chCanvasEl.getContext('2d'), {
     type: 'bar',
     data: { labels, datasets: [{ data: values, backgroundColor: bgColors, borderRadius: 4, barThickness: 22 }] },
     options: {
@@ -1228,6 +1240,10 @@ function renderChannel(d) {
       scales: { x: { ticks: { callback: (v) => v + '건', font: { size: 11 } }, grid: { color: '#f1efe8' }, beginAtZero: true }, y: { grid: { display: false } } }
     }
   });
+  if (chCanvasEl) {
+    const chLabels = labels.map((l, i) => `${l}: ${values[i]}건 (${((values[i]/total)*100).toFixed(1)}%)`).join(', ');
+    chCanvasEl.setAttribute('aria-label', `채널별 분포 차트 — ${chLabels}`);
+  }
   const items = [
     { label: '앱/웹', count: sources.native || 0, color: '#0f766e' },
     { label: '전화', count: sources.phone || 0, color: '#1d4ed8' },
@@ -2031,6 +2047,7 @@ function renderHourLoad(d) {
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1c1917', callbacks: { label: (ctx) => `${ctx.parsed.y}건` } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 10 } } }, y: { grid: { color: '#f1efe8' }, ticks: { font: { size: 11 }, callback: (v) => v + '건' }, beginAtZero: true } } }
   });
   const peakHour = data.indexOf(max);
+  el.setAttribute('aria-label', `시간대별 부하 차트, 피크: ${peakHour}시 ${max}건`);
   const total = data.reduce((a, b) => a + b, 0);
   const morning = data.slice(6, 12).reduce((a, b) => a + b, 0);
   const afternoon = data.slice(12, 18).reduce((a, b) => a + b, 0);
@@ -2179,6 +2196,8 @@ function renderComplaintTrend(d) {
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, position: 'top', labels: { font: { size: 10 } } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 9 }, maxTicksLimit: 12 } }, y: { position: 'left', grid: { color: '#f1efe8' }, ticks: { callback: (v) => v + '건' }, beginAtZero: true }, y1: { position: 'right', grid: { display: false }, ticks: { callback: (v) => v + '%' }, beginAtZero: true, max: 100 } } }
   });
   const totalCom = t.complaints.reduce((a, b) => a + b, 0);
+  const _avgRate = t.total.reduce((a,b)=>a+b,0) > 0 ? Math.round(totalCom / t.total.reduce((a,b)=>a+b,0) * 100) : 0;
+  el.setAttribute('aria-label', `컴플레인 추이 차트, ${t.labels.length}개 기간, 총 ${totalCom}건, 평균 컴플레인율 ${_avgRate}%`);
   const totalAll = t.total.reduce((a, b) => a + b, 0) || 1;
   const overallRate = Math.round(totalCom / totalAll * 100);
 
@@ -2243,6 +2262,7 @@ function renderMgrQuadrant(d) {
       scales: { x: { title: { display: true, text: '평균 해결시간(분)' }, beginAtZero: true }, y: { title: { display: true, text: '처리 건수' }, beginAtZero: true } }
     }
   });
+  el.setAttribute('aria-label', `담당자 성과 사분면 차트, ${points.length}명, X축: 평균 해결시간, Y축: 처리 건수`);
   const legend = document.getElementById('mgrQuadrantLegend');
   if (legend) legend.innerHTML = `
     <div class="mq-legend-item"><span class="mq-quad mq-q1">처리량高/빠름</span><span>스타 퍼포머</span></div>
@@ -2459,16 +2479,72 @@ function initMobileAccordions() {
   document.querySelectorAll('.chart-master-grid .cg-panel').forEach(panel => {
     const header = panel.querySelector('.cg-panel-header');
     if (!header) return;
+    // 접근성: 헤더가 탭/버튼을 포함할 경우 직접 role 부여하지 않음
+    const hasTabs = !!header.querySelector('.cg-tabs');
+    if (!hasTabs) {
+      header.setAttribute('role', 'button');
+      header.setAttribute('tabindex', '0');
+      header.setAttribute('aria-expanded', 'false');
+    }
     panel.classList.add('mob-collapsed');
-    header.addEventListener('click', () => panel.classList.toggle('mob-collapsed'));
+    const togglePanel = (e) => {
+      // 탭 버튼 등 내부 button 클릭은 아코디언 토글에서 제외
+      if (e.target.closest('button') || e.target.closest('.cg-tabs')) return;
+      const collapsed = panel.classList.toggle('mob-collapsed');
+      if (!hasTabs) header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    };
+    header.addEventListener('click', togglePanel);
+    header.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePanel(e); }
+    });
   });
 
   // section-wrap (핵심 지표 게이지 섹션) 기본 접힘
   document.querySelectorAll('section.section-wrap').forEach(sec => {
     const header = sec.querySelector('.section-header');
     if (!header) return;
+    header.setAttribute('role', 'button');
+    header.setAttribute('tabindex', '0');
+    header.setAttribute('aria-expanded', 'false');
     sec.classList.add('mob-collapsed');
-    header.addEventListener('click', () => sec.classList.toggle('mob-collapsed'));
+    const toggleSec = () => {
+      const collapsed = sec.classList.toggle('mob-collapsed');
+      header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    };
+    header.addEventListener('click', toggleSec);
+    header.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSec(); }
+    });
+  });
+
+  // 고도화 분석 #advContent 내 adv-panel 기본 접힘 (모바일 약 6800px 세로 방지)
+  _initAdvPanelAccordions();
+}
+
+// advContent 패널 아코디언 — init 시 + advContent 열릴 때 모두 호출
+function _initAdvPanelAccordions() {
+  if (window.innerWidth > 430) return;
+  document.querySelectorAll('#advContent .cg-panel').forEach(panel => {
+    if (panel.dataset.mobAccordion) return; // 중복 등록 방지
+    panel.dataset.mobAccordion = '1';
+    const header = panel.querySelector('.cg-panel-header');
+    if (!header) return;
+    const hasTabs = !!header.querySelector('.cg-tabs');
+    if (!hasTabs) {
+      header.setAttribute('role', 'button');
+      header.setAttribute('tabindex', '0');
+      header.setAttribute('aria-expanded', 'false');
+    }
+    panel.classList.add('mob-collapsed');
+    const togglePanel = (e) => {
+      if (e.target.closest('button') || e.target.closest('.cg-tabs')) return;
+      const collapsed = panel.classList.toggle('mob-collapsed');
+      if (!hasTabs) header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    };
+    header.addEventListener('click', togglePanel);
+    header.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePanel(e); }
+    });
   });
 }
 
@@ -2497,7 +2573,8 @@ function initFilterDrawer() {
       if (!drawer.classList.contains('is-open')) drawer.style.display = '';
     }, 360);
   }
-  drawer.style.display = 'block';
+  // PC에서만 드로어 초기 표시 (모바일은 바텀시트 단독 사용)
+  if (window.innerWidth > 430) drawer.style.display = 'block';
 
   // ── 모바일 바텀시트 ───────────────────────────────────────────────────
   const fbsOverlay = document.getElementById('filterBottomSheet');
@@ -2553,6 +2630,10 @@ function initFilterDrawer() {
     renderFilterDrawer(lastData, { mgr: 'bsMgrList', tag: 'bsTagList', src: 'bsSrcList', pfx: 'bs' });
     _fbsUpdateApplyBtn();
     updateFilterBadges();
+    // 필터 전체 해제 즉시 scope 노트·lastFilteredData 초기화
+    const scopeEl = document.getElementById('filterScopeNote');
+    if (scopeEl) scopeEl.style.display = 'none';
+    lastFilteredData = null;
   };
   if (fbsApplyBtn) fbsApplyBtn.onclick = () => {
     applyFilteredRender();
@@ -2946,6 +3027,10 @@ function initCollapsibles() {
       } else {
         btn.textContent = isHidden ? '▸' : '▾';
       }
+      // 모바일: 고도화 섹션 열릴 때 내부 패널 아코디언 초기화
+      if (!isHidden && btn.dataset.target === 'advContent') {
+        _initAdvPanelAccordions();
+      }
     };
     btn.addEventListener('click', toggle);
     btn.addEventListener('keydown', (e) => {
@@ -3118,7 +3203,17 @@ function clearPeriodUI(range) {
         <div style="background:rgba(255,255,255,.13);border-radius:6px;height:26px;width:45%;margin-bottom:9px"></div>
         <div style="background:rgba(255,255,255,.06);border-radius:3px;height:8px;width:65%"></div>
       </div>`;
-    kpiGrid.innerHTML = skeletonCard.repeat(6);
+    kpiGrid.innerHTML = skeletonCard.repeat(3);
+  }
+  const kpiGridSec = document.getElementById('kpiGridSecondary');
+  if (kpiGridSec) {
+    const skeletonCard = `
+      <div class="kpi-card" style="opacity:.35;pointer-events:none">
+        <div style="background:rgba(255,255,255,.09);border-radius:4px;height:9px;width:55%;margin-bottom:11px"></div>
+        <div style="background:rgba(255,255,255,.13);border-radius:6px;height:26px;width:45%;margin-bottom:9px"></div>
+        <div style="background:rgba(255,255,255,.06);border-radius:3px;height:8px;width:65%"></div>
+      </div>`;
+    kpiGridSec.innerHTML = skeletonCard.repeat(2);
   }
   // 오늘 처리할 일: 로딩 메시지로 교체
   const hacBody = document.getElementById('hacBody');
@@ -3126,9 +3221,13 @@ function clearPeriodUI(range) {
     const rl = range === 'all' ? '전체 기간' : `최근 ${range}일`;
     hacBody.innerHTML = `<div style="padding:14px 16px;text-align:center;color:var(--muted);font-size:12px">${rl} 데이터 불러오는 중…</div>`;
   }
-  // hero 인라인 메타 숨김
+  // hero 인라인 메타 수치 초기화 (이전 기간 숫자 제거 → 새 기간 데이터로 오인 방지)
+  ['himTotal', 'himFrt', 'himFcr'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '—';
+  });
   const heroMeta = document.getElementById('heroInlineMeta');
-  if (heroMeta) heroMeta.style.opacity = '0.2';
+  if (heroMeta) heroMeta.style.opacity = '0.5';
   // 게이지·차트·인사이트 섹션 dim (이전 기간 수치가 눈에 띄지 않도록)
   [
     document.querySelector('.health-gauge-row'),
