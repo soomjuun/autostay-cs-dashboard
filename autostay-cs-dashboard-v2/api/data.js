@@ -236,6 +236,8 @@ module.exports = async function handler(req, res) {
     const peakDayData = {};
     let processed = 0;
     let unassigned = 0;
+    let processedMinAt = Infinity;
+    let processedMaxAt = -Infinity;
 
     const hourLoad = Array(24).fill(0);
     const weekdayLoad = Array(7).fill(0);
@@ -269,6 +271,8 @@ module.exports = async function handler(req, res) {
         continue;
       }
       processed++;
+      if (c.createdAt < processedMinAt) processedMinAt = c.createdAt;
+      if (c.createdAt > processedMaxAt) processedMaxAt = c.createdAt;
 
       if (!c.assigneeId) unassigned++;
 
@@ -592,6 +596,9 @@ module.exports = async function handler(req, res) {
       dataNote: {
         collected: allChats.length, processed, limit: HARD_LIMIT,
         isSampled: allChats.length >= HARD_LIMIT,
+        processedMinAt: processedMinAt === Infinity ? null : processedMinAt,
+        processedMaxAt: processedMaxAt === -Infinity ? null : processedMaxAt,
+        daysParam: days,
       },
       channel: { name: channelInfo.name || '오토스테이 CS', id: channelInfo.id || null },
       summary: {
