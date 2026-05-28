@@ -407,7 +407,7 @@ function renderHeroAction(d, scoreObj) {
     const warnCount   = actions.filter(a => a.type === 'warn').length;
     const totalCount = urgentCount + warnCount;
     const queueHeader = totalCount > 0
-      ? `<div class="aq-header"><span style="color:#fff;font-weight:900">오늘 처리할 일</span> <span class="aq-total">${totalCount}건</span>${urgentCount > 0 ? '<span class="aq-sep"> · </span><span class="aq-urgent">즉시 ' + urgentCount + '건</span>' : ''}${warnCount > 0 ? '<span class="aq-sep"> · </span><span class="aq-warn">확인 ' + warnCount + '건</span>' : ''}</div>`
+      ? `<div class="aq-header"><span style="color:#fff;font-weight:900">오늘 처리할 일</span> <span class="aq-total">${totalCount}건</span>${urgentCount > 0 ? '<span class="aq-sep"> · </span><span class="aq-urgent">즉시 ' + urgentCount + '건</span>' : ''}<span class="aq-sep"> · </span><span class="aq-warn">확인 ${warnCount}건</span></div>`
       : `<div class="aq-header aq-ok">오늘 즉시 조치 필요 없음</div>`;
     hacBody.innerHTML = queueHeader + top3.map((a, i) => {
       const isClickable = !!(a.url || a.onclick);
@@ -886,10 +886,13 @@ function renderTrend(d) {
   if (trendEl) {
     // aria-label: 합계는 summary.totalChats(=processed) 기준으로 화면 수치와 일치시킴
     const _ariaTotal = summary.totalChats || 0;
-    const _ariaSpan = dailyTrend.labels.length;
+    const _dn = d.dataNote || {};
+    const _ariaSpan = (_dn.processedMinAt && _dn.processedMaxAt)
+      ? Math.max(1, Math.round((_dn.processedMaxAt - _dn.processedMinAt) / (86400 * 1000)) + 1)
+      : activeVals.length;
     const _ariaLabel = currentDays === 'all'
       ? `일별 채팅 추이 차트, 전체 수집 ${_ariaTotal}건 기준, 실제 포함 기간 ${_ariaSpan}일, 일평균 ${Math.round(avg)}건`
-      : `일별 채팅 추이 차트, 최근 ${currentDays}일 기간 중 ${_ariaSpan}일 데이터, 합계 ${_ariaTotal}건, 일평균 ${Math.round(avg)}건`;
+      : `일별 채팅 추이 차트, 최근 ${currentDays}일 기간 중 실제 ${_ariaSpan}일 데이터, 합계 ${_ariaTotal}건, 일평균 ${Math.round(avg)}건`;
     trendEl.setAttribute('aria-label', _ariaLabel);
   }
   renderPeakAnalysis(d.peakAnalysis, d.managers || []);
@@ -1628,7 +1631,7 @@ function openComplaintPanel() {
         const barW = Math.round(item.count / maxCount * 100);
         const pct  = Math.round(item.count / total * 100);
         return `<div class="cp-tag-row">
-          <div class="cp-tag-label">${item.label}</div>
+          <div class="cp-tag-label">${item.label} 태그</div>
           <div class="cp-tag-bar-wrap"><div class="cp-tag-bar" style="width:${barW}%"></div></div>
           <div class="cp-tag-count">${item.count}건</div>
           <div class="cp-tag-pct">${pct}%</div>
@@ -1658,6 +1661,7 @@ function openComplaintPanel() {
       <div class="cp-kpi"><div class="cp-kpi-val" style="color:var(--rose)">${totalComplaints}건</div><div class="cp-kpi-lbl">총 컴플레인</div></div>
       <div class="cp-kpi"><div class="cp-kpi-val" style="color:${complaintPct >= 15 ? 'var(--rose)' : 'var(--amber)'}">${complaintPct}%</div><div class="cp-kpi-lbl">전체 대비</div></div>
       <div class="cp-kpi"><div class="cp-kpi-val" style="${trendCls}">${trendDir}</div><div class="cp-kpi-lbl">최근 추이</div></div>
+      <div class="cp-kpi"><div class="cp-kpi-val" style="color:var(--amber)">${longComplaint.length}건</div><div class="cp-kpi-lbl">장기지연 포함</div></div>
     </div>
     <div class="cp-section-title">컴플레인 유형별 분석</div>
     <div class="cp-tag-rows">${tagsHtml}</div>
@@ -2596,6 +2600,20 @@ function initMobileAccordions() {
       header.setAttribute('aria-expanded', 'false');
     }
     panel.classList.add('mob-collapsed');
+    // 캔버스(차트)가 있는 패널에 "차트 보기" 버튼 추가
+    const hasCanvas = !!panel.querySelector('canvas');
+    if (hasCanvas) {
+      const chartBtn = document.createElement('button');
+      chartBtn.className = 'mob-chart-btn';
+      chartBtn.textContent = '차트 보기';
+      chartBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        panel.classList.remove('mob-collapsed');
+        if (!hasTabs) header.setAttribute('aria-expanded', 'true');
+        chartBtn.remove();
+      });
+      header.appendChild(chartBtn);
+    }
     const togglePanel = (e) => {
       // 탭 버튼 등 내부 button 클릭은 아코디언 토글에서 제외
       if (e.target.closest('button') || e.target.closest('.cg-tabs')) return;
