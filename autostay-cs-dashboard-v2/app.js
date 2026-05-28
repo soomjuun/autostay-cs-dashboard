@@ -706,8 +706,15 @@ function renderKPIs(d, scoreObj) {
       (collectedTotal > 0 ? `전체 수집: ${collectedTotal}건 (API 한도 ${limitVal}건)` : ''),
       `실데이터=채널톡 API 원천값 / 계산값=서버 집계 / 캐시=5분 TTL`,
     ].filter(Boolean).join('&#10;');
-    const _sampledNote = diagObj.sampled
+    const _sampledNote = isSampled
       ? ` <span style="color:var(--amber);font-weight:700;font-size:10px" data-tip="API 수집 한도(${limitVal}건)에 도달했습니다. 오래된 채팅은 집계에서 제외될 수 있습니다." tabindex="0" style="cursor:help">⚠ 수집 상한</span>`
+      : '';
+    // 기간 필터 무관 — 수집 전체가 현재 기간 내에 포함된 경우 안내
+    const _allInPeriod = !isSampled && dataNote.collected > 0 && dataNote.collected === dataNote.processed;
+    const _samePeriodsNote = _allInPeriod
+      ? ` · <span style="color:var(--muted);font-size:10px;cursor:help"
+            data-tip="전체 closed 채팅이 ${dataNote.collected}건이며, 선택 기간(${currentDays === 'all' ? '전체' : `최근 ${currentDays}일`}) 내에 모두 포함됩니다.&#10;&#10;→ 14일·30일·전체 탭을 전환해도 동일한 결과가 표시되는 것이 정상입니다.&#10;→ API 수집 한도(${limitVal}건) 미도달 · 실제 데이터 ${dataNote.collected}건뿐&#10;&#10;현재 요청 파라미터: days=${currentDays}"
+            tabindex="0">기간별 동일 결과 ⓘ</span>`
       : '';
     kpiBasisHeaderEl.innerHTML = `
       <span>분석 기준</span>
@@ -715,7 +722,7 @@ function renderKPIs(d, scoreObj) {
         ${currentDays === 'all' ? `최근 ${limitVal}건 한도` : `최근 ${currentDays}일`}
         · <strong>${totalChats}건</strong> 기준
         <span data-tip="${_basisDetailLines}" tabindex="0" style="cursor:help;color:var(--muted);font-weight:400"> ⓘ</span>
-      </span>${cacheInfo}${_sampledNote}`;
+      </span>${cacheInfo}${_sampledNote}${_samePeriodsNote}`;
   }
 
   const grid = document.getElementById('kpiGrid');
@@ -2329,21 +2336,60 @@ function renderDiagnostics(d) {
   // ── 수집 한도 탭 ──
   const limitEl = document.getElementById('diagLimitPanel');
   if (limitEl) {
-    const collected = d.diagnostics?.collectedTotal ?? d.summary?.totalChats ?? '—';
-    const limitVal = 1000;
+    // dataNote 정정 — 이전에 d.diagnostics.collectedTotal 로 잘못 참조하던 것 수정
+    const dn = d.dataNote || {};
+    const collected = dn.collected ?? '—';
+    const processedCnt = dn.processed ?? '—';
+    const limitValDiag = dn.limit ?? 1000;
     const pages = diag.pages || 0;
-    const sampled = diag.sampled;
-    const sampledBadge = sampled
+    const isSampledDiag = dn.isSampled || false;
+    const sampledBadge = isSampledDiag
       ? `<span style="color:var(--amber);font-weight:700">⚠ 수집 상한 도달 — 오래된 채팅 일부 제외</span>`
-      : `<span style="color:var(--teal)">전량 수집 완료</span>`;
+      : `<span style="color:var(--teal)">전량 수집 완료 (한도 미도달)</span>`;
+
+    // 날짜 범위 — processedMinAt/processedMaxAt (서버 응답) 또는 dailyTrend fallback
+    const _fmtTs = (ts) => {
+      if (!ts) return null;
+      const d2 = new Date(ts + 9 * 3600 * 1000); // KST
+      return `${d2.getMonth() + 1}/${d2.getDate()}`;
+    };
+    let dateRangeStr = '—';
+    if (dn.processedMinAt && dn.processedMaxAt) {
+      const minD = _fmtTs(dn.processedMinAt);
+      const maxD = _fmtTs(dn.processedMaxAt);
+      dateRangeStr = minD === maxD ? minD : `${minD} ~ ${maxD}`;
+    } else {
+      // fallback: dailyTrend 레이블에서 추출
+      const tLabels = d.dailyTrend?.labels || [];
+      const tVals = d.dailyTrend?.values || [];
+      const activeL = tLabels.filter((_, i) => tVals[i] > 0);
+      if (activeL.length >= 2) dateRangeStr = `${activeL[0]} ~ ${activeL[activeL.length - 1]}`;
+      else if (activeL.length === 1) dateRangeStr = activeL[0];
+    }
+
+    // 기간별 동일 결과 여부
+    const _allInPeriodDiag = !isSampledDiag && typeof collected === 'number' && typeof processedCnt === 'number' && collected === processedCnt;
+    const sameNote = _allInPeriodDiag
+      ? `<div class="diag-note" style="background:rgba(13,148,136,.08);border-left:3px solid var(--teal);padding:10px 12px;margin-top:10px;border-radius:6px">
+          <strong>기간별 동일 결과 — 정상 동작입니다</strong><br>
+          전체 수집 ${collected}건이 선택 기간 내에 모두 포함되어 14일·30일·전체 탭에서 동일한 수치가 표시됩니다.<br>
+          현재 요청: <code>days=${currentDays}</code> · 기간 필터 후 처리: ${processedCnt}건 / 수집: ${collected}건<br>
+          <em>원인: closed 채팅이 ${collected}건뿐이며 API 한도(${limitValDiag}건)에 도달하지 않음</em>
+        </div>`
+      : '';
+
     limitEl.innerHTML = `
       <div class="diag-summary">
-        <div class="diag-stat"><span class="diag-stat-lbl">API 수집 한도</span><span class="diag-stat-val">${limitVal}건</span></div>
-        <div class="diag-stat"><span class="diag-stat-lbl">실제 수집 건수</span><span class="diag-stat-val">${collected}건</span></div>
+        <div class="diag-stat"><span class="diag-stat-lbl">API 수집 한도</span><span class="diag-stat-val">${limitValDiag}건</span></div>
+        <div class="diag-stat"><span class="diag-stat-lbl">수집 건수 (기간 필터 전)</span><span class="diag-stat-val">${collected}건</span></div>
+        <div class="diag-stat"><span class="diag-stat-lbl">처리 건수 (기간 필터 후)</span><span class="diag-stat-val">${processedCnt}건</span></div>
         <div class="diag-stat"><span class="diag-stat-lbl">페이지 수</span><span class="diag-stat-val">${pages}p</span></div>
+        <div class="diag-stat"><span class="diag-stat-lbl">데이터 날짜 범위</span><span class="diag-stat-val">${dateRangeStr}</span></div>
+        <div class="diag-stat"><span class="diag-stat-lbl">요청 파라미터</span><span class="diag-stat-val"><code>days=${currentDays}</code></span></div>
         <div class="diag-stat"><span class="diag-stat-lbl">상한 도달 여부</span>${sampledBadge}</div>
       </div>
-      <div class="diag-note">수집 한도(${limitVal}건)에 도달하면 기간 내 오래된 채팅이 집계에서 빠질 수 있습니다. 기간을 줄이거나 조건을 좁혀 전량 수집하세요.</div>`;
+      ${sameNote}
+      <div class="diag-note" style="margin-top:8px">수집 한도(${limitValDiag}건)에 도달하면 기간 내 오래된 채팅이 집계에서 빠질 수 있습니다. 기간을 줄이거나 조건을 좁혀 전량 수집하세요.</div>`;
   }
 
   // ── CSV 기준 탭 ──
