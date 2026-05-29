@@ -124,6 +124,17 @@ function getComplaintContext(d) {
     longComplaintCount,
   };
 }
+function getManagerConcentration(d) {
+  const totalChats = d.summary?.totalChats || 1;
+  const managers = (d.managers || [])
+    .filter((m) => !EXCLUDED_MANAGERS.includes(m.name))
+    .filter((m) => (m.count || 0) > 0);
+  const topMgr = managers[0] || null;
+  const assignedTotal = managers.reduce((sum, m) => sum + (m.count || 0), 0) || 1;
+  const assignedPct = topMgr ? Math.round((topMgr.count || 0) / assignedTotal * 100) : 0;
+  const totalPct = topMgr ? Math.round((topMgr.count || 0) / totalChats * 100) : 0;
+  return { managers, topMgr, assignedTotal, assignedPct, totalPct };
+}
 function deltaArrow(pct) {
   if (pct == null || isNaN(pct)) return '<span class="delta-arrow flat">—</span>';
   if (pct > 5)  return `<span class="delta-arrow up">▲ ${pct}%</span>`;
@@ -362,15 +373,14 @@ function renderHeroAction(d, scoreObj) {
   if (!hacBody) return;
 
   const score = scoreObj.score;
-  const total = d.summary.totalChats || 1;
   const rb = d.resolutionBuckets || {};
-  const managers = (d.managers || []).filter((m) => !EXCLUDED_MANAGERS.includes(m.name));
+  const mgrConc = getManagerConcentration(d);
   const unassigned = d.summary.unassignedChats || 0;
   const openChats = d.summary.openChats || 0;
   const slow8h = rb['8시간+'] || 0;
   const complaintPct = scoreObj.complaintPct || 0;
-  const topMgr = managers[0];
-  const topPct = topMgr ? Math.round((topMgr.count / total) * 100) : 0;
+  const topMgr = mgrConc.topMgr;
+  const topPct = mgrConc.assignedPct;
   const longDelayCtx = getTopLongDelayContext(d);
   const complaintCtx = getComplaintContext(d);
 
@@ -424,14 +434,14 @@ function renderHeroAction(d, scoreObj) {
       onclick: 'openComplaintPanel(); return false;',
     });
   }
-  if (topPct > 70) {
+  if (topMgr && topPct > 60) {
     actions.push({
-      type: 'warn',
-      title: `${dispMgrName(topMgr.name)} 처리 편중`,
+      type: topPct > 70 ? 'danger' : 'warn',
+      title: `담당자 편중 완화`,
       cta: '담당자 현황 보기',
       metric: topPct + '%',
-      rec: `${topMgr.count}건 처리 · 전체 ${topPct}% 집중`,
-      target: '신규 문의 분산 권장',
+      rec: `${dispMgrName(topMgr.name)} ${topMgr.count}건 · 배정 기준 ${topPct}%`,
+      target: `전체 기준 ${mgrConc.totalPct}% · 신규 문의 분산 권장`,
       onclick: "_gotoTab('mgr-conc'); return false;",
     });
   }
@@ -532,10 +542,10 @@ function computeHealthScore(d) {
   if ((rb['2~8시간'] || 0) / resTotal > 0.30) deductSlow += 6;
   score -= deductSlow;
 
-  const managers = (d.managers || []).filter((m) => !EXCLUDED_MANAGERS.includes(m.name));
   let deductConc = 0;
-  if (managers.length > 0) {
-    const topPct = (managers[0].count || 0) / total;
+  const mgrConc = getManagerConcentration(d);
+  if (mgrConc.topMgr) {
+    const topPct = mgrConc.assignedPct / 100;
     if (topPct > 0.85) deductConc = 18;
     else if (topPct > 0.70) deductConc = 12;
     else if (topPct > 0.55) deductConc = 6;
@@ -554,7 +564,7 @@ function computeHealthScore(d) {
     complaintPct: Math.round(complaintRate * 100),
     complaintCount: complaints,
     slowPct: Math.round(slowRate * 100),
-    topPct: managers.length > 0 ? Math.round((managers[0].count || 0) / total * 100) : 0,
+    topPct: mgrConc.assignedPct,
   };
 }
 
@@ -638,13 +648,13 @@ function generateInsights(d, scoreObj) {
   const total = d.summary.totalChats || 1;
   const rb = d.resolutionBuckets || {};
   const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
-  const managers = (d.managers || []).filter((m) => !EXCLUDED_MANAGERS.includes(m.name));
+  const mgrConc = getManagerConcentration(d);
   const complaintPct = scoreObj.complaintPct;
   if (complaintPct >= 15) insights.push({ type: 'danger', icon: '위험', short: `컴플레인 ${complaintPct}%`, detail: `컴플레인 비율 ${complaintPct}% — 즉각 대응 필요 (기준: 15% 이상)` });
   else if (complaintPct >= 8) insights.push({ type: 'warn', icon: '주의', short: `컴플레인 ${complaintPct}%`, detail: `컴플레인 비율 ${complaintPct}% — 모니터링 권장 (기준: 8% 이상)` });
-  if (managers.length > 0) {
-    const topPct = Math.round((managers[0].count || 0) / total * 100);
-    const topName = dispMgrName(managers[0].name);
+  if (mgrConc.topMgr) {
+    const topPct = mgrConc.assignedPct;
+    const topName = dispMgrName(mgrConc.topMgr.name);
     if (topPct > 80) insights.push({ type: 'danger', icon: '위험', short: `${topName} ${topPct}%`, detail: `${topName} 처리 집중도 ${topPct}% — 과부하 위험, 즉시 재배정 검토` });
     else if (topPct > 60) insights.push({ type: 'warn', icon: '주의', short: `${topName} ${topPct}%`, detail: `${topName} 처리 집중도 ${topPct}% — 편중 주의` });
   }
@@ -683,10 +693,10 @@ function renderAlertStrip(d, scoreObj) {
   const total = d.summary.totalChats || 1;
   const rb = d.resolutionBuckets || {};
   const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
-  const managers = (d.managers || []).filter((m) => !EXCLUDED_MANAGERS.includes(m.name));
-  if (managers.length > 0) {
-    const topPct = Math.round((managers[0].count || 0) / total * 100);
-    if (topPct > 70) alerts.push({ level: 'danger', icon: '과부하', title: '담당자 과부하', body: `${dispMgrName(managers[0].name)} · 전체 ${topPct}%` });
+  const mgrConc = getManagerConcentration(d);
+  if (mgrConc.topMgr) {
+    const topPct = mgrConc.assignedPct;
+    if (topPct > 70) alerts.push({ level: 'danger', icon: '과부하', title: '담당자 과부하', body: `${dispMgrName(mgrConc.topMgr.name)} · 배정 기준 ${topPct}%` });
   }
   let complaintsAS, complaintBaseAS;
   if (d.complaintTrend?.complaints?.length > 0) {
@@ -737,11 +747,44 @@ function renderHeroQuickStats(d, scoreObj) {
   if (elRange) elRange.textContent = rangeLabel;
 }
 
+function renderHeroDecisionSummary(d, scoreObj) {
+  const el = document.getElementById('heroDecisionSummary');
+  if (!el) return;
+  const grade = getGrade(scoreObj.score);
+  const rb = d.resolutionBuckets || {};
+  const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
+  const slow8h = rb['8시간+'] || 0;
+  const slowPct = Math.round(slow8h / resTotal * 100);
+  const mgrConc = getManagerConcentration(d);
+  const cacheMeta = getCacheMeta(d.diagnostics || {});
+  const dataNote = d.dataNote || {};
+  const spanDays = (dataNote.processedMinAt && dataNote.processedMaxAt)
+    ? Math.max(1, Math.round((dataNote.processedMaxAt - dataNote.processedMinAt) / 86400000) + 1)
+    : null;
+  const fcrRate = d.fcrStats?.fcrRate;
+  const frtMedian = d.frtStats?.median;
+  const statusTone = scoreObj.score >= 80 ? 'good' : scoreObj.score >= 60 ? 'warn' : 'danger';
+  el.innerHTML = `
+    <div class="hds-status hds-${statusTone}">
+      <span class="hds-label">운영 판정</span>
+      <strong>${scoreObj.score}점 · ${grade.label}</strong>
+    </div>
+    <div class="hds-grid">
+      <span class="hds-chip danger">장기지연 ${slowPct}%</span>
+      <span class="hds-chip danger">컴플레인 ${scoreObj.complaintPct}%</span>
+      <span class="hds-chip ${mgrConc.assignedPct > 60 ? 'danger' : 'good'}">편중 ${mgrConc.assignedPct}%</span>
+      <span class="hds-chip good">FRT ${frtMedian != null ? fmtMin(frtMedian) : '—'}</span>
+      <span class="hds-chip good">FCR ${fcrRate != null ? fcrRate + '%' : '—'}</span>
+      <span class="hds-chip neutral">${spanDays ? `실데이터 ${spanDays}일` : '실데이터'}</span>
+      <span class="hds-chip neutral">${cacheMeta.shortLabel}</span>
+    </div>`;
+}
+
 /* ─── KPI Grid ──────────────────────────────────────────────────────── */
 function renderKPIs(d, scoreObj) {
   const { summary } = d;
-  const managers = (d.managers || []).filter((m) => !EXCLUDED_MANAGERS.includes(m.name));
-  const topMgr = managers[0];
+  const mgrConc = getManagerConcentration(d);
+  const topMgr = mgrConc.topMgr;
   const totalChats = summary.totalChats || 1;
   const openChats = summary.openChats || 0;
   const unassigned = summary.unassignedChats || 0;
@@ -750,7 +793,7 @@ function renderKPIs(d, scoreObj) {
   const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
   const slow8h = rb['8시간+'] || 0;
   const slow8hPct = Math.round(slow8h / resTotal * 100);
-  const topPct = topMgr ? Math.round((topMgr.count / totalChats) * 100) : 0;
+  const topPct = mgrConc.assignedPct;
   const complaintPct = scoreObj?.complaintPct || 0;
   const dataNote = d.dataNote || {};
   const isSampled = dataNote.isSampled || false;
@@ -905,21 +948,21 @@ function renderKPIs(d, scoreObj) {
       <div style="font-size:9.5px;color:var(--muted);margin-top:auto;padding-top:6px">컴플레인 원인 보기</div>
     </div>` },
     { sev: _kpiSev(_c5), html: `<div class="kpi-card a-${_c5}" onclick="_gotoTab('mgr-conc')"
-      data-tip="【담당자 편중 — 전체 기준】&#10;출처: 서버 계산값&#10;계산: 최다 처리 담당자 수 ÷ 전체 closed 채팅 수 × 100&#10;분모: summary.totalChats (${totalChats}건, 봇·미배정 포함)&#10;최다 처리: ${topMgr ? dispMgrName(topMgr.name) + ' (' + topMgr.count + '건)' : '—'}&#10;제외 담당자: ${EXCLUDED_MANAGERS.join(', ')}&#10;※ 게이지의 '처리 기준'은 배정 건만 분모로 사용해 수치가 다를 수 있음&#10;클릭 → 담당자 집중도 탭" tabindex="0">
-      <div class="kpi-label">담당자 편중 <span style="font-size:9px;font-weight:400;color:var(--muted)">(전체 기준)</span></div>
+      data-tip="【담당자 편중 — 배정 처리 기준】&#10;출처: 서버 계산값&#10;계산: 최다 처리 담당자 수 ÷ 배정 담당자 처리 합계 × 100&#10;분모: 배정 담당자 합계 ${mgrConc.assignedTotal}건 (봇·미배정·제외 담당자 제외)&#10;최다 처리: ${topMgr ? dispMgrName(topMgr.name) + ' (' + topMgr.count + '건)' : '—'}&#10;전체 closed 기준 보조값: ${mgrConc.totalPct}% (${topMgr ? topMgr.count : 0}/${totalChats})&#10;클릭 → 담당자 집중도 탭" tabindex="0">
+      <div class="kpi-label">담당자 편중 <span style="font-size:9px;font-weight:400;color:var(--muted)">(배정 기준)</span></div>
       <div class="kpi-value">${topPct}<span class="unit">%</span></div>
       <div class="kpi-meta">
         <span class="data-badge badge-calc">계산값</span>
         <span class="delta ${topPct > 80 ? 'bad' : topPct > 60 ? 'neutral' : 'good'}">${topPct > 80 ? '과부하' : topPct > 60 ? '주의' : '분산 양호'}</span>
       </div>
       <div class="kpi-meta" style="margin-top:2px">
-        <span style="font-size:10px;color:var(--muted)">${topMgr ? dispMgrName(topMgr.name) : '—'}</span>
-        <span style="font-size:9.5px;color:var(--muted);margin-left:4px" data-tip="분모: 전체 closed 채팅 ${totalChats}건 (봇·미배정 포함)&#10;게이지는 배정 담당자 합계를 분모로 사용 → 수치 차이 발생" tabindex="0" style="cursor:help">ⓘ</span>
+        <span style="font-size:10px;color:var(--muted)">${topMgr ? dispMgrName(topMgr.name) : '—'} · 전체 기준 ${mgrConc.totalPct}%</span>
+        <span style="font-size:9.5px;color:var(--muted);margin-left:4px" data-tip="대표값은 배정 담당자 처리 합계를 분모로 사용합니다.&#10;전체 closed 기준은 ${mgrConc.totalPct}%로 보조 표시합니다." tabindex="0" style="cursor:help">ⓘ</span>
       </div>
     </div>` },
   ];
-  // 상단 메인 KPI는 고객 영향도가 큰 3개만 유지하고, 운영 보조 지표는 별도 상태 레일로 분리
-  const _secIdxSet = new Set([0, 4]);
+  // 상단 메인 KPI는 실제 위험 드라이버 3개만 유지하고, 실시간 운영 상태는 별도 레일로 분리
+  const _secIdxSet = new Set([0, 1]);
   const primaryCards = kpiCards.filter((_, i) => !_secIdxSet.has(i));
   primaryCards.sort((a, b) => b.sev - a.sev);
   grid.innerHTML = primaryCards.map(c => c.html).join('');
@@ -950,11 +993,11 @@ function renderKPIs(d, scoreObj) {
         url: chatTalkUnassignedUrl(),
       },
       {
-        tone: topPct > 80 ? 'danger' : topPct > 60 ? 'warn' : 'good',
-        label: '담당자 편중',
-        value: `${topPct}%`,
-        sub: topMgr ? `${dispMgrName(topMgr.name)} · ${topMgr.count}건` : '담당자 없음',
-        onclick: "_gotoTab('mgr-conc'); return false;",
+        tone: openChats > 5 ? 'danger' : openChats > 0 ? 'warn' : 'good',
+        label: '오픈 채팅',
+        value: `${openChats}건`,
+        sub: unassigned > 0 ? `미배정 ${unassigned}건 포함` : '전원 배정',
+        url: chatTalkOpenUrl(),
       },
       {
         tone: cacheTone,
@@ -1852,11 +1895,11 @@ function renderConcRisk(d) {
   const el = document.getElementById('concRiskPanel');
   if (!el) return;
   const managers = (d.managers || []).filter((m) => !EXCLUDED_MANAGERS.includes(m.name));
-  const total = d.summary.totalChats || 1;
+  const mgrConc = getManagerConcentration(d);
   const unassigned = d.summary?.unassignedChats || 0;
   const activeMgrs = managers.filter((m) => m.count > 0);
-  const topMgr = activeMgrs[0];
-  const topPct = topMgr ? Math.round(topMgr.count / total * 100) : 0;
+  const topMgr = mgrConc.topMgr;
+  const topPct = mgrConc.assignedPct;
   const topName = topMgr ? dispMgrName(topMgr.name) : '—';
   const uaCls = unassigned > 0 ? 'crr-danger' : 'crr-ok';
   const concCls = topPct > 70 ? 'crr-danger' : topPct > 50 ? 'crr-warn' : 'crr-ok';
@@ -1880,8 +1923,8 @@ function renderConcRisk(d) {
     </div>
     <div class="conc-risk-row ${concCls}">
       <div class="crr-left">
-        <div class="crr-label">업무 집중도 <span data-tip="분모: 전체 closed 채팅 ${total}건 (봇·미배정 포함)&#10;계산: ${topMgr ? topMgr.count : 0}건 ÷ ${total}건 × 100&#10;※ 배정 기준(봇·미배정 제외)은 담당자 성과 테이블 참고" tabindex="0" style="cursor:help;font-size:9px;color:var(--muted)">분모ⓘ</span></div>
-        <div class="crr-sub">${topName}</div>
+        <div class="crr-label">업무 집중도 <span data-tip="분모: 배정 담당자 처리 합계 ${mgrConc.assignedTotal}건&#10;계산: ${topMgr ? topMgr.count : 0}건 ÷ ${mgrConc.assignedTotal}건 × 100&#10;전체 closed 기준 보조값: ${mgrConc.totalPct}%" tabindex="0" style="cursor:help;font-size:9px;color:var(--muted)">분모ⓘ</span></div>
+        <div class="crr-sub">${topName} · 전체 기준 ${mgrConc.totalPct}%</div>
       </div>
       <div class="crr-right"><div class="crr-value ${topPct > 70 ? 'val-danger' : topPct > 50 ? 'val-warn' : 'val-ok'}">${topPct}%</div><div class="crr-action-tag ${topPct > 70 ? 'action-urgent' : topPct > 50 ? 'action-check' : 'action-ok'}">${topPct > 70 ? '분산' : topPct > 50 ? '모니터링' : '정상'}</div></div>
     </div>
@@ -1901,16 +1944,15 @@ function renderConcRisk(d) {
 function renderMgrRiskStrip(d) {
   const el = document.getElementById('mgrRiskStrip');
   if (!el) return;
-  const managers = (d.managers || []).filter((m) => !EXCLUDED_MANAGERS.includes(m.name));
-  const total = d.summary.totalChats || 1;
+  const mgrConc = getManagerConcentration(d);
   const unassigned = d.summary?.unassignedChats || 0;
-  const topMgr = managers[0];
-  const topPct = topMgr ? Math.round((topMgr.count / total) * 100) : 0;
+  const topMgr = mgrConc.topMgr;
+  const topPct = mgrConc.assignedPct;
   const topName = topMgr ? dispMgrName(topMgr.name) : '—';
   const concStatus = topPct > 80 ? { cls: 'danger', label: '과부하' } : topPct > 60 ? { cls: 'warn', label: '주의' } : { cls: 'good', label: '양호' };
   const unaStatus = unassigned > 0 ? { cls: 'danger', label: '즉시 배정' } : { cls: 'good', label: '없음' };
   el.innerHTML = `
-    <div class="mgr-risk-card mrc-${concStatus.cls}"><div class="mrc-icon"><span style="color:${topPct > 80 ? 'var(--rose)' : topPct > 60 ? 'var(--amber)' : 'var(--green)'}">●</span></div><div class="mrc-body"><div class="mrc-label">담당자 편중률</div><div class="mrc-value">${topName}${topMgr ? ' · ' + topMgr.count + '건' : ''} · ${topPct}%</div><div class="mrc-status ${concStatus.cls}">${concStatus.label}</div></div></div>
+    <div class="mgr-risk-card mrc-${concStatus.cls}"><div class="mrc-icon"><span style="color:${topPct > 80 ? 'var(--rose)' : topPct > 60 ? 'var(--amber)' : 'var(--green)'}">●</span></div><div class="mrc-body"><div class="mrc-label">담당자 편중률 (배정 기준)</div><div class="mrc-value">${topName}${topMgr ? ' · ' + topMgr.count + '건' : ''} · ${topPct}% <span style="color:var(--muted);font-size:10px">전체 ${mgrConc.totalPct}%</span></div><div class="mrc-status ${concStatus.cls}">${concStatus.label}</div></div></div>
     <div class="mgr-risk-card mrc-${unaStatus.cls}"><div class="mrc-icon"><span style="color:${unassigned > 0 ? 'var(--rose)' : 'var(--green)'}">●</span></div><div class="mrc-body"><div class="mrc-label">미배정 채팅</div><div class="mrc-value">${unassigned}건</div><div class="mrc-status ${unaStatus.cls}">${unaStatus.label}</div></div></div>`;
 }
 
@@ -2170,7 +2212,7 @@ function renderGaugeGrid(d) {
   const gsubConc = document.getElementById('gsub-conc');
   if (gsubConc) {
     gsubConc.innerHTML = topMgr
-      ? `<span data-tip="【배정 처리 기준】&#10;${topMgr.count}건 ÷ ${mgrTotal}건(배정 담당자 합계) × 100 = ${topPct}%&#10;봇·미배정·제외 담당자 제외 후 집계&#10;※ 상단 KPI 카드는 전체 채팅 분모 사용 → 수치 상이" tabindex="0" style="cursor:help">${dispMgrName(topMgr.name)} ${topMgr.count}건 · <strong>${topPct}%</strong> <span style="font-size:9.5px;color:var(--muted)">(배정 기준)</span> · ${topPct > 70 ? '편중 주의' : topPct > 50 ? '모니터링' : '분산 양호'}</span>`
+      ? `<span data-tip="【배정 처리 기준】&#10;${topMgr.count}건 ÷ ${mgrTotal}건(배정 담당자 합계) × 100 = ${topPct}%&#10;봇·미배정·제외 담당자 제외 후 집계&#10;상단 KPI와 동일한 대표 기준입니다." tabindex="0" style="cursor:help">${dispMgrName(topMgr.name)} ${topMgr.count}건 · <strong>${topPct}%</strong> <span style="font-size:9.5px;color:var(--muted)">(배정 기준)</span> · ${topPct > 70 ? '편중 주의' : topPct > 50 ? '모니터링' : '분산 양호'}</span>`
       : '—';
   }
   setB('conc', topPct <= 40 ? '양호' : topPct <= 60 ? '주의' : '위험', topPct <= 40 ? 'good' : topPct <= 60 ? 'warn' : 'danger');
@@ -3071,6 +3113,7 @@ function fullRender(data) {
   const insights = generateInsights(data, scoreObj);
   safeRender(() => renderHealthScore(scoreObj, data), 'healthScore');
   safeRender(() => renderHeroQuickStats(data, scoreObj), 'heroQuickStats');
+  safeRender(() => renderHeroDecisionSummary(data, scoreObj), 'heroDecisionSummary');
   safeRender(() => renderHeroAction(data, scoreObj), 'heroAction');
   safeRender(() => renderKPIs(data, scoreObj), 'kpis');
   safeRender(() => renderAlertStrip(data, scoreObj), 'alertStrip');
@@ -3211,6 +3254,7 @@ async function silentRefresh() {
     safeRender(() => updateBanner(data), 'banner.silent');
     safeRender(() => renderHealthScore(scoreObj, data), 'healthScore.silent');
     safeRender(() => renderHeroQuickStats(data, scoreObj), 'heroQuickStats.silent');
+    safeRender(() => renderHeroDecisionSummary(data, scoreObj), 'heroDecisionSummary.silent');
     safeRender(() => renderHeroAction(data, scoreObj), 'heroAction.silent');
     safeRender(() => renderKPIs(data, scoreObj), 'kpis.silent');
     safeRender(() => renderAlertStrip(data, scoreObj), 'alertStrip.silent');
