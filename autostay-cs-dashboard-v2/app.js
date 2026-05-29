@@ -79,6 +79,19 @@ function fmtMin(min) {
   const d = Math.floor(h / 24);
   return `${d}일 ${h % 24}h`;
 }
+function getCacheMeta(diag = {}) {
+  const source = diag.cacheSource || (diag.kvEnabled ? 'kv' : 'memory');
+  const isKv = source === 'kv';
+  return {
+    source,
+    label: isKv ? 'Vercel KV' : '메모리 캐시',
+    shortLabel: isKv ? 'KV 캐시' : '메모리 캐시',
+    storageLabel: isKv ? 'Vercel KV (공유 캐시)' : '메모리 (인스턴스 한정)',
+    note: isKv
+      ? 'Vercel KV 공유 캐시 · 5분 TTL · 강제 갱신: 새로고침 버튼'
+      : '메모리 캐시 · 서버 인스턴스별 5분 TTL · 인스턴스 변경 시 캐시가 달라질 수 있음',
+  };
+}
 function deltaArrow(pct) {
   if (pct == null || isNaN(pct)) return '<span class="delta-arrow flat">—</span>';
   if (pct > 5)  return `<span class="delta-arrow up">▲ ${pct}%</span>`;
@@ -698,28 +711,28 @@ function renderKPIs(d, scoreObj) {
   const dataNote = d.dataNote || {};
   const isSampled = dataNote.isSampled || false;
   const limitVal = dataNote.limit || 1000;
-  const cacheText = d.diagnostics?.cacheHit ? `<span class="hero-cache-badge cache-hit">캐시</span>` : `<span class="hero-cache-badge cache-miss">최신 조회</span>`;
+  const diagForCache = d.diagnostics || {};
+  const cacheMeta = getCacheMeta(diagForCache);
 
   const cacheBadge = document.getElementById('cacheBadge');
   if (cacheBadge) {
-    const diag = d.diagnostics || {};
+    const diag = diagForCache;
     const isHit = diag.cacheHit;
-    const cacheLabel = isHit ? '메모리 캐시' : '최신 조회';
+    const cacheLabel = isHit ? cacheMeta.shortLabel : '최신 조회';
     cacheBadge.innerHTML = cacheLabel;
     cacheBadge.className = isHit ? 'hero-cache-badge cache-hit' : 'hero-cache-badge cache-miss';
     // TTL / 수집시간 / 갱신 방법을 tooltip에 통합
     const paginMs = diag.paginationMs ? `원본 수집 ${diag.paginationMs}ms` : '';
     cacheBadge.title = isHit
-      ? `메모리 캐시에서 응답 · 최대 5분 TTL${paginMs ? ' · ' + paginMs : ''}\n강제 갱신: 새로고침 버튼 클릭`
-      : `Channel Talk API 직접 조회 — 최신 데이터 (지연 없음)\n캐시 방식: 메모리 캐시`;
+      ? `${cacheMeta.storageLabel}에서 응답 · 최대 5분 TTL${paginMs ? ' · ' + paginMs : ''}\n강제 갱신: 새로고침 버튼 클릭`
+      : `Channel Talk API 직접 조회 — 최신 데이터 (지연 없음)\n캐시 방식: ${cacheMeta.storageLabel}`;
   }
 
   const kpiBasisHeaderEl = document.getElementById('kpiBasisHeader');
   if (kpiBasisHeaderEl) {
     kpiBasisHeaderEl.style.display = 'flex';
-    const diagObj = d.diagnostics || {};
-    const cacheTypeName = '메모리';
-    const cacheTipText = '메모리 캐시 · 5분 TTL · 강제 갱신: 새로고침 버튼';
+    const diagObj = diagForCache;
+    const cacheTypeName = cacheMeta.shortLabel;
     const collectedTotal = dataNote.collected || totalChats;
     const sampledWarn = isSampled
       ? ` <span style="color:var(--amber);font-weight:700" data-tip="API 수집 한도(${limitVal}건)에 도달했습니다. 오래된 채팅은 집계에서 제외될 수 있습니다." tabindex="0" style="cursor:help">⚠ 수집 상한(${limitVal}건) 도달 — 최근 ${limitVal}건 기준 집계</span>`
@@ -728,13 +741,13 @@ function renderKPIs(d, scoreObj) {
         : '');
     const paginMs = diagObj.paginationMs ? diagObj.paginationMs + 'ms' : '—';
     const cacheInfo = diagObj.cacheHit
-      ? `<span data-tip="${cacheTypeName} 캐시 응답 (최대 5분 지연) · 원본 수집시간 ${paginMs} · 강제 갱신: 새로고침 버튼" style="color:var(--amber);margin-left:6px;cursor:help" tabindex="0">${cacheTypeName} 캐시</span>`
-      : (d.diagnostics ? `<span data-tip="Channel Talk API 직접 조회 결과 — 지연 없음 · ${cacheTypeName} 캐시 대기 중" style="color:var(--teal);margin-left:6px;cursor:help" tabindex="0">최신 조회</span>` : `<span style="color:var(--muted);margin-left:6px">캐시 없음</span>`);
+      ? `<span data-tip="${cacheMeta.note} · 원본 수집시간 ${paginMs}" style="color:var(--amber);margin-left:6px;cursor:help" tabindex="0">${cacheTypeName}</span>`
+      : (d.diagnostics ? `<span data-tip="Channel Talk API 직접 조회 결과 — 지연 없음 · 다음 요청부터 ${cacheMeta.shortLabel} 대기 중" style="color:var(--teal);margin-left:6px;cursor:help" tabindex="0">최신 조회</span>` : `<span style="color:var(--muted);margin-left:6px">캐시 없음</span>`);
     // ⓘ 툴팁에 상세 정보 압축 (Channel Talk API · 캐시 · KST · 전체 수집 · 범례)
     const _basisDetailLines = [
       `채널톡 API closed 상태 채팅 수 기준 (완료 처리된 건만 집계)`,
       `채널톡 Open API v5 실데이터. 해결시간·FRT는 종료 후 계산값`,
-      `${cacheTypeName} 5분 캐시 적용 중 (TTL 5분)`,
+      `${cacheMeta.note}`,
       `기준 시간: KST (한국 표준시)`,
       (collectedTotal > 0 ? `전체 수집: ${collectedTotal}건 (API 한도 ${limitVal}건)` : ''),
       `실데이터=채널톡 API 원천값 / 계산값=서버 집계 / 캐시=5분 TTL`,
@@ -761,12 +774,12 @@ function renderKPIs(d, scoreObj) {
     const _allInPeriod = !isSampled && dataNote.collected > 0 && dataNote.collected === dataNote.processed;
     const _dateRangeTip = _dateRangeStr ? `&#10;실제 포함 기간: ${_dateRangeStr}` : '';
     const _samePeriodsNote = _allInPeriod
-      ? ` · <span style="color:var(--muted);font-size:10px;cursor:help"
+      ? ` · <span style="color:var(--amber);font-size:10px;font-weight:700;cursor:help"
             data-tip="전체 closed 채팅이 ${dataNote.collected}건이며, 선택 기간(${currentDays === 'all' ? '전체' : `최근 ${currentDays}일`}) 내에 모두 포함됩니다.&#10;&#10;→ 14일·30일·전체 탭을 전환해도 동일한 결과가 표시되는 것이 정상입니다.&#10;→ API 수집 한도(${limitVal}건) 미도달 · 실제 데이터 ${dataNote.collected}건뿐${_dateRangeTip}&#10;&#10;현재 요청 파라미터: days=${currentDays}"
-            tabindex="0">기간별 동일 결과 ⓘ</span>`
+            tabindex="0">기간 확장 영향 없음 ⓘ</span>`
       : '';
     const _dateRangeNote = _dateRangeStr
-      ? ` <span style="color:var(--muted);font-size:10px" data-tip="수집된 채팅의 실제 날짜 범위 (KST 기준)" tabindex="0" style="cursor:help">${_dateRangeStr}</span>`
+      ? ` <span style="color:var(--muted);font-size:10px" data-tip="수집된 채팅의 실제 날짜 범위 (KST 기준)" tabindex="0" style="cursor:help">실제 범위 ${_dateRangeStr}</span>`
       : '';
     // 기간 선택과 실제 데이터 범위 불일치 경고 (선택 기간 >> 실제 데이터 스팬)
     const _periodMismatchNote = (() => {
@@ -776,9 +789,9 @@ function renderKPIs(d, scoreObj) {
       const missingDays = Math.round((actualStartMs - expectedStartMs) / (86400 * 1000));
       if (missingDays < 2) return ''; // 2일 미만 차이는 정상 범위
       const actualSpanDays = Math.max(1, Math.round((dataNote.processedMaxAt - dataNote.processedMinAt) / (86400 * 1000)) + 1);
-      return ` · <span style="color:var(--amber);font-size:10px;cursor:help"
+      return ` · <span style="color:var(--amber);font-size:10px;font-weight:700;cursor:help"
         data-tip="최근 ${currentDays}일 선택 / 실제 수집 범위: ${_dateRangeStr || '?'} (${actualSpanDays}일치)&#10;약 ${missingDays}일 이전 데이터 없음 — API 수집 시작 이전 기간&#10;한도 미도달 · 수집된 전체 데이터를 정상 반영 중"
-        tabindex="0">기간 부족 ${actualSpanDays}/${currentDays}일 ⓘ</span>`;
+        tabindex="0">실데이터 ${actualSpanDays}/${currentDays}일 ⓘ</span>`;
     })();
     kpiBasisHeaderEl.innerHTML = `
       <span>분석 기준</span>
@@ -825,7 +838,6 @@ function renderKPIs(d, scoreObj) {
       </div>
       ${openChats > 0 ? `<div style="font-size:9px;margin-top:4px;display:flex;gap:8px;flex-wrap:wrap">
         ${unassigned > 0 ? `<span style="color:var(--rose)">미배정 ${unassigned}건</span>` : '<span style="color:var(--green)">전원 배정</span>'}
-        ${longChatOpenCount > 0 ? `<span style="color:var(--amber)">장기오픈 ${longChatOpenCount}건</span>` : ''}
       </div>` : ''}
     </a>` },
     { sev: _kpiSev(_c3), html: `<div class="kpi-card a-${_c3}" onclick="openLongChatsPanel()"
@@ -2470,7 +2482,7 @@ function renderDiagnostics(d) {
   const diag = d.diagnostics || {};
   const calls = diag.callTiming || [];
   const warns = diag.warnings || [];
-  const cacheSourceLabel = '메모리';
+  const cacheMeta = getCacheMeta(diag);
 
   if (footerEl) {
     const okCount = calls.filter((c) => c.ok).length;
@@ -2490,7 +2502,7 @@ function renderDiagnostics(d) {
     el.innerHTML = `
       <div class="diag-summary">
         <div class="diag-stat"><span class="diag-stat-lbl">서버 응답시간</span><span class="diag-stat-val">${responseTimeLabel}</span></div>
-        <div class="diag-stat"><span class="diag-stat-lbl">캐시 상태</span><span class="diag-stat-val ${diag.cacheHit ? 'good' : ''}">${diag.cacheHit ? '캐시(' + cacheSourceLabel + ')' : '최신 조회'}</span></div>
+        <div class="diag-stat"><span class="diag-stat-lbl">캐시 상태</span><span class="diag-stat-val ${diag.cacheHit ? 'good' : ''}">${diag.cacheHit ? cacheMeta.shortLabel : '최신 조회'}</span></div>
         <div class="diag-stat"><span class="diag-stat-lbl">원본 수집</span><span class="diag-stat-val">${diag.pages || 0}p · ${diag.paginationMs || 0}ms</span></div>
         <div class="diag-stat"><span class="diag-stat-lbl">실패 호출</span><span class="diag-stat-val ${warns.length > 0 ? 'danger' : 'good'}">${warns.length}건</span></div>
       </div>
@@ -2499,24 +2511,24 @@ function renderDiagnostics(d) {
         <thead><tr><th>API 엔드포인트</th><th>상태</th><th class="num-r">HTTP</th><th class="num-r">응답시간</th></tr></thead>
         <tbody>${totalRows || '<tr><td colspan="4" class="diag-empty">호출 정보 없음</td></tr>'}</tbody>
       </table>
-      <div class="diag-note">v4.0 — 메모리 캐시 (5분 TTL) · 부분 실패 허용 · 1000건 한도</div>`;
+      <div class="diag-note">v4.0 — ${cacheMeta.storageLabel} · 부분 실패 허용 · 1000건 한도</div>`;
   }
 
   // ── 캐시 탭 ──
   const cacheEl = document.getElementById('diagCachePanel');
   if (cacheEl) {
-    const cacheStatus = diag.cacheHit ? `<span class="diag-stat-val good">캐시 HIT (${cacheSourceLabel})</span>` : `<span class="diag-stat-val">캐시 MISS — 최신 조회</span>`;
+    const cacheStatus = diag.cacheHit ? `<span class="diag-stat-val good">캐시 HIT (${cacheMeta.shortLabel})</span>` : `<span class="diag-stat-val">캐시 MISS — 최신 조회</span>`;
     const paginMs = diag.paginationMs || 0;
     const totalMs = diag.totalMs || 0;
     cacheEl.innerHTML = `
       <div class="diag-summary">
-        <div class="diag-stat"><span class="diag-stat-lbl">캐시 종류</span><span class="diag-stat-val">${cacheSourceLabel} (인메모리)</span></div>
+        <div class="diag-stat"><span class="diag-stat-lbl">캐시 종류</span><span class="diag-stat-val">${cacheMeta.storageLabel}</span></div>
         <div class="diag-stat"><span class="diag-stat-lbl">이번 응답</span>${cacheStatus}</div>
         <div class="diag-stat"><span class="diag-stat-lbl">TTL</span><span class="diag-stat-val">5분</span></div>
         <div class="diag-stat"><span class="diag-stat-lbl">원본 API 시간</span><span class="diag-stat-val">${paginMs}ms</span></div>
         <div class="diag-stat"><span class="diag-stat-lbl">서버 응답시간</span><span class="diag-stat-val">${diag.cacheHit ? '≈0ms (캐시)' : totalMs + 'ms'}</span></div>
       </div>
-      <div class="diag-note">캐시 적중 시 서버 응답이 즉시 반환됩니다. 새로고침 버튼으로 강제 갱신 가능 (TTL 무시).</div>`;
+      <div class="diag-note">${cacheMeta.note}. 캐시 적중 시 서버 응답이 즉시 반환됩니다.</div>`;
   }
 
   // ── 수집 한도 탭 ──

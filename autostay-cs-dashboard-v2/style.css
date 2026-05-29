@@ -2340,6 +2340,14 @@ button.hac-row-btn:focus-visible .hac-row {
   text-transform: uppercase;
   opacity: 1;
 }
+.hero-title {
+  color: #F8FAFC;
+  letter-spacing: 0;
+  text-shadow: 0 1px 2px rgba(0,0,0,.24);
+}
+.hero-desc {
+  color: rgba(226,232,240,.78);
+}
 .hero-version-pill {
   font-size: 10px; padding: 2px 8px;
   background: var(--teal-s);
@@ -2360,16 +2368,16 @@ button.hac-row-btn:focus-visible .hac-row {
   display: inline-flex; align-items: center; gap: 5px;
 }
 .him-lbl {
-  color: var(--muted);
+  color: rgba(203,213,225,.72);
   font-weight: 500;
 }
 .him-val {
-  color: var(--text);
+  color: #F8FAFC;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 .him-divider {
-  color: var(--border);
+  color: rgba(148,163,184,.55);
   font-size: 10px;
 }
 
@@ -2571,11 +2579,11 @@ a.kpi-card:focus-visible {
 .hero-meta {
   display: flex; align-items: center; gap: 8px;
   margin-top: 14px; padding-top: 10px;
-  border-top: 1px solid var(--border);
-  font-size: 11px; color: var(--muted);
+  border-top: 1px solid rgba(148,163,184,.24);
+  font-size: 11px; color: rgba(203,213,225,.78);
 }
-.hero-channel-name { font-weight: 600; color: var(--text); }
-.hero-meta-sep { color: var(--border); }
+.hero-channel-name { font-weight: 600; color: #F8FAFC; }
+.hero-meta-sep { color: rgba(148,163,184,.55); }
 .hero-updated-at { font-variant-numeric: tabular-nums; }
 .hero-cache-badge {
   font-size: 10px; padding: 2px 7px; border-radius: 4px; font-weight: 600;
@@ -2997,7 +3005,16 @@ button.ld-more-link:hover {
   .filter-chip { font-size: 10.5px; padding: 4px 9px; }
 
   /* ── Hero / section: 패딩 축소 ──────────────────────────────────────── */
+  .hero { padding: 24px 0 16px; }
   .hero-container { padding: 0 16px; }
+  .hero-top { gap: 10px; margin-bottom: 12px; }
+  .hero-title { font-size: 22px; line-height: 1.2; }
+  .hero-desc { font-size: 12px; }
+  .hero-inline-meta { margin-top: 8px; gap: 6px; font-size: 11px; }
+  .hero-action-card { padding: 14px 16px; border-radius: 12px; }
+  .hac-body { gap: 8px; }
+  .hac-row-link { padding: 10px 12px; }
+  .hero-kpi-strip { margin-top: 10px; }
   .section-wrap { padding: 0 12px; }
   .basis-row { padding: 6px 12px 0; }
   .alert-strip { padding: 0 12px; }
