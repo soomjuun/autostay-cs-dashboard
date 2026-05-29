@@ -3194,6 +3194,74 @@ button.ld-more-link:hover {
   max-width: 1240px;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* V4.3 — Unified Desktop Grid                                                */
+/* ══════════════════════════════════════════════════════════════════════════ */
+:root {
+  --ops-page-max: 1400px;
+}
+.hero-container,
+.toolbar-inner,
+.basis-row,
+.alert-strip,
+.section-wrap,
+.chart-master-grid,
+.adv-section-wrap {
+  max-width: var(--ops-page-max);
+}
+.hero-container,
+.toolbar-inner,
+.basis-row,
+.alert-strip,
+.section-wrap,
+.chart-master-grid,
+.adv-section-wrap {
+  padding-left: 24px;
+  padding-right: 24px;
+}
+.hero {
+  padding-top: 22px;
+}
+.hero-top {
+  grid-template-columns: minmax(0, 1fr) 380px;
+}
+.hero-copy {
+  min-height: 232px;
+}
+.hero-action-card {
+  padding: 18px 20px;
+}
+.hero-kpi-strip .kpi-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.kpi-card {
+  min-height: 112px;
+}
+.hero .secondary-kpi-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+.secondary-kpi-label {
+  flex: 0 0 132px;
+}
+.hero .kpi-grid--secondary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(240px, 320px));
+  gap: 10px;
+  width: auto;
+}
+.hero .secondary-kpi-strip .kpi-card,
+.hero .secondary-kpi-strip .kpi-card-ok {
+  min-height: 62px;
+  width: 100%;
+}
+.hero-meta {
+  margin-top: 12px;
+}
+
 @media (max-width: 1100px) {
   .hero-top {
     display: flex;
@@ -3279,7 +3347,8 @@ button.ld-more-link:hover {
   .kpi-value .unit { font-size: 12px; }
   .kpi-meta { gap: 4px; font-size: 10px; }
   .delta { font-size: 10px; padding: 1px 5px; }
-  .secondary-kpi-strip { display: none; }
+  .secondary-kpi-strip,
+  .hero .secondary-kpi-strip { display: none; }
   .secondary-kpi-label { font-size: 11px; }
   .kpi-grid--secondary { gap: 8px; }
   .secondary-kpi-strip .kpi-card,
