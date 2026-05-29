@@ -3011,10 +3011,25 @@ button.ld-more-link:hover {
   .hero-title { font-size: 22px; line-height: 1.2; }
   .hero-desc { font-size: 12px; }
   .hero-inline-meta { margin-top: 8px; gap: 6px; font-size: 11px; }
-  .hero-action-card { padding: 14px 16px; border-radius: 12px; }
-  .hac-body { gap: 8px; }
-  .hac-row-link { padding: 10px 12px; }
-  .hero-kpi-strip { margin-top: 10px; }
+  .hero-focus { width: 100%; align-items: stretch; }
+  .hero-action-card { width: 100%; padding: 12px; border-radius: 12px; }
+  .hac-header { margin-bottom: 8px; padding-bottom: 8px; }
+  .hac-body { gap: 6px; }
+  .hac-row { padding: 8px 9px; gap: 8px; border-radius: 9px; }
+  .hac-row-title { font-size: 12px; line-height: 1.25; }
+  .hac-row-sub { display: none; }
+  .hac-row-rec { display: none; }
+  .hac-row-cta { margin-top: 2px; font-size: 10px; }
+  .hac-row-metric { font-size: 12px; }
+  .hac-footer { display: none; }
+  .hero-kpi-strip { margin-top: 8px; padding-top: 10px; }
+  .hero-kpi-strip .kpi-grid { gap: 8px; }
+  .kpi-card { padding: 12px 10px; border-radius: 12px; }
+  .kpi-label { font-size: 11px; margin-bottom: 6px; }
+  .kpi-value { font-size: 22px; margin-bottom: 5px; }
+  .kpi-value .unit { font-size: 12px; }
+  .kpi-meta { gap: 4px; font-size: 10px; }
+  .delta { font-size: 10px; padding: 1px 5px; }
   .section-wrap { padding: 0 12px; }
   .basis-row { padding: 6px 12px 0; }
   .alert-strip { padding: 0 12px; }
