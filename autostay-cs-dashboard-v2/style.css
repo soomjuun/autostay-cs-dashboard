@@ -3558,3 +3558,230 @@ button.ld-more-link:hover {
   font-size: 14px; font-weight: 700; cursor: pointer;
 }
 .fbs-btn-apply:active { opacity: 0.85; }
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* V4.4 — Executive Operations Rail                                          */
+/* ══════════════════════════════════════════════════════════════════════════ */
+.aq-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 9px 10px;
+  border: 1px solid #E5E8EB;
+  border-radius: 12px;
+  background: #F7F8FA;
+}
+.aq-title-row {
+  color: #191F28;
+  font-size: 12px;
+  font-weight: 800;
+}
+.aq-chips-row {
+  gap: 5px;
+}
+.aq-total,
+.aq-urgent,
+.aq-warn {
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 800;
+}
+.aq-total {
+  background: #E8F3FF;
+  color: #1B64DA;
+}
+.aq-urgent {
+  background: #FFF1F2;
+  color: #BE123C;
+}
+.aq-warn {
+  background: #FFF7ED;
+  color: #C2410C;
+}
+.aq-header.aq-ok {
+  color: #15803D;
+}
+.hac-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 62px;
+  padding: 8px 10px;
+}
+.hac-row-num {
+  width: 24px;
+  height: 24px;
+}
+.hac-row-title {
+  font-size: 12.5px;
+}
+.hac-row-rec {
+  color: #4E5968;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hac-row-target {
+  margin-top: 2px;
+  color: #8B95A1;
+  font-size: 10px;
+  font-weight: 700;
+}
+.hac-row-cta {
+  display: none;
+  width: fit-content;
+  margin-top: 5px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #E8F3FF;
+  color: #1B64DA;
+  font-size: 10px;
+  font-weight: 800;
+}
+.hac-row-metric {
+  align-self: center;
+  min-width: 48px;
+  text-align: right;
+}
+.hero-action-card {
+  padding: 16px;
+}
+.hac-header {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+}
+.hac-body {
+  gap: 6px;
+}
+.hac-footer {
+  display: none;
+}
+.hero .secondary-kpi-strip {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid #E5E8EB;
+  border-radius: 16px;
+  background: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(25,31,40,.04);
+}
+.secondary-kpi-label {
+  display: flex;
+  align-items: center;
+  flex: 0 0 88px;
+  color: #4E5968;
+  font-size: 12px;
+  font-weight: 800;
+}
+.ops-status-rail {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.ops-status-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  min-height: 66px;
+  padding: 10px 11px;
+  border: 1px solid #F2F4F6;
+  border-radius: 12px;
+  background: #F9FAFB;
+  color: #191F28;
+  text-align: left;
+  text-decoration: none;
+  font: inherit;
+}
+button.ops-status-item {
+  width: 100%;
+  cursor: pointer;
+}
+a.ops-status-item {
+  cursor: pointer;
+}
+.ops-status-item:hover {
+  border-color: #D1D6DB;
+  background: #FFFFFF;
+}
+.ops-status-dot {
+  width: 7px;
+  height: 7px;
+  margin-top: 5px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: #8B95A1;
+}
+.osi-good .ops-status-dot { background: #10B981; }
+.osi-warn .ops-status-dot { background: #F59E0B; }
+.osi-danger .ops-status-dot { background: #F43F5E; }
+.osi-neutral .ops-status-dot { background: #8B95A1; }
+.ops-status-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.ops-status-label {
+  color: #8B95A1;
+  font-size: 10.5px;
+  font-weight: 800;
+}
+.ops-status-value {
+  color: #191F28;
+  font-size: 15px;
+  font-weight: 850;
+  line-height: 1.18;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ops-status-sub {
+  color: #6B7684;
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ops-status-skeleton {
+  min-height: 66px;
+  border-radius: 12px;
+  background: linear-gradient(90deg, #F2F4F6, #E5E8EB, #F2F4F6);
+  background-size: 220% 100%;
+  animation: skeletonShimmer 1.1s infinite linear;
+}
+@keyframes skeletonShimmer {
+  0% { background-position: 120% 0; }
+  100% { background-position: -120% 0; }
+}
+
+@media (max-width: 1100px) {
+  .ops-status-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 430px) {
+  .secondary-kpi-strip,
+  .hero .secondary-kpi-strip {
+    display: none;
+  }
+  .hac-row {
+    min-height: 58px;
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+  }
+  .hac-row-target {
+    display: none;
+  }
+}

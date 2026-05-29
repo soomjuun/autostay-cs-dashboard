@@ -92,6 +92,38 @@ function getCacheMeta(diag = {}) {
       : '메모리 캐시 · 서버 인스턴스별 5분 TTL · 인스턴스 변경 시 캐시가 달라질 수 있음',
   };
 }
+function getManagerNameById(d, id) {
+  if (!id) return '담당자 없음';
+  const mgr = (d.managers || []).find((m) => String(m.id) === String(id));
+  return mgr ? dispMgrName(mgr.name) : String(id);
+}
+function getTopLongDelayContext(d) {
+  const list = [...(d.longChats || [])].sort((a, b) => (b.resolutionMin || 0) - (a.resolutionMin || 0));
+  const top = list[0];
+  if (!top) return null;
+  const firstTag = Array.isArray(top.tags) && top.tags.length ? `#${top.tags[0]}` : '태그 없음';
+  return {
+    duration: fmtMin(top.resolutionMin),
+    manager: getManagerNameById(d, top.assigneeId),
+    tag: firstTag,
+    count: list.length,
+  };
+}
+function getComplaintContext(d) {
+  const tags = d.tags || { labels: [], values: [] };
+  const topTag = (tags.labels || [])
+    .map((label, i) => ({ label, count: tags.values[i] || 0 }))
+    .filter((item) => item.label.includes('컴플레인'))
+    .sort((a, b) => b.count - a.count)[0];
+  const longComplaintCount = (d.longChats || []).filter((c) =>
+    (Array.isArray(c.tags) ? c.tags : []).some((t) => t.includes('컴플레인'))
+  ).length;
+  return {
+    topTag: topTag ? `#${topTag.label}` : '컴플레인 태그',
+    topCount: topTag?.count || 0,
+    longComplaintCount,
+  };
+}
 function deltaArrow(pct) {
   if (pct == null || isNaN(pct)) return '<span class="delta-arrow flat">—</span>';
   if (pct > 5)  return `<span class="delta-arrow up">▲ ${pct}%</span>`;
@@ -339,6 +371,8 @@ function renderHeroAction(d, scoreObj) {
   const complaintPct = scoreObj.complaintPct || 0;
   const topMgr = managers[0];
   const topPct = topMgr ? Math.round((topMgr.count / total) * 100) : 0;
+  const longDelayCtx = getTopLongDelayContext(d);
+  const complaintCtx = getComplaintContext(d);
 
   // 우선순위 액션 모음
   const actions = [];
@@ -351,36 +385,42 @@ function renderHeroAction(d, scoreObj) {
       title: `미배정 상담 ${unassigned}건`,
       cta: '미배정 큐 보기',
       metric: unassigned + '건',
-      rec: '담당자를 배정하세요',
+      rec: '오픈 큐 소유권 공백',
+      target: '담당자 즉시 배정',
       url: chatTalkUnassignedUrl(),
     });
   }
   if (slow8h > 0) {
     actions.push({
       type: slow8h > 10 ? 'danger' : 'warn',
-      title: `장기 지연 ${slow8h}건 (8시간+)`,
+      title: `장기 지연 큐 우선 정리`,
       cta: '장기지연 보기',
       metric: slow8h + '건',
-      rec: '오래 지연된 상담부터 확인하세요',
+      rec: longDelayCtx
+        ? `최장 ${longDelayCtx.duration} · ${longDelayCtx.manager} · ${longDelayCtx.tag}`
+        : '오래 지연된 상담부터 확인하세요',
+      target: '8시간+ 완료 건 기준',
       onclick: 'openLongChatsPanel(); return false;',
     });
   }
   if (complaintPct >= 15) {
     actions.push({
       type: 'danger',
-      title: `컴플레인 ${complaintCount}건 (${complaintPct}%)`,
+      title: `컴플레인 원인 차단`,
       cta: '컴플레인 원인 보기',
       metric: complaintCount + '건',
-      rec: '컴플레인 원인을 확인하세요',
+      rec: `${complaintCtx.topTag} ${complaintCtx.topCount}건 · 장기지연 연계 ${complaintCtx.longComplaintCount}건`,
+      target: `${complaintPct}% · 즉시 대응 권장`,
       onclick: 'openComplaintPanel(); return false;',
     });
   } else if (complaintPct >= 8) {
     actions.push({
       type: 'warn',
-      title: `컴플레인 ${complaintCount}건 (${complaintPct}%)`,
+      title: `컴플레인 추이 점검`,
       cta: '컴플레인 추이 보기',
       metric: complaintCount + '건',
-      rec: '컴플레인 추이를 확인하세요',
+      rec: `${complaintCtx.topTag} 중심으로 추이 확인`,
+      target: `${complaintPct}% · 모니터링`,
       onclick: 'openComplaintPanel(); return false;',
     });
   }
@@ -390,7 +430,8 @@ function renderHeroAction(d, scoreObj) {
       title: `${dispMgrName(topMgr.name)} 처리 편중`,
       cta: '담당자 현황 보기',
       metric: topPct + '%',
-      rec: '담당자 현황을 확인하세요',
+      rec: `${topMgr.count}건 처리 · 전체 ${topPct}% 집중`,
+      target: '신규 문의 분산 권장',
       onclick: "_gotoTab('mgr-conc'); return false;",
     });
   }
@@ -400,7 +441,8 @@ function renderHeroAction(d, scoreObj) {
       title: `미해결 오픈 채팅 ${openChats}건`,
       cta: '오픈 상담 보기',
       metric: openChats + '건',
-      rec: '오픈 상담을 확인하세요',
+      rec: '진행 중 상담 상태 확인',
+      target: '누락 응답 방지',
       url: chatTalkOpenUrl(),
     });
   }
@@ -420,8 +462,8 @@ function renderHeroAction(d, scoreObj) {
     const warnCount   = actions.filter(a => a.type === 'warn').length;
     const totalCount = urgentCount + warnCount;
     const queueHeader = totalCount > 0
-      ? `<div class="aq-header"><div class="aq-title-row">오늘 처리할 일</div><div class="aq-chips-row"><span class="aq-total">${totalCount}건</span>${urgentCount > 0 ? '<span class="aq-urgent">즉시 ' + urgentCount + '건</span>' : ''}<span class="aq-warn">확인 ${warnCount}건</span></div></div>`
-      : `<div class="aq-header aq-ok">오늘 즉시 조치 필요 없음</div>`;
+      ? `<div class="aq-header"><div class="aq-title-row">운영 작업 큐</div><div class="aq-chips-row"><span class="aq-total">${totalCount}개 이슈</span>${urgentCount > 0 ? '<span class="aq-urgent">즉시 ' + urgentCount + '</span>' : ''}${warnCount > 0 ? '<span class="aq-warn">점검 ' + warnCount + '</span>' : ''}</div></div>`
+      : `<div class="aq-header aq-ok">즉시 조치 필요 항목 없음</div>`;
     hacBody.innerHTML = queueHeader + top3.map((a, i) => {
       const isClickable = !!(a.url || a.onclick);
       const inner = `
@@ -429,6 +471,7 @@ function renderHeroAction(d, scoreObj) {
         <div class="hac-row-body">
           <div class="hac-row-title">${a.title}</div>
           ${a.rec ? `<div class="hac-row-rec">${a.rec}</div>` : ''}
+          ${a.target ? `<div class="hac-row-target">${a.target}</div>` : ''}
           ${isClickable ? `<div class="hac-row-cta">${a.cta}</div>` : ''}
         </div>
         <div class="hac-row-metric">${a.metric}</div>
@@ -475,34 +518,35 @@ function computeHealthScore(d) {
   }
   const complaintRate = complaints / complaintBase;
   let deductComplaint = 0;
-  if (complaintRate > 0.20) deductComplaint = 25;
-  else if (complaintRate > 0.15) deductComplaint = 18;
-  else if (complaintRate > 0.10) deductComplaint = 10;
-  else if (complaintRate > 0.05) deductComplaint = 4;
+  if (complaintRate > 0.20) deductComplaint = 30;
+  else if (complaintRate > 0.15) deductComplaint = 24;
+  else if (complaintRate > 0.10) deductComplaint = 16;
+  else if (complaintRate > 0.05) deductComplaint = 8;
   score -= deductComplaint;
 
   const slowRate = (rb['8시간+'] || 0) / resTotal;
   let deductSlow = 0;
-  if (slowRate > 0.50) deductSlow = 20;
-  else if (slowRate > 0.35) deductSlow = 14;
-  else if (slowRate > 0.20) deductSlow = 8;
-  if ((rb['2~8시간'] || 0) / resTotal > 0.30) deductSlow += 5;
+  if (slowRate > 0.50) deductSlow = 28;
+  else if (slowRate > 0.35) deductSlow = 22;
+  else if (slowRate > 0.20) deductSlow = 14;
+  if ((rb['2~8시간'] || 0) / resTotal > 0.30) deductSlow += 6;
   score -= deductSlow;
 
   const managers = (d.managers || []).filter((m) => !EXCLUDED_MANAGERS.includes(m.name));
   let deductConc = 0;
   if (managers.length > 0) {
     const topPct = (managers[0].count || 0) / total;
-    if (topPct > 0.85) deductConc = 20;
+    if (topPct > 0.85) deductConc = 18;
     else if (topPct > 0.70) deductConc = 12;
-    else if (topPct > 0.55) deductConc = 5;
+    else if (topPct > 0.55) deductConc = 6;
   }
   score -= deductConc;
 
   const quickRate = ((rb['0~5분'] || 0) + (rb['5~30분'] || 0)) / resTotal;
-  if (quickRate > 0.50) score += 10;
-  else if (quickRate > 0.30) score += 5;
+  if (quickRate > 0.50) score += 6;
+  else if (quickRate > 0.30) score += 3;
   if (d.summary.openChats > 10) score -= 5;
+  if (complaintRate > 0.15 && slowRate > 0.35) score = Math.min(score, 64);
 
   return {
     score: Math.max(0, Math.min(100, Math.round(score))),
@@ -515,9 +559,9 @@ function computeHealthScore(d) {
 }
 
 function getGrade(score) {
-  if (score >= 80) return { grade: 'A', label: '양호', color: '#15803d' };
-  if (score >= 65) return { grade: 'B', label: '보통', color: '#b45309' };
-  if (score >= 50) return { grade: 'C', label: '주의', color: '#b45309' };
+  if (score >= 85) return { grade: 'A', label: '안정', color: '#15803d' };
+  if (score >= 70) return { grade: 'B', label: '관리', color: '#b45309' };
+  if (score >= 55) return { grade: 'C', label: '주의', color: '#ea580c' };
   return { grade: 'D', label: '위험', color: '#be123c' };
 }
 
@@ -874,15 +918,74 @@ function renderKPIs(d, scoreObj) {
       </div>
     </div>` },
   ];
-  // 보조 KPI (index 0=미배정, index 4=담당자편중) → secondary grid 분리
+  // 상단 메인 KPI는 고객 영향도가 큰 3개만 유지하고, 운영 보조 지표는 별도 상태 레일로 분리
   const _secIdxSet = new Set([0, 4]);
   const primaryCards = kpiCards.filter((_, i) => !_secIdxSet.has(i));
-  const secondaryCards = kpiCards.filter((_, i) => _secIdxSet.has(i));
   primaryCards.sort((a, b) => b.sev - a.sev);
-  secondaryCards.sort((a, b) => b.sev - a.sev);
   grid.innerHTML = primaryCards.map(c => c.html).join('');
+
   const kpiGridSec = document.getElementById('kpiGridSecondary');
-  if (kpiGridSec) kpiGridSec.innerHTML = secondaryCards.map(c => c.html).join('');
+  if (kpiGridSec) {
+    kpiGridSec.className = 'ops-status-rail';
+    const fmtDateShort = (ts) => {
+      if (!ts) return null;
+      const dt = new Date(ts + 9 * 3600 * 1000);
+      return `${dt.getUTCMonth() + 1}/${dt.getUTCDate()}`;
+    };
+    const minShort = fmtDateShort(dataNote.processedMinAt);
+    const maxShort = fmtDateShort(dataNote.processedMaxAt);
+    const rangeShort = minShort && maxShort
+      ? (minShort === maxShort ? minShort : `${minShort}-${maxShort}`)
+      : (currentDays === 'all' ? '전체' : `${currentDays}일`);
+    const dataSpanDays = (dataNote.processedMinAt && dataNote.processedMaxAt)
+      ? Math.max(1, Math.round((dataNote.processedMaxAt - dataNote.processedMinAt) / 86400000) + 1)
+      : null;
+    const cacheTone = cacheMeta.source === 'kv' ? 'good' : 'neutral';
+    const statusItems = [
+      {
+        tone: unassigned > 0 ? 'danger' : 'good',
+        label: '미배정',
+        value: unassigned > 0 ? `${unassigned}건` : '없음',
+        sub: unassigned > 0 ? '담당자 배정 필요' : '오픈 큐 정상',
+        url: chatTalkUnassignedUrl(),
+      },
+      {
+        tone: topPct > 80 ? 'danger' : topPct > 60 ? 'warn' : 'good',
+        label: '담당자 편중',
+        value: `${topPct}%`,
+        sub: topMgr ? `${dispMgrName(topMgr.name)} · ${topMgr.count}건` : '담당자 없음',
+        onclick: "_gotoTab('mgr-conc'); return false;",
+      },
+      {
+        tone: cacheTone,
+        label: '캐시',
+        value: cacheMeta.shortLabel,
+        sub: cacheMeta.source === 'kv' ? '공유 캐시 사용' : '인스턴스 한정',
+      },
+      {
+        tone: isSampled ? 'warn' : 'neutral',
+        label: '데이터 범위',
+        value: rangeShort,
+        sub: dataSpanDays ? `실데이터 ${dataSpanDays}일 · ${totalChats}건` : `${totalChats}건 기준`,
+      },
+    ];
+    kpiGridSec.innerHTML = statusItems.map((item) => {
+      const content = `
+        <span class="ops-status-dot"></span>
+        <span class="ops-status-body">
+          <span class="ops-status-label">${item.label}</span>
+          <span class="ops-status-value">${item.value}</span>
+          <span class="ops-status-sub">${item.sub}</span>
+        </span>`;
+      if (item.url) {
+        return `<a class="ops-status-item osi-${item.tone}" href="${item.url}" target="_blank" rel="noopener noreferrer">${content}</a>`;
+      }
+      if (item.onclick) {
+        return `<button class="ops-status-item osi-${item.tone}" type="button" onclick="${item.onclick}">${content}</button>`;
+      }
+      return `<div class="ops-status-item osi-${item.tone}">${content}</div>`;
+    }).join('');
+  }
 }
 
 /* ─── Trend ──────────────────────────────────────────────────────────── */
@@ -3489,7 +3592,14 @@ function clearPeriodUI(range) {
   const kpiGrid = document.getElementById('kpiGrid');
   if (kpiGrid) kpiGrid.innerHTML = _skCard.repeat(3);
   const kpiGridSec = document.getElementById('kpiGridSecondary');
-  if (kpiGridSec) kpiGridSec.innerHTML = _skCard.repeat(2);
+  if (kpiGridSec) {
+    kpiGridSec.className = 'ops-status-rail is-loading';
+    kpiGridSec.innerHTML = `
+      <div class="ops-status-skeleton"></div>
+      <div class="ops-status-skeleton"></div>
+      <div class="ops-status-skeleton"></div>
+      <div class="ops-status-skeleton"></div>`;
+  }
   // 오늘 처리할 일: 로딩 메시지로 교체
   const hacBody = document.getElementById('hacBody');
   if (hacBody) {
