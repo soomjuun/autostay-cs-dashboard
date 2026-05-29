@@ -86,6 +86,12 @@
         <div id="kpiGrid" class="kpi-grid"></div>
       </div>
 
+      <!-- 보조 KPI rail: 운영 정상성 보조 지표 -->
+      <div class="secondary-kpi-strip">
+        <div class="secondary-kpi-label">운영 참고 지표</div>
+        <div id="kpiGridSecondary" class="kpi-grid kpi-grid--secondary"></div>
+      </div>
+
       <div class="hero-meta">
         <span id="channelName" class="hero-channel-name">—</span>
         <span class="hero-meta-sep">·</span>
@@ -146,12 +152,6 @@
         </div>
       </div>
     </div>
-  </div>
-
-  <!-- 보조 KPI strip: 미배정·담당자편중 — 툴바 아래, 폴드 밖 -->
-  <div class="secondary-kpi-strip">
-    <div class="secondary-kpi-label">운영 참고 지표</div>
-    <div id="kpiGridSecondary" class="kpi-grid kpi-grid--secondary"></div>
   </div>
 
   <!-- 모바일 필터 바텀시트 (≤430px) — position:fixed, body 레벨 -->
