@@ -135,6 +135,18 @@ function getManagerConcentration(d) {
   const totalPct = topMgr ? Math.round((topMgr.count || 0) / totalChats * 100) : 0;
   return { managers, topMgr, assignedTotal, assignedPct, totalPct };
 }
+function getDataSpanDays(dataNote = {}) {
+  return (dataNote.processedMinAt && dataNote.processedMaxAt)
+    ? Math.max(1, Math.round((dataNote.processedMaxAt - dataNote.processedMinAt) / 86400000) + 1)
+    : null;
+}
+function isSameAcrossMainPeriods(dataNote = {}) {
+  const spanDays = getDataSpanDays(dataNote);
+  const collected = Number(dataNote.collected || 0);
+  const processed = Number(dataNote.processed || 0);
+  const limit = Number(dataNote.limit || 1000);
+  return Boolean(spanDays && spanDays <= 7 && collected > 0 && collected === processed && collected < limit && !dataNote.isSampled);
+}
 function deltaArrow(pct) {
   if (pct == null || isNaN(pct)) return '<span class="delta-arrow flat">—</span>';
   if (pct > 5)  return `<span class="delta-arrow up">▲ ${pct}%</span>`;
@@ -758,9 +770,8 @@ function renderHeroDecisionSummary(d, scoreObj) {
   const mgrConc = getManagerConcentration(d);
   const cacheMeta = getCacheMeta(d.diagnostics || {});
   const dataNote = d.dataNote || {};
-  const spanDays = (dataNote.processedMinAt && dataNote.processedMaxAt)
-    ? Math.max(1, Math.round((dataNote.processedMaxAt - dataNote.processedMinAt) / 86400000) + 1)
-    : null;
+  const spanDays = getDataSpanDays(dataNote);
+  const sameAcrossPeriods = isSameAcrossMainPeriods(dataNote);
   const fcrRate = d.fcrStats?.fcrRate;
   const frtMedian = d.frtStats?.median;
   const statusTone = scoreObj.score >= 80 ? 'good' : scoreObj.score >= 60 ? 'warn' : 'danger';
@@ -775,6 +786,7 @@ function renderHeroDecisionSummary(d, scoreObj) {
       <span class="hds-chip ${mgrConc.assignedPct > 60 ? 'danger' : 'good'}">편중 ${mgrConc.assignedPct}%</span>
       <span class="hds-chip good">FRT ${frtMedian != null ? fmtMin(frtMedian) : '—'}</span>
       <span class="hds-chip good">FCR ${fcrRate != null ? fcrRate + '%' : '—'}</span>
+      ${sameAcrossPeriods ? '<span class="hds-chip warn">기간별 동일</span>' : ''}
       <span class="hds-chip neutral">${spanDays ? `실데이터 ${spanDays}일` : '실데이터'}</span>
       <span class="hds-chip neutral">${cacheMeta.shortLabel}</span>
     </div>`;
@@ -798,6 +810,7 @@ function renderKPIs(d, scoreObj) {
   const dataNote = d.dataNote || {};
   const isSampled = dataNote.isSampled || false;
   const limitVal = dataNote.limit || 1000;
+  const sameAcrossPeriods = isSameAcrossMainPeriods(dataNote);
   const diagForCache = d.diagnostics || {};
   const cacheMeta = getCacheMeta(diagForCache);
 
@@ -861,9 +874,9 @@ function renderKPIs(d, scoreObj) {
     const _allInPeriod = !isSampled && dataNote.collected > 0 && dataNote.collected === dataNote.processed;
     const _dateRangeTip = _dateRangeStr ? `&#10;실제 포함 기간: ${_dateRangeStr}` : '';
     const _samePeriodsNote = _allInPeriod
-      ? ` · <span style="color:var(--amber);font-size:10px;font-weight:700;cursor:help"
-            data-tip="전체 closed 채팅이 ${dataNote.collected}건이며, 선택 기간(${currentDays === 'all' ? '전체' : `최근 ${currentDays}일`}) 내에 모두 포함됩니다.&#10;&#10;→ 14일·30일·전체 탭을 전환해도 동일한 결과가 표시되는 것이 정상입니다.&#10;→ API 수집 한도(${limitVal}건) 미도달 · 실제 데이터 ${dataNote.collected}건뿐${_dateRangeTip}&#10;&#10;현재 요청 파라미터: days=${currentDays}"
-            tabindex="0">기간 확장 영향 없음 ⓘ</span>`
+      ? ` · <span style="color:var(--amber);font-size:10px;font-weight:800;cursor:help"
+            data-tip="현재 수집된 closed 채팅 ${dataNote.collected}건이 선택 기간 안에 모두 포함됩니다.&#10;${sameAcrossPeriods ? '특히 실제 데이터 범위가 7일 이내라 7일·14일·30일·전체 핵심 지표가 동일하게 보이는 것이 정상입니다.' : '선택 기간보다 오래된 원천 데이터가 없으면 기간을 넓혀도 지표가 바뀌지 않습니다.'}&#10;API 수집 한도(${limitVal}건) 미도달${_dateRangeTip}&#10;현재 요청 파라미터: days=${currentDays}"
+            tabindex="0">${sameAcrossPeriods ? '7/14/30/전체 동일 데이터 ⓘ' : '기간 확장 영향 없음 ⓘ'}</span>`
       : '';
     const _dateRangeNote = _dateRangeStr
       ? ` <span style="color:var(--muted);font-size:10px" data-tip="수집된 채팅의 실제 날짜 범위 (KST 기준)" tabindex="0" style="cursor:help">실제 범위 ${_dateRangeStr}</span>`
@@ -980,9 +993,7 @@ function renderKPIs(d, scoreObj) {
     const rangeShort = minShort && maxShort
       ? (minShort === maxShort ? minShort : `${minShort}-${maxShort}`)
       : (currentDays === 'all' ? '전체' : `${currentDays}일`);
-    const dataSpanDays = (dataNote.processedMinAt && dataNote.processedMaxAt)
-      ? Math.max(1, Math.round((dataNote.processedMaxAt - dataNote.processedMinAt) / 86400000) + 1)
-      : null;
+    const dataSpanDays = getDataSpanDays(dataNote);
     const cacheTone = cacheMeta.source === 'kv' ? 'good' : 'neutral';
     const statusItems = [
       {
@@ -1009,7 +1020,7 @@ function renderKPIs(d, scoreObj) {
         tone: isSampled ? 'warn' : 'neutral',
         label: '데이터 범위',
         value: rangeShort,
-        sub: dataSpanDays ? `실데이터 ${dataSpanDays}일 · ${totalChats}건` : `${totalChats}건 기준`,
+        sub: sameAcrossPeriods ? `기간별 동일 · ${totalChats}건` : (dataSpanDays ? `실데이터 ${dataSpanDays}일 · ${totalChats}건` : `${totalChats}건 기준`),
       },
     ];
     kpiGridSec.innerHTML = statusItems.map((item) => {
@@ -2715,12 +2726,13 @@ function renderDiagnostics(d) {
 
     // 기간별 동일 결과 여부
     const _allInPeriodDiag = !isSampledDiag && typeof collected === 'number' && typeof processedCnt === 'number' && collected === processedCnt;
+    const _sameAcrossMainDiag = isSameAcrossMainPeriods(dn);
     const sameNote = _allInPeriodDiag
       ? `<div class="diag-note" style="background:rgba(13,148,136,.08);border-left:3px solid var(--teal);padding:10px 12px;margin-top:10px;border-radius:6px">
           <strong>기간별 동일 결과 — 정상 동작입니다</strong><br>
-          전체 수집 ${collected}건이 선택 기간 내에 모두 포함되어 14일·30일·전체 탭에서 동일한 수치가 표시됩니다.<br>
+          전체 수집 ${collected}건이 선택 기간 내에 모두 포함되어 ${_sameAcrossMainDiag ? '7일·14일·30일·전체' : '더 긴 기간'} 탭에서 동일한 수치가 표시됩니다.<br>
           현재 요청: <code>days=${currentDays}</code> · 기간 필터 후 처리: ${processedCnt}건 / 수집: ${collected}건<br>
-          <em>원인: closed 채팅이 ${collected}건뿐이며 API 한도(${limitValDiag}건)에 도달하지 않음</em>
+          <em>원인: 기간 기준 원천 데이터가 ${dateRangeStr} 범위에 있고 API 한도(${limitValDiag}건)에 도달하지 않음</em>
         </div>`
       : '';
 
@@ -2731,6 +2743,7 @@ function renderDiagnostics(d) {
         <div class="diag-stat"><span class="diag-stat-lbl">처리 건수 (기간 필터 후)</span><span class="diag-stat-val">${processedCnt}건</span></div>
         <div class="diag-stat"><span class="diag-stat-lbl">페이지 수</span><span class="diag-stat-val">${pages}p</span></div>
         <div class="diag-stat"><span class="diag-stat-lbl">데이터 날짜 범위</span><span class="diag-stat-val">${dateRangeStr}</span></div>
+        <div class="diag-stat"><span class="diag-stat-lbl">기간 기준</span><span class="diag-stat-val">${dn.periodBasis || 'closedAt/updatedAt/createdAt'}</span></div>
         <div class="diag-stat"><span class="diag-stat-lbl">요청 파라미터</span><span class="diag-stat-val"><code>days=${currentDays}</code></span></div>
         <div class="diag-stat"><span class="diag-stat-lbl">상한 도달 여부</span>${sampledBadge}</div>
       </div>
@@ -3154,8 +3167,9 @@ function fullRender(data) {
 /* ─── Fetch ─────────────────────────────────────────────────────────── */
 async function fetchData() {
   const qs = currentDays === 'all' ? 'days=all' : `days=${currentDays}`;
+  const freshQs = forceRefreshRequested ? '&fresh=1' : '';
   const ts = Date.now();
-  const res = await fetch(`/api/data?${qs}&_t=${ts}`, { cache: 'no-store' });
+  const res = await fetch(`/api/data?${qs}${freshQs}&_t=${ts}`, { cache: 'no-store' });
   if (res.status === 401) {
     try { const body = await res.json(); if (body && body.redirect) { window.location.href = body.redirect; return; } } catch (_) {}
     window.location.href = '/api/auth';
@@ -3486,8 +3500,8 @@ document.addEventListener('DOMContentLoaded', () => {
       tabBtn.setAttribute('aria-pressed', 'true');
       currentDays = range === 'all' ? 'all' : parseInt(range);
       // 기간 변경 시 집계 기준 안내 toast
-      const rangeLabel = range === 'all' ? '전체 기간 (최대 500건)' : `최근 ${range}일`;
-      showToast(`${rangeLabel} 기준 · 채널톡 API 집계 · 5분 캐시 적용`, 'info', 3200);
+      const rangeLabel = range === 'all' ? '전체 기간 (최대 1000건)' : `최근 ${range}일`;
+      showToast(`${rangeLabel} 기준 조회 · 실제 데이터 범위가 같으면 핵심 지표도 동일합니다`, 'info', 3600);
       // 기간 전환 즉시 basis header + hero inline meta를 업데이트하여 버튼 상태와 표시 기간이 일치하도록 함
       const newRangeText = range === 'all' ? '전체 기간' : `최근 ${range}일`;
       const kpiHeaderEl = document.getElementById('kpiBasisHeader');

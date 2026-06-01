@@ -892,7 +892,7 @@ canvas { display: block; }
 /* ══════════════════════════════════════════════════════════════════════════ */
 .tag-bar-chart { display: flex; flex-direction: column; gap: 5px; }
 .rt-row {
-  display: grid; grid-template-columns: 110px 1fr 50px 36px;
+  display: grid; grid-template-columns: 110px minmax(0, 1fr) minmax(72px, max-content);
   align-items: center; gap: 8px; font-size: 11.5px; padding: 4px 0;
 }
 .rt-label { color: var(--text); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -905,7 +905,7 @@ canvas { display: block; }
 }
 .rt-bar.complaint-bar { background: var(--rose); }
 .rt-bar.warn-bar      { background: var(--amber); }
-.rt-value { color: var(--text); text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.rt-value { color: var(--text); text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; word-break: keep-all; }
 .rt-bar-label {
   font-size: 9px; font-weight: 600; padding: 1px 6px;
   border-radius: 4px; text-align: center; white-space: nowrap;
@@ -3825,6 +3825,11 @@ a.ops-status-item {
   background: #ECFDF5;
   color: #047857;
 }
+.hds-chip.warn {
+  border-color: #FFE8B3;
+  background: #FFFBEB;
+  color: #B45309;
+}
 .hds-chip.neutral {
   border-color: #E5E8EB;
   background: #F7F8FA;
@@ -3865,4 +3870,40 @@ a.ops-status-item {
     font-size: 10.5px;
     padding: 4px 8px;
   }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* V4.6 — Korean Line-Break Guard                                             */
+/* ══════════════════════════════════════════════════════════════════════════ */
+.app,
+.modal-box,
+.cg-panel,
+.kpi-card,
+.kpi-card-ok {
+  word-break: keep-all;
+}
+.range-tab,
+.toolbar-btn,
+.filter-chip,
+.delta,
+.data-badge,
+.kpi-label,
+.kco-label,
+.rt-label,
+.rt-value,
+.res-big-lbl,
+.gauge-panel-badge,
+.crr-action-tag,
+.mrc-status,
+.agent-comment,
+.tr-eval,
+.action-urgent,
+.action-check,
+.action-ok,
+.ops-status-label,
+.ops-status-value,
+.ops-status-sub,
+.hds-chip {
+  word-break: keep-all;
+  white-space: nowrap;
 }
