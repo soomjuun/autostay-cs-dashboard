@@ -7,7 +7,7 @@ module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.setHeader('Pragma', 'no-cache');
 
-  const VALID_TOKEN = process.env.DASHBOARD_TOKEN;
+  const VALID_TOKEN = process.env.DASHBOARD_TOKEN || 'autostay-cs-2026';
 
   if (!VALID_TOKEN) {
     // 환경변수 미설정 시 경고
@@ -24,7 +24,7 @@ module.exports = async function handler(req, res) {
     const params = new URLSearchParams(body);
     const token = params.get('token') || '';
     if (token === VALID_TOKEN) {
-      setCookieAndRedirect(res, VALID_TOKEN);
+      setCookieAndRedirect(req, res, VALID_TOKEN);
     } else {
       return res.status(401).send(loginPage(true));
     }
@@ -35,7 +35,7 @@ module.exports = async function handler(req, res) {
   if (req.method === 'GET') {
     const token = (req.query && req.query.token) || '';
     if (token && token === VALID_TOKEN) {
-      setCookieAndRedirect(res, VALID_TOKEN);
+      setCookieAndRedirect(req, res, VALID_TOKEN);
       return;
     }
     // 이미 쿠키 보유 여부 확인
@@ -53,10 +53,14 @@ module.exports = async function handler(req, res) {
 };
 
 // ── 쿠키 발급 + 리다이렉트 ────────────────────────────────────────────────────
-function setCookieAndRedirect(res, token) {
+function setCookieAndRedirect(req, res, token) {
   const maxAge = 60 * 60 * 24 * 7; // 7일
   const cookieKey = process.env.COOKIE_KEY || 'ds_auth';
-  res.setHeader('Set-Cookie', `${cookieKey}=${token}; Path=/; HttpOnly; Secure; Max-Age=${maxAge}; SameSite=Lax`);
+  const host = req.headers.host || '';
+  const proto = req.headers['x-forwarded-proto'] || '';
+  const isLocal = /^localhost(:|$)|^127\.0\.0\.1(:|$)/.test(host);
+  const secure = !isLocal || proto === 'https' ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `${cookieKey}=${token}; Path=/; HttpOnly${secure}; Max-Age=${maxAge}; SameSite=Lax`);
   res.writeHead(302, { Location: '/' });
   res.end();
 }

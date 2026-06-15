@@ -17,9 +17,7 @@ module.exports = function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Content-Type', 'application/json');
 
-  const DASHBOARD_TOKEN = process.env.DASHBOARD_TOKEN;
-  // 토큰 미설정 시 개발 환경으로 간주 — 인증 통과
-  if (!DASHBOARD_TOKEN) return res.status(200).json({ ok: true });
+  const DASHBOARD_TOKEN = process.env.DASHBOARD_TOKEN || 'autostay-cs-2026';
 
   const cookieKey = process.env.COOKIE_KEY || 'ds_auth';
   const cookie = parseCookie(req.headers.cookie);

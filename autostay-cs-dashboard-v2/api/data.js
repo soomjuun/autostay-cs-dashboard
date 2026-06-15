@@ -11,7 +11,107 @@
 //   채널 ID 응답에 포함 (딥링크용)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const { cacheGet, cacheSet, KV_ENABLED } = require('./_cache');
+const { cacheGet, cacheSet, persistentGet, persistentSet, KV_ENABLED } = require('./_cache');
+
+const SNAPSHOT_KEY = 'cs:daily-snapshots:v1';
+const FALLBACK_DASHBOARD_TOKEN = 'autostay-cs-2026';
+
+function kstDateKey(ts = Date.now()) {
+  const d = new Date(ts + 9 * 3600 * 1000);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function compactSnapshot(result) {
+  const today = kstDateKey();
+  const todayLabel = today.slice(5).replace(/^0/, '').replace('-0', '/').replace('-', '/');
+  const trendLabels = result.dailyTrend?.labels || [];
+  const trendValues = result.dailyTrend?.values || [];
+  const complaintValues = result.complaintTrend?.complaints || [];
+  const todayIdx = trendLabels.lastIndexOf(todayLabel);
+  const dailyTotal = todayIdx >= 0 ? (trendValues[todayIdx] || 0) : 0;
+  const dailyComplaints = todayIdx >= 0 ? (complaintValues[todayIdx] || 0) : 0;
+  const windowTotal = result.summary?.totalChats || 0;
+  const windowComplaints = (result.complaintTrend?.complaints || []).reduce((a, b) => a + b, 0);
+  return {
+    date: today,
+    capturedAt: result.updatedAt,
+    range: result.range,
+    dailyTotal,
+    dailyComplaints,
+    dailyComplaintRate: dailyTotal ? Math.round((dailyComplaints / dailyTotal) * 100) : 0,
+    windowTotal,
+    windowComplaints,
+    openChats: result.summary?.openChats || 0,
+    unassignedChats: result.summary?.unassignedChats || 0,
+    avgResolutionMin: result.summary?.avgResolutionMin || 0,
+    fcrRate: result.fcrStats?.fcrRate ?? null,
+    frtMedian: result.frtStats?.median ?? null,
+    resolutionSampleN: Object.values(result.resolutionBuckets || {}).reduce((a, b) => a + b, 0),
+    unknownTagCount: (result.tags?.labels || []).reduce((sum, label, i) => {
+      const normalized = String(label || '').toLowerCase();
+      return sum + (['파악불가', '미분류', '태그없음', '태그 없음', 'unknown', 'uncategorized'].some((p) => normalized.includes(p.toLowerCase())) ? (result.tags.values?.[i] || 0) : 0);
+    }, 0),
+  };
+}
+
+async function recordDailySnapshot(result) {
+  if (!KV_ENABLED) {
+    return { enabled: false, source: 'none', count: 0, firstDate: null, lastDate: null, message: 'Vercel KV 미연결' };
+  }
+  try {
+    const existing = (await persistentGet(SNAPSHOT_KEY)).value || {};
+    const byDate = existing.byDate && typeof existing.byDate === 'object' ? existing.byDate : {};
+    const snap = compactSnapshot(result);
+    byDate[snap.date] = snap;
+    const keys = Object.keys(byDate).sort();
+    const trimmed = keys.slice(-120).reduce((acc, key) => {
+      acc[key] = byDate[key];
+      return acc;
+    }, {});
+    await persistentSet(SNAPSHOT_KEY, { updatedAt: new Date().toISOString(), byDate: trimmed });
+    const dates = Object.keys(trimmed).sort();
+    const trend = {
+      labels: dates,
+      total: dates.map((date) => trimmed[date].dailyTotal || 0),
+      complaints: dates.map((date) => trimmed[date].dailyComplaints || 0),
+    };
+    const compareDays = result.dataNote?.daysParam || 7;
+    const currentSlice = trend.total.slice(-compareDays);
+    const previousSlice = trend.total.slice(-compareDays * 2, -compareDays);
+    const currentTotal = currentSlice.reduce((a, b) => a + b, 0);
+    const previousTotal = previousSlice.reduce((a, b) => a + b, 0);
+    const last7 = trend.total.slice(-7);
+    const prev7 = trend.total.slice(-14, -7);
+    const last7Avg = last7.length ? Math.round(last7.reduce((a, b) => a + b, 0) / last7.length) : 0;
+    const prev7Avg = prev7.length ? Math.round(prev7.reduce((a, b) => a + b, 0) / prev7.length) : 0;
+    return {
+      enabled: true,
+      source: 'kv',
+      count: dates.length,
+      firstDate: dates[0] || null,
+      lastDate: dates[dates.length - 1] || null,
+      message: dates.length >= 14 ? '스냅샷 기준 추세 비교 가능' : '스냅샷 누적 중',
+      trend,
+      snapshotWow: {
+        currentTotal,
+        previousTotal,
+        delta: currentTotal - previousTotal,
+        deltaPct: previousTotal > 0 ? Math.round(((currentTotal - previousTotal) / previousTotal) * 100) : null,
+      },
+      snapshotForecast: {
+        last7Avg,
+        last14Avg: prev7Avg,
+        momentum: prev7Avg > 0 ? Math.round(((last7Avg - prev7Avg) / prev7Avg) * 100) : 0,
+        nextDayProjection: last7Avg,
+      },
+    };
+  } catch (e) {
+    return { enabled: false, source: 'error', count: 0, firstDate: null, lastDate: null, message: '스냅샷 저장 실패' };
+  }
+}
 
 // ── 쿠키 파싱 ─────────────────────────────────────────────────────────────
 function parseCookie(str) {
@@ -81,7 +181,7 @@ function classifyComplaint(tags) {
 
 module.exports = async function handler(req, res) {
   // ── 인증 게이트 ─────────────────────────────────────────────────────
-  const DASHBOARD_TOKEN = process.env.DASHBOARD_TOKEN;
+  const DASHBOARD_TOKEN = process.env.DASHBOARD_TOKEN || FALLBACK_DASHBOARD_TOKEN;
   if (DASHBOARD_TOKEN) {
     const cookieKey = process.env.COOKIE_KEY || 'ds_auth';
     const cookie = parseCookie(req.headers.cookie);
@@ -259,20 +359,23 @@ module.exports = async function handler(req, res) {
       service: 0, system: 0, pricing: 0, churn: 0, other: 0
     };
     const complaintCategoryDaily = {}; // {dayKey: {service, system, ...}}
+    const getPeriodTs = (c) => c.closedAt || c.updatedAt || c.createdAt;
 
     // ── 채팅 처리 ──────────────────────────────────────────────────
     for (const c of allChats) {
-      if (cutoffMs && c.createdAt < cutoffMs) {
-        if (days && c.createdAt >= cutoffMs - days * 24 * 3600 * 1000) {
-          const dt = toKST(c.createdAt);
+      const periodTs = getPeriodTs(c);
+      if (!periodTs) continue;
+      if (cutoffMs && periodTs < cutoffMs) {
+        if (days && periodTs >= cutoffMs - days * 24 * 3600 * 1000) {
+          const dt = toKST(periodTs);
           const k = `${dt.getMonth() + 1}/${dt.getDate()}`;
           if (k in dayCountsPrev) dayCountsPrev[k]++;
         }
         continue;
       }
       processed++;
-      if (c.createdAt < processedMinAt) processedMinAt = c.createdAt;
-      if (c.createdAt > processedMaxAt) processedMaxAt = c.createdAt;
+      if (periodTs < processedMinAt) processedMinAt = periodTs;
+      if (periodTs > processedMaxAt) processedMaxAt = periodTs;
 
       if (!c.assigneeId) unassigned++;
 
@@ -285,7 +388,7 @@ module.exports = async function handler(req, res) {
         userChatCount[c.userId] = (userChatCount[c.userId] || 0) + 1;
       }
 
-      const dt = toKST(c.createdAt);
+      const dt = toKST(periodTs);
       const dayKey = `${dt.getMonth() + 1}/${dt.getDate()}`;
       if (dayKey in dayCounts) dayCounts[dayKey]++;
 
@@ -380,6 +483,7 @@ module.exports = async function handler(req, res) {
               resolutionMin: Math.round(mins),
               source: srcKey,
               createdAt: c.createdAt,
+              periodAt: periodTs,
             });
           }
         }
@@ -493,6 +597,10 @@ module.exports = async function handler(req, res) {
     const p95Res = pct(resTimes, 0.95);
     const timesEx8h = resTimes.filter((t) => t < 480);
     const avgEx8h = timesEx8h.length ? Math.round(timesEx8h.reduce((a, b) => a + b, 0) / timesEx8h.length) : null;
+    const unknownTagCount = Object.entries(tagCounts).reduce((sum, [tag, count]) => {
+      const normalized = String(tag || '').toLowerCase();
+      return sum + (['파악불가', '미분류', '태그없음', '태그 없음', 'unknown', 'uncategorized'].some((p) => normalized.includes(p.toLowerCase())) ? count : 0);
+    }, 0);
 
     // B-1: FRT 통계
     const frtStats = frtTimes.length ? {
@@ -599,6 +707,7 @@ module.exports = async function handler(req, res) {
         processedMinAt: processedMinAt === Infinity ? null : processedMinAt,
         processedMaxAt: processedMaxAt === -Infinity ? null : processedMaxAt,
         daysParam: days,
+        periodBasis: 'closedAt || updatedAt || createdAt',
       },
       channel: { name: channelInfo.name || '오토스테이 CS', id: channelInfo.id || null },
       summary: {
@@ -608,7 +717,17 @@ module.exports = async function handler(req, res) {
         avgResolutionMin: avgRes,
         peakDay: peakEntry ? { label: peakEntry[0], count: peakEntry[1] } : null,
       },
-      resolutionStats: { avg: avgRes, median: medianRes, p75: p75Res, p90: p90Res, p95: p95Res, avgEx8h },
+      resolutionStats: {
+        avg: avgRes, median: medianRes, p75: p75Res, p90: p90Res, p95: p95Res, avgEx8h,
+        agentHandleTimeAvailable: false,
+        agentHandleTimeNote: 'Channel Talk chat list 응답에는 고객 미응답 구간을 제거할 이벤트/메시지 타임라인이 포함되지 않아 순수 상담원 처리시간은 별도 메시지 수집 API가 필요합니다.',
+      },
+      taggingQuality: {
+        unknownCount: unknownTagCount,
+        unknownRate: processed > 0 ? Math.round((unknownTagCount / processed) * 100) : 0,
+        autoTaggingAvailable: false,
+        blocker: '현재 API 응답에는 상담 본문 텍스트가 없어 LLM 본문 자동분류를 실행할 수 없습니다. user-chat 메시지 본문 수집 후 서버 분류 파이프라인이 필요합니다.',
+      },
       frtStats,                                  // B-1: FRT 통계
       fcrStats,                                  // B-2: FCR
       repeatStats,                               // B-2: 반복 문의
@@ -635,6 +754,11 @@ module.exports = async function handler(req, res) {
         createdAt: c.createdAt,
       })),
     };
+
+    result.snapshotStore = await recordDailySnapshot(result);
+    if (result.snapshotStore.trend) result.snapshotTrend = result.snapshotStore.trend;
+    if (result.snapshotStore.snapshotWow) result.snapshotWow = result.snapshotStore.snapshotWow;
+    if (result.snapshotStore.snapshotForecast) result.snapshotForecast = result.snapshotStore.snapshotForecast;
 
     // ── 캐시 저장 (5분 TTL) ──────────────────────────────────────
     if (!skipCache) {

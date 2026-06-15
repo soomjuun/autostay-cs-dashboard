@@ -26,7 +26,8 @@ async function kvGet(key) {
 async function kvSet(key, value, ttlSec = 300) {
   if (!KV_ENABLED) return false;
   try {
-    const r = await fetch(`${KV_URL}/set/${encodeURIComponent(key)}?EX=${ttlSec}`, {
+    const ttlQuery = ttlSec ? `?EX=${ttlSec}` : '';
+    const r = await fetch(`${KV_URL}/set/${encodeURIComponent(key)}${ttlQuery}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${KV_TOKEN}`,
@@ -72,4 +73,20 @@ async function cacheSet(key, value, ttlSec = 300) {
   await kvSet(key, value, ttlSec);
 }
 
-module.exports = { cacheGet, cacheSet, KV_ENABLED };
+async function persistentGet(key) {
+  const memHit = memGet(key);
+  if (memHit) return { value: memHit, source: 'memory' };
+  const kvHit = await kvGet(key);
+  if (kvHit) {
+    memSet(key, kvHit, 60 * 60 * 1000);
+    return { value: kvHit, source: 'kv' };
+  }
+  return { value: null, source: null };
+}
+
+async function persistentSet(key, value) {
+  memSet(key, value, 60 * 60 * 1000);
+  return kvSet(key, value, null);
+}
+
+module.exports = { cacheGet, cacheSet, persistentGet, persistentSet, KV_ENABLED };
