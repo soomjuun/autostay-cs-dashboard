@@ -147,6 +147,52 @@ function isSameAcrossMainPeriods(dataNote = {}) {
   const limit = Number(dataNote.limit || 1000);
   return Boolean(spanDays && spanDays <= 7 && collected > 0 && collected === processed && collected < limit && !dataNote.isSampled);
 }
+function getUnknownTagStats(d) {
+  const tags = d.tags || { labels: [], values: [] };
+  const total = d.summary?.totalChats || 0;
+  const unknownPatterns = ['파악불가', '미분류', '태그없음', '태그 없음', 'unknown', 'uncategorized'];
+  const count = (tags.labels || []).reduce((sum, label, i) => {
+    const normalized = String(label || '').toLowerCase();
+    const isUnknown = unknownPatterns.some((p) => normalized.includes(p.toLowerCase()));
+    return sum + (isUnknown ? (tags.values?.[i] || 0) : 0);
+  }, 0);
+  const pct = total ? Math.round(count / total * 100) : 0;
+  const cls = pct >= 40 ? 'danger' : pct >= 20 ? 'warn' : 'good';
+  return { count, pct, total, classified: Math.max(total - count, 0), cls, isHigh: pct >= 30 };
+}
+function getResolutionSampleStats(d) {
+  const rb = d.resolutionBuckets || {};
+  const n = Object.values(rb).reduce((a, b) => a + b, 0);
+  const cls = n < 30 ? 'danger' : n < 80 ? 'warn' : 'good';
+  const label = n < 30 ? '표본 작음' : n < 80 ? '참고용' : '표본 양호';
+  return { n, cls, label };
+}
+function hasPeriodBaseline(d) {
+  const w = d.wow || {};
+  const spanDays = getDataSpanDays(d.dataNote || {});
+  const previousTotal = Number(w.previousTotal || 0);
+  const currentTotal = Number(w.currentTotal || d.summary?.totalChats || 0);
+  return Boolean(spanDays >= 14 && previousTotal >= 20 && currentTotal >= 20 && !isSameAcrossMainPeriods(d.dataNote || {}));
+}
+function getDataReliabilityBadges(d) {
+  const badges = [];
+  const unknown = getUnknownTagStats(d);
+  const sample = getResolutionSampleStats(d);
+  const spanDays = getDataSpanDays(d.dataNote || {});
+  if (unknown.isHigh) badges.push(`<span class="hds-chip ${unknown.cls}">VOC 미분류 ${unknown.pct}%</span>`);
+  if (sample.n && sample.n < 80) badges.push(`<span class="hds-chip ${sample.cls}">해결시간 n=${sample.n} ${sample.label}</span>`);
+  if (spanDays && spanDays < 14) badges.push('<span class="hds-chip warn">추세 데이터 누적 중</span>');
+  return badges.join('');
+}
+function renderDataQualityNote(stats, areaLabel = 'VOC') {
+  if (!stats || !stats.isHigh) return '';
+  const usable = stats.classified > 0 ? `분류된 ${stats.classified}건 중심` : '분류 가능 데이터 부족';
+  return `<div class="data-quality-note dq-${stats.cls}">
+    <strong>${areaLabel} 신뢰도 주의</strong>
+    <span>태그 미분류 ${stats.pct}% (${stats.count}/${stats.total || 0}건) · ${usable} 참고용입니다.</span>
+    <em>대화 본문 자동분류 또는 상담원 태깅 누락 알림 적용 권장</em>
+  </div>`;
+}
 function deltaArrow(pct) {
   if (pct == null || isNaN(pct)) return '<span class="delta-arrow flat">—</span>';
   if (pct > 5)  return `<span class="delta-arrow up">▲ ${pct}%</span>`;
@@ -775,6 +821,7 @@ function renderHeroDecisionSummary(d, scoreObj) {
   const fcrRate = d.fcrStats?.fcrRate;
   const frtMedian = d.frtStats?.median;
   const statusTone = scoreObj.score >= 80 ? 'good' : scoreObj.score >= 60 ? 'warn' : 'danger';
+  const reliabilityBadges = getDataReliabilityBadges(d);
   el.innerHTML = `
     <div class="hds-status hds-${statusTone}">
       <span class="hds-label">운영 판정</span>
@@ -789,6 +836,7 @@ function renderHeroDecisionSummary(d, scoreObj) {
       ${sameAcrossPeriods ? '<span class="hds-chip warn">기간별 동일</span>' : ''}
       <span class="hds-chip neutral">${spanDays ? `실데이터 ${spanDays}일` : '실데이터'}</span>
       <span class="hds-chip neutral">${cacheMeta.shortLabel}</span>
+      ${reliabilityBadges}
     </div>`;
 }
 
@@ -813,6 +861,8 @@ function renderKPIs(d, scoreObj) {
   const sameAcrossPeriods = isSameAcrossMainPeriods(dataNote);
   const diagForCache = d.diagnostics || {};
   const cacheMeta = getCacheMeta(diagForCache);
+  const unknownStats = getUnknownTagStats(d);
+  const resSample = getResolutionSampleStats(d);
 
   const cacheBadge = document.getElementById('cacheBadge');
   if (cacheBadge) {
@@ -878,6 +928,14 @@ function renderKPIs(d, scoreObj) {
             data-tip="현재 수집된 closed 채팅 ${dataNote.collected}건이 선택 기간 안에 모두 포함됩니다.&#10;${sameAcrossPeriods ? '특히 실제 데이터 범위가 7일 이내라 7일·14일·30일·전체 핵심 지표가 동일하게 보이는 것이 정상입니다.' : '선택 기간보다 오래된 원천 데이터가 없으면 기간을 넓혀도 지표가 바뀌지 않습니다.'}&#10;API 수집 한도(${limitVal}건) 미도달${_dateRangeTip}&#10;현재 요청 파라미터: days=${currentDays}"
             tabindex="0">${sameAcrossPeriods ? '7/14/30/전체 동일 데이터 ⓘ' : '기간 확장 영향 없음 ⓘ'}</span>`
       : '';
+    const _qualityNote = [
+      unknownStats.isHigh ? `VOC 미분류 ${unknownStats.pct}% (${unknownStats.count}/${unknownStats.total})` : '',
+      resSample.n && resSample.n < 80 ? `해결시간 n=${resSample.n} ${resSample.label}` : '',
+      !hasPeriodBaseline(d) ? '기간 비교 기준 부족' : '',
+    ].filter(Boolean).join(' · ');
+    const _qualityHtml = _qualityNote
+      ? ` · <span class="kpi-quality-inline" data-tip="작은 표본·미분류 태그·짧은 수집 기간은 비율 지표를 흔들 수 있습니다.&#10;현재 표시: ${_qualityNote}" tabindex="0">신뢰도 점검: ${_qualityNote} ⓘ</span>`
+      : '';
     const _dateRangeNote = _dateRangeStr
       ? ` <span style="color:var(--muted);font-size:10px" data-tip="수집된 채팅의 실제 날짜 범위 (KST 기준)" tabindex="0" style="cursor:help">실제 범위 ${_dateRangeStr}</span>`
       : '';
@@ -899,7 +957,7 @@ function renderKPIs(d, scoreObj) {
         ${currentDays === 'all' ? `최근 ${limitVal}건 한도` : `최근 ${currentDays}일`}
         · <strong>${totalChats}건</strong> 기준
         <span data-tip="${_basisDetailLines}" tabindex="0" style="cursor:help;color:var(--muted);font-weight:400"> ⓘ</span>
-      </span>${_dateRangeNote}${_periodMismatchNote}${cacheInfo}${_sampledNote}${_samePeriodsNote}`;
+      </span>${_dateRangeNote}${_periodMismatchNote}${cacheInfo}${_sampledNote}${_samePeriodsNote}${_qualityHtml}`;
   }
 
   const grid = document.getElementById('kpiGrid');
@@ -1256,7 +1314,9 @@ function renderVOC(d) {
   const el = document.getElementById('vocList');
   if (!el || !tags?.labels?.length) { if (el) el.innerHTML = '<div style="color:var(--muted);font-size:12px">태그 데이터 없음</div>'; return; }
   const totalForPct = summary.totalChats || 1;
-  el.innerHTML = tags.labels.slice(0, 8).map((lbl, i) => {
+  const unknownStats = getUnknownTagStats(d);
+  const qualityNote = renderDataQualityNote(unknownStats, 'VOC');
+  const rows = tags.labels.slice(0, 8).map((lbl, i) => {
     const cnt = tags.values[i];
     const pct = Math.round(cnt / totalForPct * 100);
     const cls = pct >= 15 ? 'rising' : pct >= 8 ? 'warn-r' : '';
@@ -1277,6 +1337,7 @@ function renderVOC(d) {
         <div class="voc-pct ${pct >= 15 ? 'pct-high' : pct >= 8 ? 'pct-mid' : 'pct-low'}">${pct}%</div>
       </div>`;
   }).join('');
+  el.innerHTML = qualityNote + rows;
 }
 
 function renderVocRiskSection(d) {
@@ -1284,6 +1345,7 @@ function renderVocRiskSection(d) {
   const el = document.getElementById('vocRiskCards');
   if (!el || !tags?.labels?.length) { if (el) el.innerHTML = '<div style="color:var(--muted);font-size:12px">태그 데이터 없음</div>'; return; }
   const total = summary.totalChats || 1;
+  const unknownStats = getUnknownTagStats(d);
   const items = tags.labels.slice(0, 8).map((lbl, i) => {
     const cnt = tags.values[i] || 0;
     const pct = Math.round(cnt / total * 100);
@@ -1298,7 +1360,7 @@ function renderVocRiskSection(d) {
     return { lbl, cnt, pct, action, ctx, badge, riskScore: lbl.includes('컴플레인') ? 100 : pct };
   }).sort((a, b) => b.riskScore - a.riskScore);
   const legendHtml = `<div class="vrc-legend"><span class="vrc-l-item"><span class="vrc-l-dot" style="background:var(--rose)"></span>HIGH ≥15%·컴플레인</span><span class="vrc-l-item"><span class="vrc-l-dot" style="background:var(--amber)"></span>MID ≥8%</span><span class="vrc-l-item"><span class="vrc-l-dot" style="background:var(--teal)"></span>LOW 정상</span></div>`;
-  el.innerHTML = legendHtml + items.map((it) => `
+  el.innerHTML = renderDataQualityNote(unknownStats, 'VOC 리스크') + legendHtml + items.map((it) => `
     <div class="voc-risk-card ${it.pct >= 15 || it.lbl.includes('컴플레인') ? 'vrc-high' : it.pct >= 8 ? 'vrc-mid' : 'vrc-low'}">
       <div class="vrc-header"><span class="vrc-tag">#${it.lbl}</span>${it.badge}</div>
       <div class="vrc-meta">${it.ctx}</div>
@@ -1422,7 +1484,9 @@ function renderComplaintCategory(d) {
 function renderCategoryBars(d) {
   const { tags, summary } = d;
   const total = summary.totalChats || 1;
+  const unknownStats = getUnknownTagStats(d);
   const cats = {
+    unknown:   { label: '미분류',    color: '#64748b', count: 0, children: {} },
     complaint: { label: '컴플레인', color: '#be123c', count: 0, children: {} },
     subscribe:  { label: '구독 관련',  color: '#0f766e', count: 0, children: {} },
     inquiry:    { label: '이용 문의',  color: '#1d4ed8', count: 0, children: {} },
@@ -1431,7 +1495,11 @@ function renderCategoryBars(d) {
   (tags?.labels || []).forEach((lbl, i) => {
     const val = tags.values[i] || 0;
     if (!val) return;
-    if (lbl.includes('컴플레인')) {
+    const normalized = String(lbl || '').toLowerCase();
+    if (['파악불가', '미분류', '태그없음', '태그 없음', 'unknown', 'uncategorized'].some((p) => normalized.includes(p.toLowerCase()))) {
+      cats.unknown.count += val;
+      cats.unknown.children[lbl] = (cats.unknown.children[lbl] || 0) + val;
+    } else if (lbl.includes('컴플레인')) {
       cats.complaint.count += val;
       const sub = lbl.replace('컴플레인', '').replace(/^[/\-_\s]+/, '').trim() || '일반';
       cats.complaint.children[sub] = (cats.complaint.children[sub] || 0) + val;
@@ -1450,7 +1518,7 @@ function renderCategoryBars(d) {
   const maxCount = Math.max(...parents.map(p => p.count), 1);
   const el = document.getElementById('categoryBars');
   if (!el) return;
-  el.innerHTML = parents.map((cat) => {
+  el.innerHTML = renderDataQualityNote(unknownStats, '카테고리') + parents.map((cat) => {
     const childEntries = Object.entries(cat.children).sort((a, b) => b[1] - a[1]).slice(0, 4);
     const showChildren = childEntries.length > 1 || (childEntries.length === 1 && childEntries[0][0] !== '일반');
     const childHtml = showChildren ? `<div class="cat-children">${
@@ -1470,7 +1538,7 @@ function renderCategoryBars(d) {
       <div class="cat-parent-count">${cat.count}건<span class="cat-parent-pct"> ${Math.round(cat.count / total * 100)}%</span></div>
     </div>
     ${hasChildren ? `<div class="cat-children-wrap" id="${catId}" style="display:none">${childHtml}</div>` : childHtml}`;
-  }).join('') + '<div class="cat-hierarchy-note">ⓘ 태그명 기반 자동 분류 — <strong>컴플레인</strong>: "컴플레인" 포함 태그 / <strong>구독 관련</strong>: "구독"·"정기구독" 포함 / <strong>이용 문의</strong>: "이용"·"단순문의" 포함 / 나머지 기타. 색상: <span style="color:var(--rose)">■</span>위험(≥15%) <span style="color:var(--amber)">■</span>주의(≥8%) <span style="color:var(--teal)">■</span>정상</div>';
+  }).join('') + '<div class="cat-hierarchy-note">ⓘ 태그명 기반 자동 분류 — <strong>미분류</strong>: 파악불가·태그없음 / <strong>컴플레인</strong>: "컴플레인" 포함 태그 / <strong>구독 관련</strong>: "구독"·"정기구독" 포함 / <strong>이용 문의</strong>: "이용"·"단순문의" 포함 / 나머지 기타. 색상뿐 아니라 HIGH/MID/LOW·주의 라벨을 함께 표시합니다.</div>';
 }
 
 /* ─── ChannelTalk Link Helper ─────────────────────────────────────────── */
@@ -1542,6 +1610,7 @@ function renderChannel(d) {
 function renderResolution(d) {
   const rb = d.resolutionBuckets;
   const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
+  const sampleStats = getResolutionSampleStats(d);
   const quick = (rb['0~5분'] || 0) + (rb['5~30분'] || 0);
   const quickPct = Math.round(quick / resTotal * 100);
   const slowPct = Math.round((rb['8시간+'] || 0) / resTotal * 100);
@@ -1571,7 +1640,11 @@ function renderResolution(d) {
     }).join('');
   }
   const note = document.getElementById('avgResNote');
-  if (note) note.textContent = d.summary.avgResolutionMin != null ? `전체 평균 ${fmtMin(d.summary.avgResolutionMin)} · 고객 미응답 포함 (비동기 채널 특성)` : '데이터 없음';
+  if (note) {
+    note.innerHTML = d.summary.avgResolutionMin != null
+      ? `전체 평균 <strong>${fmtMin(d.summary.avgResolutionMin)}</strong> · 고객 미응답 포함 · <span class="sample-badge sample-${sampleStats.cls}">n=${sampleStats.n} ${sampleStats.label}</span> <span data-tip="현재 해결시간은 closed 채팅의 created~closed 기준입니다. 고객 미응답·야간 대기 시간이 포함되어 실제 상담원 순처리시간보다 길게 보일 수 있습니다. 상담원 처리시간은 별도 이벤트/메시지 기준 산출이 필요합니다." tabindex="0" style="cursor:help;color:var(--muted)">ⓘ</span>`
+      : '데이터 없음';
+  }
 
   // P2.12 자동 해석 — 해결시간 분포
   const resInterpEl = document.getElementById('resInterpNote');
@@ -1586,7 +1659,10 @@ function renderResolution(d) {
       : slowPct > 10
       ? ` · 8시간+ <strong style="color:var(--amber)">${slowPct}%</strong> 모니터링`
       : '';
-    resInterpEl.innerHTML = `<div class="auto-interp"><span class="ai-text">${quickMsg}${slowMsg}</span></div>`;
+    const sampleMsg = sampleStats.n < 80
+      ? ` · <span class="sample-badge sample-${sampleStats.cls}">n=${sampleStats.n} ${sampleStats.label}</span>`
+      : '';
+    resInterpEl.innerHTML = `<div class="auto-interp"><span class="ai-text">${quickMsg}${slowMsg}${sampleMsg}</span></div>`;
   }
 }
 
@@ -1916,11 +1992,14 @@ function renderConcRisk(d) {
   const concCls = topPct > 70 ? 'crr-danger' : topPct > 50 ? 'crr-warn' : 'crr-ok';
   const concInterpEl = document.getElementById('concRiskInterp');
   if (concInterpEl) {
+    const staffingContext = activeMgrs.length <= 2
+      ? `활성 담당자 ${activeMgrs.length}명 구조라 과부하 단정보다 백업/분산 기준 점검이 우선입니다.`
+      : '신규 문의 분산 배정 기준 점검 권장';
     const concMsg = topPct > 80
-      ? `<strong>${topName}</strong> 처리 집중도 <strong style="color:var(--rose)">${topPct}%</strong> — 과부하 위험. 즉시 재배정 검토 권장`
+      ? `<strong>${topName}</strong> 배정 처리 집중도 <strong style="color:var(--rose)">${topPct}%</strong> — ${staffingContext}`
       : topPct > 60
-      ? `<strong>${topName}</strong> 처리 집중도 <strong style="color:var(--amber)">${topPct}%</strong> — 편중 주의. 신규 문의 분산 배정 권장`
-      : `담당자 간 처리 분산 양호 (최다 <strong>${topName}</strong> ${topPct}%)`;
+      ? `<strong>${topName}</strong> 배정 처리 집중도 <strong style="color:var(--amber)">${topPct}%</strong> — ${staffingContext}`
+      : `담당자 간 처리 분산 양호 (최다 <strong>${topName}</strong> ${topPct}%, 배정 기준)`;
     const uaMsg = unassigned > 0 ? ` · 미배정 <strong style="color:var(--rose)">${unassigned}건</strong> 즉시 배정 필요` : '';
     concInterpEl.innerHTML = `<div class="auto-interp"><span class="ai-text">${concMsg}${uaMsg}</span></div>`;
   }
@@ -1935,7 +2014,7 @@ function renderConcRisk(d) {
     <div class="conc-risk-row ${concCls}">
       <div class="crr-left">
         <div class="crr-label">업무 집중도 <span data-tip="분모: 배정 담당자 처리 합계 ${mgrConc.assignedTotal}건&#10;계산: ${topMgr ? topMgr.count : 0}건 ÷ ${mgrConc.assignedTotal}건 × 100&#10;전체 closed 기준 보조값: ${mgrConc.totalPct}%" tabindex="0" style="cursor:help;font-size:9px;color:var(--muted)">분모ⓘ</span></div>
-        <div class="crr-sub">${topName} · 전체 기준 ${mgrConc.totalPct}%</div>
+        <div class="crr-sub">${topName} · 배정 기준 대표값 · 전체 기준 ${mgrConc.totalPct}% 보조</div>
       </div>
       <div class="crr-right"><div class="crr-value ${topPct > 70 ? 'val-danger' : topPct > 50 ? 'val-warn' : 'val-ok'}">${topPct}%</div><div class="crr-action-tag ${topPct > 70 ? 'action-urgent' : topPct > 50 ? 'action-check' : 'action-ok'}">${topPct > 70 ? '분산' : topPct > 50 ? '모니터링' : '정상'}</div></div>
     </div>
@@ -1946,8 +2025,8 @@ function renderConcRisk(d) {
     ${topPct >= 75 ? `<div class="conc-redistrib-tip">
       <span class="crt-icon"></span>
       <div class="crt-body">
-        <div class="crt-title">${topName} 처리 비중 ${topPct}% — 재배분 검토 권장</div>
-        <div class="crt-sub">상위 담당자 1인 집중 완화를 위해 ${activeMgrs.slice(1, 3).map(m => dispMgrName(m.name)).join('·') || '다른 담당자'}에게 신규 채팅 우선 배정하세요.</div>
+        <div class="crt-title">${topName} 배정 처리 비중 ${topPct}% — 백업/분산 기준 검토</div>
+        <div class="crt-sub">활성 담당자 ${activeMgrs.length}명 · ${activeMgrs.length <= 2 ? '인력 구조 영향 가능성이 큽니다. 신규 문의 라우팅과 휴무/피크 백업 룰을 먼저 점검하세요.' : `${activeMgrs.slice(1, 3).map(m => dispMgrName(m.name)).join('·') || '다른 담당자'}에게 신규 채팅 우선 배정하세요.`}</div>
       </div>
     </div>` : ''}`;
 }
@@ -2236,6 +2315,18 @@ function renderWow(d) {
   const w = d.wow;
   const total = d.summary.totalChats || 0;
   if (!w) { el.innerHTML = `<div class="wow-card"><div class="wow-label">현 기간</div><div class="wow-val">${total}건</div><div class="wow-sub">비교 기준 없음</div></div>`; return; }
+  const spanDays = getDataSpanDays(d.dataNote || {});
+  const baselineOk = hasPeriodBaseline(d);
+  if (!baselineOk) {
+    el.innerHTML = `
+      <div class="analysis-hold-card">
+        <div class="hold-label">기간 비교 보류</div>
+        <div class="hold-title">데이터 누적 중</div>
+        <div class="hold-sub">실데이터 ${spanDays || '—'}일 · 현 기간 ${w.currentTotal || total}건 · 직전 동기간 ${w.previousTotal || 0}건</div>
+        <div class="hold-foot">직전 동기간 20건 이상과 14일 이상 누적 후 증감률을 표시합니다.</div>
+      </div>`;
+    return;
+  }
   const sign = w.delta > 0 ? '+' : '';
   const cls = w.delta > 0 ? 'wow-up' : w.delta < 0 ? 'wow-down' : 'wow-flat';
   const deltaCard = w.previousTotal === 0
@@ -2259,9 +2350,11 @@ function renderSLA(d) {
   el.innerHTML = items.map((it) => {
     const v = s[it.key] || { rate: 0, count: 0, total: 0 };
     const cls = v.rate >= it.target ? 'good' : v.rate >= it.target * 0.7 ? 'warn' : 'danger';
+    const sampleCls = v.total < 30 ? 'danger' : v.total < 80 ? 'warn' : 'good';
+    const sampleText = v.total < 80 ? ` · n=${v.total} 참고용` : '';
     return `<div class="sla-row sla-${cls}">
       <span class="sla-icon">${it.icon}</span>
-      <div class="sla-meta"><div class="sla-label">${it.label}</div><div class="sla-target">목표 ${it.target}%</div></div>
+      <div class="sla-meta"><div class="sla-label">${it.label}</div><div class="sla-target">목표 ${it.target}%${sampleText ? `<span class="sample-badge sample-${sampleCls}">${sampleText.replace(' · ', '')}</span>` : ''}</div></div>
       <div class="sla-bar-wrap"><div class="sla-bar-fill sla-${cls}" style="width:${Math.min(v.rate, 100)}%"></div><div class="sla-target-marker" style="left:${it.target}%"></div></div>
       <div class="sla-val sla-${cls}">${v.rate}%</div>
       <div class="sla-count" tabindex="0" data-tip="【SLA 분모 설명】&#10;기준: closed 채팅 ${v.total}건&#10;제외 항목: ① 진행 중(open) 채팅 ② 해결시간 측정 불가(봇 자동종결·시스템 메시지만 있는 채팅) ③ 해결시간 데이터 누락 건&#10;→ 총 채팅 수와 SLA 분모가 다를 수 있음&#10;${it.label} 내 완료: ${v.count}건 / ${v.total}건 기준" style="cursor:help">${v.count}/${v.total} ⓘ</div>
@@ -2440,6 +2533,17 @@ function renderAnomaly(d) {
   const el = document.getElementById('anomalyPanel');
   if (!el) return;
   const anom = d.anomalies || [];
+  const spanDays = getDataSpanDays(d.dataNote || {});
+  const total = d.summary?.totalChats || 0;
+  if (spanDays && (spanDays < 14 || total < 30)) {
+    el.innerHTML = `<div class="analysis-hold-card">
+      <div class="hold-label">이상치 탐지 보류</div>
+      <div class="hold-title">표본 부족</div>
+      <div class="hold-sub">실데이터 ${spanDays}일 · ${total}건</div>
+      <div class="hold-foot">Z-score는 최소 14일 이상, 30건 이상 누적 후 표시합니다.</div>
+    </div>`;
+    return;
+  }
   if (!anom.length) { el.innerHTML = `<div class="anom-ok"><div class="anom-ok-icon">✓</div><div class="anom-ok-text">유의미한 이상치 없음</div><div class="anom-ok-sub">±1.8σ 범위 내 정상</div></div>`; return; }
   el.innerHTML = anom.map((a) => {
     const cls = a.isHigh ? 'anom-high' : 'anom-low';
@@ -2453,6 +2557,16 @@ function renderForecast(d) {
   const el = document.getElementById('forecastPanel');
   if (!el) return;
   const f = d.forecast || {};
+  const spanDays = getDataSpanDays(d.dataNote || {});
+  if (!hasPeriodBaseline(d)) {
+    el.innerHTML = `<div class="analysis-hold-card">
+      <div class="hold-label">예측 보류</div>
+      <div class="hold-title">베이스라인 부족</div>
+      <div class="hold-sub">실데이터 ${spanDays || '—'}일 · 최근 7일 ${f.last7Avg ?? '—'}건/일 · 직전 7일 ${f.last14Avg ?? 0}건/일</div>
+      <div class="hold-foot">직전 구간이 0건이거나 수집 기간이 짧으면 모멘텀/다음날 투영을 숨깁니다.</div>
+    </div>`;
+    return;
+  }
   const m = f.momentum || 0;
   const cls = m > 10 ? 'fc-up' : m < -10 ? 'fc-down' : 'fc-flat';
   const icon = m > 10 ? '↑' : m < -10 ? '↓' : '→';
