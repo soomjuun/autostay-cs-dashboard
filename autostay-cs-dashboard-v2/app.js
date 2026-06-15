@@ -167,21 +167,58 @@ function getResolutionSampleStats(d) {
   const label = n < 30 ? '표본 작음' : n < 80 ? '참고용' : '표본 양호';
   return { n, cls, label };
 }
-function hasPeriodBaseline(d) {
-  const w = d.wow || {};
+function getDurableHistoryStatus(d) {
+  const snap = d.snapshotStore || {};
   const spanDays = getDataSpanDays(d.dataNote || {});
+  const snapshotDays = Number(snap.count || 0);
+  const historyDays = Math.max(spanDays || 0, snapshotDays || 0);
+  const enabled = Boolean(snap.enabled);
+  const configured = enabled || snapshotDays > 0;
+  return {
+    enabled,
+    configured,
+    snapshotDays,
+    historyDays,
+    source: snap.source || (enabled ? 'kv' : 'none'),
+    label: configured ? `스냅샷 ${snapshotDays}일` : '외부 스냅샷 미설정',
+    message: snap.message || (configured ? '스냅샷 누적 중' : 'KV/DB 연결 필요'),
+  };
+}
+function getSlaTargets() {
+  const defaults = { sla30Min: 50, sla2Hour: 80, sla8Hour: 95 };
+  try {
+    const saved = JSON.parse(localStorage.getItem('cs_sla_targets') || '{}');
+    return {
+      sla30Min: Number(saved.sla30Min) || defaults.sla30Min,
+      sla2Hour: Number(saved.sla2Hour) || defaults.sla2Hour,
+      sla8Hour: Number(saved.sla8Hour) || defaults.sla8Hour,
+    };
+  } catch (_) {
+    return defaults;
+  }
+}
+function setSlaTargets(next) {
+  localStorage.setItem('cs_sla_targets', JSON.stringify(next));
+}
+function hasPeriodBaseline(d) {
+  const w = d.snapshotWow || d.wow || {};
+  const history = getDurableHistoryStatus(d);
   const previousTotal = Number(w.previousTotal || 0);
   const currentTotal = Number(w.currentTotal || d.summary?.totalChats || 0);
-  return Boolean(spanDays >= 14 && previousTotal >= 20 && currentTotal >= 20 && !isSameAcrossMainPeriods(d.dataNote || {}));
+  const hasSnapshotBaseline = Boolean(d.snapshotWow && history.historyDays >= 14);
+  return Boolean(history.historyDays >= 14 && previousTotal >= 20 && currentTotal >= 20 && (hasSnapshotBaseline || !isSameAcrossMainPeriods(d.dataNote || {})));
 }
 function getDataReliabilityBadges(d) {
   const badges = [];
   const unknown = getUnknownTagStats(d);
   const sample = getResolutionSampleStats(d);
   const spanDays = getDataSpanDays(d.dataNote || {});
+  const history = getDurableHistoryStatus(d);
   if (unknown.isHigh) badges.push(`<span class="hds-chip ${unknown.cls}">VOC 미분류 ${unknown.pct}%</span>`);
   if (sample.n && sample.n < 80) badges.push(`<span class="hds-chip ${sample.cls}">해결시간 n=${sample.n} ${sample.label}</span>`);
-  if (spanDays && spanDays < 14) badges.push('<span class="hds-chip warn">추세 데이터 누적 중</span>');
+  if (!history.configured) badges.push('<span class="hds-chip danger">스냅샷 미설정</span>');
+  else if (history.historyDays < 14) badges.push(`<span class="hds-chip warn">${history.label} · 누적 중</span>`);
+  else if (spanDays && spanDays < 14) badges.push(`<span class="hds-chip good">${history.label}</span>`);
   return badges.join('');
 }
 function renderDataQualityNote(stats, areaLabel = 'VOC') {
@@ -190,7 +227,7 @@ function renderDataQualityNote(stats, areaLabel = 'VOC') {
   return `<div class="data-quality-note dq-${stats.cls}">
     <strong>${areaLabel} 신뢰도 주의</strong>
     <span>태그 미분류 ${stats.pct}% (${stats.count}/${stats.total || 0}건) · ${usable} 참고용입니다.</span>
-    <em>대화 본문 자동분류 또는 상담원 태깅 누락 알림 적용 권장</em>
+    <em>현재 응답에는 상담 본문이 없어 실제 LLM 자동분류는 미실행 상태입니다. 메시지 본문 수집 후 자동 태깅 파이프라인 연결 필요</em>
   </div>`;
 }
 function deltaArrow(pct) {
@@ -863,6 +900,7 @@ function renderKPIs(d, scoreObj) {
   const cacheMeta = getCacheMeta(diagForCache);
   const unknownStats = getUnknownTagStats(d);
   const resSample = getResolutionSampleStats(d);
+  const historyStatus = getDurableHistoryStatus(d);
 
   const cacheBadge = document.getElementById('cacheBadge');
   if (cacheBadge) {
@@ -931,6 +969,7 @@ function renderKPIs(d, scoreObj) {
     const _qualityNote = [
       unknownStats.isHigh ? `VOC 미분류 ${unknownStats.pct}% (${unknownStats.count}/${unknownStats.total})` : '',
       resSample.n && resSample.n < 80 ? `해결시간 n=${resSample.n} ${resSample.label}` : '',
+      !historyStatus.configured ? '외부 스냅샷 미설정' : (historyStatus.historyDays < 14 ? `${historyStatus.label} 누적 중` : ''),
       !hasPeriodBaseline(d) ? '기간 비교 기준 부족' : '',
     ].filter(Boolean).join(' · ');
     const _qualityHtml = _qualityNote
@@ -1609,6 +1648,7 @@ function renderChannel(d) {
 /* ─── Resolution ──────────────────────────────────────────────────────── */
 function renderResolution(d) {
   const rb = d.resolutionBuckets;
+  const rStats = d.resolutionStats || {};
   const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
   const sampleStats = getResolutionSampleStats(d);
   const quick = (rb['0~5분'] || 0) + (rb['5~30분'] || 0);
@@ -1642,7 +1682,7 @@ function renderResolution(d) {
   const note = document.getElementById('avgResNote');
   if (note) {
     note.innerHTML = d.summary.avgResolutionMin != null
-      ? `전체 평균 <strong>${fmtMin(d.summary.avgResolutionMin)}</strong> · 고객 미응답 포함 · <span class="sample-badge sample-${sampleStats.cls}">n=${sampleStats.n} ${sampleStats.label}</span> <span data-tip="현재 해결시간은 closed 채팅의 created~closed 기준입니다. 고객 미응답·야간 대기 시간이 포함되어 실제 상담원 순처리시간보다 길게 보일 수 있습니다. 상담원 처리시간은 별도 이벤트/메시지 기준 산출이 필요합니다." tabindex="0" style="cursor:help;color:var(--muted)">ⓘ</span>`
+      ? `전체 평균 <strong>${fmtMin(d.summary.avgResolutionMin)}</strong> · 고객 미응답 포함 · <span class="sample-badge sample-${sampleStats.cls}">n=${sampleStats.n} ${sampleStats.label}</span> <span class="sample-badge sample-warn">순처리시간 미수집</span> <span data-tip="${rStats.agentHandleTimeNote || '현재 해결시간은 closed 채팅의 created~closed 기준입니다. 고객 미응답·야간 대기 시간이 포함되어 실제 상담원 순처리시간보다 길게 보일 수 있습니다. 상담원 처리시간은 별도 이벤트/메시지 기준 산출이 필요합니다.'}" tabindex="0" style="cursor:help;color:var(--muted)">ⓘ</span>`
       : '데이터 없음';
   }
 
@@ -2312,18 +2352,24 @@ function renderGaugeGrid(d) {
 function renderWow(d) {
   const el = document.getElementById('wowStrip');
   if (!el) return;
-  const w = d.wow;
+  const w = d.snapshotWow || d.wow;
   const total = d.summary.totalChats || 0;
   if (!w) { el.innerHTML = `<div class="wow-card"><div class="wow-label">현 기간</div><div class="wow-val">${total}건</div><div class="wow-sub">비교 기준 없음</div></div>`; return; }
   const spanDays = getDataSpanDays(d.dataNote || {});
+  const history = getDurableHistoryStatus(d);
+  const basisLabel = d.snapshotWow ? '스냅샷 기준' : 'API 기간 기준';
   const baselineOk = hasPeriodBaseline(d);
   if (!baselineOk) {
+    const holdTitle = history.configured ? '데이터 누적 중' : '외부 스냅샷 미설정';
+    const holdFoot = history.configured
+      ? '직전 동기간 20건 이상과 14일 이상 누적 후 증감률을 표시합니다.'
+      : 'Vercel KV/DB 일별 스냅샷이 연결되어야 서버리스 재시작 후에도 추세 기준이 유지됩니다.';
     el.innerHTML = `
       <div class="analysis-hold-card">
         <div class="hold-label">기간 비교 보류</div>
-        <div class="hold-title">데이터 누적 중</div>
-        <div class="hold-sub">실데이터 ${spanDays || '—'}일 · 현 기간 ${w.currentTotal || total}건 · 직전 동기간 ${w.previousTotal || 0}건</div>
-        <div class="hold-foot">직전 동기간 20건 이상과 14일 이상 누적 후 증감률을 표시합니다.</div>
+        <div class="hold-title">${holdTitle}</div>
+        <div class="hold-sub">실데이터 ${spanDays || '—'}일 · ${history.label} · 현 기간 ${w.currentTotal || total}건 · 직전 동기간 ${w.previousTotal || 0}건</div>
+        <div class="hold-foot">${holdFoot}</div>
       </div>`;
     return;
   }
@@ -2333,8 +2379,8 @@ function renderWow(d) {
     ? `<div class="wow-card wow-flat"><div class="wow-label">증감</div><div class="wow-val" style="color:var(--muted);font-size:16px">비교 불가</div><div class="wow-sub" style="font-size:9px;color:var(--muted)">직전 기간 데이터 없음</div></div>`
     : `<div class="wow-card ${cls}"><div class="wow-label">증감</div><div class="wow-val">${sign}${w.delta}건</div><div class="wow-sub">${deltaArrow(w.deltaPct)}</div></div>`;
   el.innerHTML = `
-    <div class="wow-card"><div class="wow-label">현 기간</div><div class="wow-val">${w.currentTotal}건</div></div>
-    <div class="wow-card"><div class="wow-label">직전 동기간</div><div class="wow-val muted">${w.previousTotal === 0 ? '—' : w.previousTotal + '건'}</div>${w.previousTotal === 0 ? '<div class="wow-sub" style="color:var(--amber);font-size:9.5px">⚠ 직전 데이터 없음</div>' : ''}</div>
+    <div class="wow-card"><div class="wow-label">현 기간</div><div class="wow-val">${w.currentTotal}건</div><div class="wow-sub" style="font-size:9.5px;color:var(--muted)">${basisLabel}</div></div>
+    <div class="wow-card"><div class="wow-label">직전 동기간</div><div class="wow-val muted">${w.previousTotal === 0 ? '—' : w.previousTotal + '건'}</div>${w.previousTotal === 0 ? '<div class="wow-sub" style="color:var(--amber);font-size:9.5px">⚠ 직전 데이터 없음</div>' : `<div class="wow-sub" style="font-size:9.5px;color:var(--muted)">${basisLabel}</div>`}</div>
     ${deltaCard}`;
 }
 
@@ -2342,10 +2388,11 @@ function renderSLA(d) {
   const el = document.getElementById('slaTracker');
   if (!el) return;
   const s = d.slaStats || {};
+  const targets = getSlaTargets();
   const items = [
-    { key: 'sla30Min', label: '30분 SLA', target: 50, icon: '' },
-    { key: 'sla2Hour', label: '2시간 SLA', target: 80, icon: '' },
-    { key: 'sla8Hour', label: '8시간 SLA', target: 95, icon: '' },
+    { key: 'sla30Min', label: '30분 SLA', target: targets.sla30Min, icon: '' },
+    { key: 'sla2Hour', label: '2시간 SLA', target: targets.sla2Hour, icon: '' },
+    { key: 'sla8Hour', label: '8시간 SLA', target: targets.sla8Hour, icon: '' },
   ];
   el.innerHTML = items.map((it) => {
     const v = s[it.key] || { rate: 0, count: 0, total: 0 };
@@ -2535,12 +2582,17 @@ function renderAnomaly(d) {
   const anom = d.anomalies || [];
   const spanDays = getDataSpanDays(d.dataNote || {});
   const total = d.summary?.totalChats || 0;
-  if (spanDays && (spanDays < 14 || total < 30)) {
+  const history = getDurableHistoryStatus(d);
+  if ((history.historyDays || spanDays) && (history.historyDays < 14 || total < 30)) {
+    const holdTitle = history.configured ? '표본 부족' : '외부 스냅샷 미설정';
+    const holdFoot = history.configured
+      ? 'Z-score는 최소 14일 이상, 30건 이상 누적 후 표시합니다.'
+      : 'Z-score 기준선 유지를 위해 KV/DB 일별 스냅샷 연결이 필요합니다.';
     el.innerHTML = `<div class="analysis-hold-card">
       <div class="hold-label">이상치 탐지 보류</div>
-      <div class="hold-title">표본 부족</div>
-      <div class="hold-sub">실데이터 ${spanDays}일 · ${total}건</div>
-      <div class="hold-foot">Z-score는 최소 14일 이상, 30건 이상 누적 후 표시합니다.</div>
+      <div class="hold-title">${holdTitle}</div>
+      <div class="hold-sub">실데이터 ${spanDays || '—'}일 · ${history.label} · ${total}건</div>
+      <div class="hold-foot">${holdFoot}</div>
     </div>`;
     return;
   }
@@ -2556,14 +2608,20 @@ function renderAnomaly(d) {
 function renderForecast(d) {
   const el = document.getElementById('forecastPanel');
   if (!el) return;
-  const f = d.forecast || {};
+  const f = d.snapshotForecast || d.forecast || {};
   const spanDays = getDataSpanDays(d.dataNote || {});
+  const history = getDurableHistoryStatus(d);
+  const basisLabel = d.snapshotForecast ? '스냅샷 기준' : 'API 기간 기준';
   if (!hasPeriodBaseline(d)) {
+    const holdTitle = history.configured ? '베이스라인 부족' : '외부 스냅샷 미설정';
+    const holdFoot = history.configured
+      ? '직전 구간이 0건이거나 수집 기간이 짧으면 모멘텀/다음날 투영을 숨깁니다.'
+      : '볼륨 모멘텀은 서버리스 메모리 캐시가 아니라 KV/DB 일별 스냅샷 누적이 필요합니다.';
     el.innerHTML = `<div class="analysis-hold-card">
       <div class="hold-label">예측 보류</div>
-      <div class="hold-title">베이스라인 부족</div>
-      <div class="hold-sub">실데이터 ${spanDays || '—'}일 · 최근 7일 ${f.last7Avg ?? '—'}건/일 · 직전 7일 ${f.last14Avg ?? 0}건/일</div>
-      <div class="hold-foot">직전 구간이 0건이거나 수집 기간이 짧으면 모멘텀/다음날 투영을 숨깁니다.</div>
+      <div class="hold-title">${holdTitle}</div>
+      <div class="hold-sub">실데이터 ${spanDays || '—'}일 · ${history.label} · 최근 7일 ${f.last7Avg ?? '—'}건/일 · 직전 7일 ${f.last14Avg ?? 0}건/일</div>
+      <div class="hold-foot">${holdFoot}</div>
     </div>`;
     return;
   }
@@ -2571,7 +2629,7 @@ function renderForecast(d) {
   const cls = m > 10 ? 'fc-up' : m < -10 ? 'fc-down' : 'fc-flat';
   const icon = m > 10 ? '↑' : m < -10 ? '↓' : '→';
   el.innerHTML = `
-    <div class="fc-header"><span class="fc-icon">${icon}</span><div class="fc-title-block"><div class="fc-title">${m > 10 ? '상승 모멘텀' : m < -10 ? '하락 모멘텀' : '평탄'}</div><div class="fc-sub">7일 평균 vs 14일 전 7일 평균</div></div></div>
+    <div class="fc-header"><span class="fc-icon">${icon}</span><div class="fc-title-block"><div class="fc-title">${m > 10 ? '상승 모멘텀' : m < -10 ? '하락 모멘텀' : '평탄'}</div><div class="fc-sub">7일 평균 vs 직전 7일 평균 · ${basisLabel}</div></div></div>
     <div class="fc-grid">
       <div class="fc-cell"><div class="fc-cell-lbl">최근 7일</div><div class="fc-cell-val">${f.last7Avg}건/일</div></div>
       <div class="fc-cell"><div class="fc-cell-lbl">직전 7일</div><div class="fc-cell-val muted">${f.last14Avg}건/일</div></div>
@@ -2583,7 +2641,9 @@ function renderForecast(d) {
 function renderComplaintTrend(d) {
   const el = document.getElementById('complaintTrendChart');
   if (!el) return;
-  const t = d.complaintTrend || { labels: [], total: [], complaints: [] };
+  const historyForTrend = getDurableHistoryStatus(d);
+  const useSnapshotTrend = Boolean(d.snapshotTrend?.labels?.length >= 14);
+  const t = useSnapshotTrend ? d.snapshotTrend : (d.complaintTrend || { labels: [], total: [], complaints: [] });
   const rates = t.labels.map((_, i) => t.total[i] > 0 ? Math.round((t.complaints[i] || 0) / t.total[i] * 100) : 0);
   if (charts.complaintTrend) charts.complaintTrend.destroy();
   charts.complaintTrend = new Chart(el.getContext('2d'), {
@@ -2694,19 +2754,28 @@ function renderComplaintTrend(d) {
   const rateDiffSign = rateDiff !== null ? (rateDiff > 0 ? '+' : '') : '';
   const rateDiffStyle = rateDiff === null ? 'color:var(--muted)' : rateDiff > 2 ? 'color:var(--rose);font-weight:700' : rateDiff < -2 ? 'color:var(--teal-d);font-weight:700' : 'color:var(--muted)';
   const rateDiffLabel = rateDiff !== null ? `${rateDiffSign}${rateDiff}%p` : '—';
+  const history = historyForTrend;
+  const trendBaselineOk = Boolean(history.historyDays >= 14 && prevN >= 7 && prevAll >= 20 && recentAll >= 20 && (useSnapshotTrend || !isSameAcrossMainPeriods(d.dataNote || {})));
+  const trendHoldReason = !history.configured
+    ? '외부 스냅샷 미설정'
+    : history.historyDays < 14
+    ? `${history.label} · 누적 중`
+    : '직전 7일 표본 부족';
 
   const kvEl = document.getElementById('complaintTrendKV');
   if (kvEl) kvEl.innerHTML = `
     <div class="ct-kv"><span class="ct-lbl">총 컴플레인</span><span class="ct-val">${totalCom}건</span></div>
     <div class="ct-kv"><span class="ct-lbl">전체 비율</span><span class="ct-val ${overallRate >= 15 ? 'danger' : overallRate >= 8 ? 'warn' : 'good'}">${overallRate}%</span></div>
     <div class="ct-kv"><span class="ct-lbl">최근 ${recentN}일 평균</span><span class="ct-val ${recentRate >= 15 ? 'danger' : recentRate >= 8 ? 'warn' : 'good'}">${recentRate}%</span></div>
-    <div class="ct-kv"><span class="ct-lbl">직전 ${recentN}일 대비</span><span class="ct-val" style="${rateDiffStyle}">${rateDiffLabel}</span></div>
+    <div class="ct-kv"><span class="ct-lbl">직전 ${recentN}일 대비</span><span class="ct-val" style="${trendBaselineOk ? rateDiffStyle : 'color:var(--muted)'}">${trendBaselineOk ? rateDiffLabel : '판단 보류'}</span></div>
     <div class="ct-kv"><span class="ct-lbl">피크 날짜</span><span class="ct-val">${peakLabel} (${peakCnt}건)</span></div>`;
 
   // P2.12 자동 해석 요약
   const interpEl = document.getElementById('complaintTrendInterp');
   if (interpEl) {
-    const direction = trendPct > 5 ? `<span style="color:var(--rose);font-weight:700">증가 추세 (${trendPct > 0 ? '+' : ''}${trendPct}%)</span>` : trendPct < -5 ? `<span style="color:var(--teal-d);font-weight:700">감소 추세 (${trendPct}%)</span>` : `<span style="color:var(--muted)">안정적</span>`;
+    const direction = !trendBaselineOk
+      ? `<span class="sample-badge sample-warn">추세 판단 보류</span> <span style="color:var(--muted)">${trendHoldReason}</span>`
+      : trendPct > 5 ? `<span style="color:var(--rose);font-weight:700">증가 추세 (${trendPct > 0 ? '+' : ''}${trendPct}%)</span>` : trendPct < -5 ? `<span style="color:var(--teal-d);font-weight:700">감소 추세 (${trendPct}%)</span>` : `<span style="color:var(--muted)">안정적</span>`;
     const urgency = recentRate >= 15 ? '즉각 대응 필요' : recentRate >= 8 ? '지속 모니터링' : '정상 범위';
     interpEl.innerHTML = `
       <div class="auto-interp">
@@ -2775,13 +2844,17 @@ function renderDiagnostics(d) {
         <div class="diag-stat"><span class="diag-stat-lbl">캐시 상태</span><span class="diag-stat-val ${diag.cacheHit ? 'good' : ''}">${diag.cacheHit ? cacheMeta.shortLabel : '최신 조회'}</span></div>
         <div class="diag-stat"><span class="diag-stat-lbl">원본 수집</span><span class="diag-stat-val">${diag.pages || 0}p · ${diag.paginationMs || 0}ms</span></div>
         <div class="diag-stat"><span class="diag-stat-lbl">실패 호출</span><span class="diag-stat-val ${warns.length > 0 ? 'danger' : 'good'}">${warns.length}건</span></div>
+        <div class="diag-stat"><span class="diag-stat-lbl">일별 스냅샷</span><span class="diag-stat-val ${d.snapshotStore?.enabled ? 'good' : 'danger'}">${d.snapshotStore?.enabled ? `${d.snapshotStore.count}일` : '미설정'}</span></div>
+        <div class="diag-stat"><span class="diag-stat-lbl">자동 태깅</span><span class="diag-stat-val ${d.taggingQuality?.autoTaggingAvailable ? 'good' : 'danger'}">${d.taggingQuality?.autoTaggingAvailable ? '활성' : '본문 미수집'}</span></div>
+        <div class="diag-stat"><span class="diag-stat-lbl">순처리시간</span><span class="diag-stat-val ${d.resolutionStats?.agentHandleTimeAvailable ? 'good' : 'danger'}">${d.resolutionStats?.agentHandleTimeAvailable ? '활성' : '미수집'}</span></div>
       </div>
       ${warnHtml}
       <table class="diag-tbl">
         <thead><tr><th>API 엔드포인트</th><th>상태</th><th class="num-r">HTTP</th><th class="num-r">응답시간</th></tr></thead>
         <tbody>${totalRows || '<tr><td colspan="4" class="diag-empty">호출 정보 없음</td></tr>'}</tbody>
       </table>
-      <div class="diag-note">v4.0 — ${cacheMeta.storageLabel} · 부분 실패 허용 · 1000건 한도</div>`;
+      <div class="diag-note">v4.0 — ${cacheMeta.storageLabel} · 부분 실패 허용 · 1000건 한도</div>
+      <div class="diag-note" style="margin-top:8px">${d.snapshotStore?.message || '스냅샷 상태 없음'} · ${d.taggingQuality?.blocker || '자동 태깅 상태 없음'} · ${d.resolutionStats?.agentHandleTimeNote || '순처리시간 상태 없음'}</div>`;
   }
 
   // ── 캐시 탭 ──
@@ -2797,8 +2870,10 @@ function renderDiagnostics(d) {
         <div class="diag-stat"><span class="diag-stat-lbl">TTL</span><span class="diag-stat-val">5분</span></div>
         <div class="diag-stat"><span class="diag-stat-lbl">원본 API 시간</span><span class="diag-stat-val">${paginMs}ms</span></div>
         <div class="diag-stat"><span class="diag-stat-lbl">서버 응답시간</span><span class="diag-stat-val">${diag.cacheHit ? '≈0ms (캐시)' : totalMs + 'ms'}</span></div>
+        <div class="diag-stat"><span class="diag-stat-lbl">영구 스냅샷</span><span class="diag-stat-val ${d.snapshotStore?.enabled ? 'good' : 'danger'}">${d.snapshotStore?.enabled ? `${d.snapshotStore.count}일 · ${d.snapshotStore.source}` : 'KV/DB 필요'}</span></div>
       </div>
-      <div class="diag-note">${cacheMeta.note}. 캐시 적중 시 서버 응답이 즉시 반환됩니다.</div>`;
+      <div class="diag-note">${cacheMeta.note}. 캐시 적중 시 서버 응답이 즉시 반환됩니다.</div>
+      <div class="diag-note" style="margin-top:8px">기간 비교·예측·이상치 기준선은 5분 캐시가 아니라 일별 스냅샷이 필요합니다. ${d.snapshotStore?.message || 'Vercel KV 연결 필요'}</div>`;
   }
 
   // ── 수집 한도 탭 ──
@@ -3221,6 +3296,42 @@ function initFilterDrawer() {
   });
 }
 
+function initSlaTargetControls() {
+  const ids = {
+    sla30Min: document.getElementById('slaTarget30'),
+    sla2Hour: document.getElementById('slaTarget2h'),
+    sla8Hour: document.getElementById('slaTarget8h'),
+  };
+  const resetBtn = document.getElementById('slaTargetReset');
+  const applyToInputs = (targets) => {
+    if (ids.sla30Min) ids.sla30Min.value = targets.sla30Min;
+    if (ids.sla2Hour) ids.sla2Hour.value = targets.sla2Hour;
+    if (ids.sla8Hour) ids.sla8Hour.value = targets.sla8Hour;
+  };
+  const readInputs = () => ({
+    sla30Min: Math.max(1, Math.min(100, Number(ids.sla30Min?.value || 50))),
+    sla2Hour: Math.max(1, Math.min(100, Number(ids.sla2Hour?.value || 80))),
+    sla8Hour: Math.max(1, Math.min(100, Number(ids.sla8Hour?.value || 95))),
+  });
+  const rerender = () => {
+    const targets = readInputs();
+    setSlaTargets(targets);
+    if (lastData) renderSLA(lastFilteredData || lastData);
+  };
+  applyToInputs(getSlaTargets());
+  Object.values(ids).forEach((input) => {
+    if (!input) return;
+    input.addEventListener('change', rerender);
+    input.addEventListener('blur', rerender);
+  });
+  if (resetBtn) resetBtn.addEventListener('click', () => {
+    const defaults = { sla30Min: 50, sla2Hour: 80, sla8Hour: 95 };
+    setSlaTargets(defaults);
+    applyToInputs(defaults);
+    if (lastData) renderSLA(lastFilteredData || lastData);
+  });
+}
+
 /* ─── Full Render ────────────────────────────────────────────────────── */
 function fullRender(data) {
   // 기간 전환 시 적용된 stale dimming / opacity 초기화
@@ -3308,6 +3419,21 @@ function _setRefreshStatus(text, cls) {
 function _nowHHMM() {
   const n = new Date();
   return n.getHours().toString().padStart(2, '0') + ':' + n.getMinutes().toString().padStart(2, '0');
+}
+
+async function ensureAuthenticated() {
+  try {
+    const res = await fetch('/api/check?_t=' + Date.now(), { cache: 'no-store' });
+    if (res.status === 401) {
+      let body = null;
+      try { body = await res.json(); } catch (_) {}
+      window.location.href = body?.redirect || '/api/auth';
+      return false;
+    }
+    return res.ok;
+  } catch (_) {
+    return true;
+  }
 }
 
 function render() {
@@ -3571,6 +3697,35 @@ function downloadCSV() {
   showToast(`CSV ${dlRowCount}건 내보내기 완료 · ${dlRangeLabel}${dlFilterLabel}`, 'success', 5000);
 }
 
+async function copyOpsReport() {
+  const d = lastFilteredData || lastData;
+  if (!d) { showToast('복사할 데이터가 아직 없습니다', 'info'); return; }
+  const scoreObj = computeHealthScore(d);
+  const unknown = getUnknownTagStats(d);
+  const sample = getResolutionSampleStats(d);
+  const history = getDurableHistoryStatus(d);
+  const rb = d.resolutionBuckets || {};
+  const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
+  const slow8h = rb['8시간+'] || 0;
+  const complaints = (d.complaintTrend?.complaints || []).reduce((a, b) => a + b, 0);
+  const total = d.summary?.totalChats || 0;
+  const complaintRate = total ? Math.round(complaints / total * 100) : 0;
+  const report = [
+    `[OPS] 채널톡 CS 대시보드 요약`,
+    `기간: ${currentDays === 'all' ? '전체' : `최근 ${currentDays}일`} · 총 ${total}건 · 건강점수 ${scoreObj.score}점`,
+    `오픈 ${d.summary?.openChats || 0}건 · 미배정 ${d.summary?.unassignedChats || 0}건 · 장기지연 ${slow8h}/${resTotal}건(${Math.round(slow8h / resTotal * 100)}%)`,
+    `컴플레인 ${complaints}건(${complaintRate}%) · FRT ${d.frtStats?.median != null ? fmtMin(d.frtStats.median) : '—'} · FCR ${d.fcrStats?.fcrRate ?? '—'}%`,
+    `데이터 신뢰도: VOC 미분류 ${unknown.pct}%(${unknown.count}/${unknown.total}) · 해결시간 n=${sample.n} ${sample.label} · ${history.label}`,
+    `주의: 자동 태깅 ${d.taggingQuality?.autoTaggingAvailable ? '활성' : '미구현/본문 미수집'} · 순수 상담원 처리시간 ${d.resolutionStats?.agentHandleTimeAvailable ? '활성' : '미수집'}`,
+  ].join('\n');
+  try {
+    await navigator.clipboard.writeText(report);
+    showToast('운영 리포트를 클립보드에 복사했습니다', 'success');
+  } catch (_) {
+    showToast('브라우저 권한 문제로 복사하지 못했습니다', 'error');
+  }
+}
+
 /* ─── Collapsibles ──────────────────────────────────────────────────── */
 function initCollapsibles() {
   document.querySelectorAll('.collapse-toggle').forEach(btn => {
@@ -3637,6 +3792,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // CSV 다운로드
   const csvBtn = document.getElementById('csvDownloadBtn');
   if (csvBtn) csvBtn.addEventListener('click', downloadCSV);
+  const reportBtn = document.getElementById('reportCopyBtn');
+  if (reportBtn) reportBtn.addEventListener('click', copyOpsReport);
 
   // 롱챗 모달 배경 클릭 닫기
   const modal = document.getElementById('longChatsModal');
@@ -3653,6 +3810,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   initCollapsibles();
   initFilterDrawer();
+  initSlaTargetControls();
   initMobileAccordions();
   initTooltips();
   initTabs();
@@ -3827,4 +3985,7 @@ function triggerFullReload() {
   render();
 }
 
-render();
+(async function boot() {
+  const ok = await ensureAuthenticated();
+  if (ok) render();
+})();

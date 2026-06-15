@@ -124,6 +124,9 @@
           <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
           CSV
         </button>
+        <button id="reportCopyBtn" class="toolbar-btn toolbar-btn--ghost">
+          리포트 복사
+        </button>
         <button id="refreshBtn" class="toolbar-btn toolbar-btn--primary">
           <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M13.65 2.35A8 8 0 1 0 14.94 8H13a6 6 0 1 1-1.25-3.72L9 7h5V2l-.35.35z"/></svg>
           새로고침
@@ -154,6 +157,15 @@
       </div>
     </div>
   </div>
+
+  <nav class="section-anchor-nav" aria-label="대시보드 섹션 이동">
+    <a href="#section-kpis">핵심</a>
+    <a href="#section-trends">추이</a>
+    <a href="#section-voc">VOC</a>
+    <a href="#section-resolution">해결시간</a>
+    <a href="#section-advanced">고도화</a>
+    <a href="#section-diagnostics">진단</a>
+  </nav>
 
   <!-- 모바일 필터 바텀시트 (≤430px) — position:fixed, body 레벨 -->
   <div id="filterBottomSheet" class="fbs-overlay" aria-hidden="true" role="dialog" aria-modal="true" aria-label="필터">
@@ -186,7 +198,7 @@
     </div>
   </div>
 
-  <div class="basis-row">
+  <div id="section-kpis" class="basis-row">
     <div id="kpiBasisHeader" class="kpi-basis-header"></div>
     <div id="filterBadgeRow" class="filter-badge-row" style="display:none"></div>
   </div>
@@ -289,7 +301,7 @@
   <!-- ────────────────────────────────────────────────────────
        MASTER GRID
   ──────────────────────────────────────────────────────────── -->
-  <div class="chart-master-grid">
+  <div id="section-trends" class="chart-master-grid">
 
     <!-- Row 1: 트렌드(col-8) + 히트맵(col-4) -->
     <div class="cg-panel col-8">
@@ -323,7 +335,7 @@
     </div>
 
     <!-- A-1: VOC 통합 탭 (col-12) -->
-    <div class="cg-panel col-12">
+    <div id="section-voc" class="cg-panel col-12">
       <div class="cg-panel-header">
         <span class="cg-panel-title">VOC 분석</span>
         <div id="vocTabs" class="cg-tabs" role="tablist" aria-label="VOC 분석 탭">
@@ -362,7 +374,7 @@
     </div>
 
     <!-- 카테고리 (col-12) -->
-    <div class="cg-panel col-12">
+    <div id="section-resolution" class="cg-panel col-12">
       <div class="cg-panel-header"><span class="cg-panel-title">문의 카테고리 분석</span></div>
       <div id="categoryBars" class="category-bars"></div>
     </div>
@@ -462,7 +474,7 @@
   <!-- ════════════════════════════════════════════════════════
        ADVANCED INTELLIGENCE
   ════════════════════════════════════════════════════════ -->
-  <section class="adv-section-wrap">
+  <section id="section-advanced" class="adv-section-wrap">
     <div class="adv-section-banner collapse-toggle" data-target="advContent" role="button" tabindex="0" aria-expanded="false" aria-controls="advContent">
       <div class="adv-banner-text">
         <div class="adv-banner-title">고도화 분석 (Advanced Intelligence)</div>
@@ -475,10 +487,16 @@
     <div id="advContent" class="hidden">
 
     <!-- WoW + SLA -->
-    <div class="cg-panel col-12 adv-panel">
+    <div id="section-diagnostics" class="cg-panel col-12 adv-panel">
       <div class="cg-panel-header">
         <span class="cg-panel-title">기간 비교 & SLA 준수율</span>
         <span class="panel-badge adv-pb">Period-over-Period</span>
+      </div>
+      <div class="sla-target-controls" aria-label="SLA 목표 설정">
+        <label>30분 <input id="slaTarget30" type="number" min="1" max="100" step="1" value="50">%</label>
+        <label>2시간 <input id="slaTarget2h" type="number" min="1" max="100" step="1" value="80">%</label>
+        <label>8시간 <input id="slaTarget8h" type="number" min="1" max="100" step="1" value="95">%</label>
+        <button id="slaTargetReset" type="button">기본값</button>
       </div>
       <div class="adv-grid-12">
         <div id="wowStrip" class="wow-strip"></div>

@@ -406,6 +406,36 @@ canvas { display: block; }
   background: var(--teal); color: #fff;
 }
 .toolbar-btn--primary:hover { background: var(--teal-d); }
+.section-anchor-nav {
+  position: sticky;
+  top: 50px;
+  z-index: 650;
+  display: flex;
+  gap: 6px;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 8px 24px;
+  background: rgba(255,255,255,.94);
+  border-bottom: 1px solid var(--border-soft);
+  backdrop-filter: blur(10px);
+  overflow-x: auto;
+}
+.section-anchor-nav a {
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-decoration: none;
+}
+.section-anchor-nav a:hover {
+  color: var(--teal-d);
+  border-color: var(--teal-l);
+  background: var(--teal-bg);
+}
 
 /* ══════════════════════════════════════════════════════════════════════════ */
 /* BASIS ROW / ALERT STRIP                                                    */
@@ -1853,6 +1883,45 @@ canvas { display: block; }
 
 /* SLA Tracker */
 .sla-tracker { display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
+.sla-target-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+  background: #F8FAFC;
+}
+.sla-target-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--muted);
+}
+.sla-target-controls input {
+  width: 52px;
+  height: 26px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+}
+.sla-target-controls button {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 800;
+}
 .sla-row {
   display: grid; grid-template-columns: 28px 110px 1fr 60px 80px 60px;
   gap: 10px; align-items: center; padding: 10px 12px;
@@ -1899,6 +1968,8 @@ canvas { display: block; }
 @media (max-width: 700px) {
   .sla-row { grid-template-columns: 24px 1fr 60px; }
   .sla-row .sla-bar-wrap, .sla-row .sla-count, .sla-row .sla-status { display: none; }
+  .sla-target-controls { gap: 6px; padding: 8px; }
+  .sla-target-controls input { width: 48px; }
 }
 
 /* Hour Load KV */

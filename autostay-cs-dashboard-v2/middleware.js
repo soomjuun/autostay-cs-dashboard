@@ -10,10 +10,7 @@ export const config = {
 };
 
 export default function middleware(request) {
-  const validToken = process.env.DASHBOARD_TOKEN;
-
-  // 토큰 미설정 시 인증 비활성화 (로컬 개발용)
-  if (!validToken) return;
+  const validToken = process.env.DASHBOARD_TOKEN || 'autostay-cs-2026';
 
   const cookieKey = process.env.COOKIE_KEY || 'ds_auth';
   const cookies = request.headers.get('cookie') || '';
