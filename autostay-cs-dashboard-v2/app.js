@@ -246,12 +246,15 @@ function showToast(msg, type = 'success', duration = 3500) {
   if (!container) {
     container = document.createElement('div');
     container.id = 'toast-container';
+    container.setAttribute('aria-live', 'polite');
     container.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:99999;display:flex;flex-direction:column;gap:8px;pointer-events:none;';
     document.body.appendChild(container);
   }
-  const icons = { success: '✓', error: '✕', info: 'ℹ' };
-  const colors = { success: '#0f766e', error: '#be123c', info: '#1d4ed8' };
+  const icons = { success: '✓', error: '✕', info: 'ℹ', warn: '!' };
+  const colors = { success: '#3182F6', error: '#BE123C', info: '#1B64DA', warn: '#B45309' };
   const toast = document.createElement('div');
+  toast.className = `toast-msg ${type}`;
+  toast.setAttribute('role', 'status');
   toast.style.cssText = `background:${colors[type]||colors.info};color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:600;box-shadow:0 4px 20px rgba(0,0,0,.22);opacity:0;transform:translateY(10px);transition:all .22s cubic-bezier(.4,0,.2,1);max-width:340px;display:flex;align-items:center;gap:8px;`;
   toast.innerHTML = `<span style="font-size:15px">${icons[type]||'ℹ'}</span><span>${msg}</span>`;
   container.appendChild(toast);
@@ -470,6 +473,7 @@ function renderHeroAction(d, scoreObj) {
   const score = scoreObj.score;
   const rb = d.resolutionBuckets || {};
   const mgrConc = getManagerConcentration(d);
+  const activeManagerCount = (d.managers || []).filter((m) => !EXCLUDED_MANAGERS.includes(m.name) && m.count > 0).length;
   const unassigned = d.summary.unassignedChats || 0;
   const openChats = d.summary.openChats || 0;
   const slow8h = rb['8시간+'] || 0;
@@ -531,12 +535,14 @@ function renderHeroAction(d, scoreObj) {
   }
   if (topMgr && topPct > 60) {
     actions.push({
-      type: topPct > 70 ? 'danger' : 'warn',
-      title: `담당자 편중 완화`,
+      type: topPct > 70 && activeManagerCount > 2 ? 'danger' : 'warn',
+      title: activeManagerCount <= 2 ? `백업·분산 기준 점검` : `담당자 편중 완화`,
       cta: '담당자 현황 보기',
       metric: topPct + '%',
       rec: `${dispMgrName(topMgr.name)} ${topMgr.count}건 · 배정 기준 ${topPct}%`,
-      target: `전체 기준 ${mgrConc.totalPct}% · 신규 문의 분산 권장`,
+      target: activeManagerCount <= 2
+        ? `활성 ${activeManagerCount}명 · 휴무/피크 백업 룰 점검`
+        : `전체 기준 ${mgrConc.totalPct}% · 신규 문의 분산 권장`,
       onclick: "_gotoTab('mgr-conc'); return false;",
     });
   }
@@ -744,13 +750,15 @@ function generateInsights(d, scoreObj) {
   const rb = d.resolutionBuckets || {};
   const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
   const mgrConc = getManagerConcentration(d);
+  const activeManagerCount = (d.managers || []).filter((m) => !EXCLUDED_MANAGERS.includes(m.name) && m.count > 0).length;
   const complaintPct = scoreObj.complaintPct;
   if (complaintPct >= 15) insights.push({ type: 'danger', icon: '위험', short: `컴플레인 ${complaintPct}%`, detail: `컴플레인 비율 ${complaintPct}% — 즉각 대응 필요 (기준: 15% 이상)` });
   else if (complaintPct >= 8) insights.push({ type: 'warn', icon: '주의', short: `컴플레인 ${complaintPct}%`, detail: `컴플레인 비율 ${complaintPct}% — 모니터링 권장 (기준: 8% 이상)` });
   if (mgrConc.topMgr) {
     const topPct = mgrConc.assignedPct;
     const topName = dispMgrName(mgrConc.topMgr.name);
-    if (topPct > 80) insights.push({ type: 'danger', icon: '위험', short: `${topName} ${topPct}%`, detail: `${topName} 처리 집중도 ${topPct}% — 과부하 위험, 즉시 재배정 검토` });
+    if (topPct > 80 && activeManagerCount <= 2) insights.push({ type: 'warn', icon: '점검', short: `${topName} ${topPct}%`, detail: `${topName} 처리 집중도 ${topPct}% · 활성 담당자 ${activeManagerCount}명 — 과부하 단정보다 백업·분산 기준 점검이 우선입니다` });
+    else if (topPct > 80) insights.push({ type: 'danger', icon: '위험', short: `${topName} ${topPct}%`, detail: `${topName} 처리 집중도 ${topPct}% — 과부하 위험, 즉시 재배정 검토` });
     else if (topPct > 60) insights.push({ type: 'warn', icon: '주의', short: `${topName} ${topPct}%`, detail: `${topName} 처리 집중도 ${topPct}% — 편중 주의` });
   }
   const slowPct = Math.round((rb['8시간+'] || 0) / resTotal * 100);
@@ -789,9 +797,15 @@ function renderAlertStrip(d, scoreObj) {
   const rb = d.resolutionBuckets || {};
   const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
   const mgrConc = getManagerConcentration(d);
+  const activeManagerCount = (d.managers || []).filter((m) => !EXCLUDED_MANAGERS.includes(m.name) && m.count > 0).length;
   if (mgrConc.topMgr) {
     const topPct = mgrConc.assignedPct;
-    if (topPct > 70) alerts.push({ level: 'danger', icon: '과부하', title: '담당자 과부하', body: `${dispMgrName(mgrConc.topMgr.name)} · 배정 기준 ${topPct}%` });
+    if (topPct > 70) alerts.push({
+      level: activeManagerCount <= 2 ? 'warn' : 'danger',
+      icon: '편중',
+      title: activeManagerCount <= 2 ? '백업 기준 점검' : '담당자 과부하',
+      body: `${dispMgrName(mgrConc.topMgr.name)} · 배정 기준 ${topPct}% · 활성 ${activeManagerCount}명`
+    });
   }
   let complaintsAS, complaintBaseAS;
   if (d.complaintTrend?.complaints?.length > 0) {
@@ -835,7 +849,7 @@ function renderHeroQuickStats(d, scoreObj) {
   const elFcr = document.getElementById('himFcr');
   if (elFcr) {
     elFcr.textContent = fcrRate != null ? fcrRate + '%' : '—';
-    elFcr.style.color = fcrRate >= 90 ? '#5eead4' : fcrRate >= 75 ? '#fcd34d' : '#fca5a5';
+    elFcr.style.color = fcrRate == null ? '#8B95A1' : fcrRate >= 90 ? '#047857' : fcrRate >= 75 ? '#B45309' : '#BE123C';
   }
 
   const elRange = document.getElementById('himRange');
@@ -857,6 +871,14 @@ function renderHeroDecisionSummary(d, scoreObj) {
   const sameAcrossPeriods = isSameAcrossMainPeriods(dataNote);
   const fcrRate = d.fcrStats?.fcrRate;
   const frtMedian = d.frtStats?.median;
+  const activeManagerCount = (d.managers || []).filter((m) => !EXCLUDED_MANAGERS.includes(m.name) && m.count > 0).length;
+  const slowTone = slowPct > 30 ? 'danger' : slowPct > 10 ? 'warn' : 'good';
+  const complaintTone = scoreObj.complaintPct >= 15 ? 'danger' : scoreObj.complaintPct >= 8 ? 'warn' : 'good';
+  const concentrationTone = mgrConc.assignedPct > 80
+    ? (activeManagerCount <= 2 ? 'warn' : 'danger')
+    : mgrConc.assignedPct > 60 ? 'warn' : 'good';
+  const frtTone = frtMedian == null ? 'neutral' : frtMedian <= 5 ? 'good' : frtMedian <= 30 ? 'warn' : 'danger';
+  const fcrTone = fcrRate == null ? 'neutral' : fcrRate >= 90 ? 'good' : fcrRate >= 75 ? 'warn' : 'danger';
   const statusTone = scoreObj.score >= 80 ? 'good' : scoreObj.score >= 60 ? 'warn' : 'danger';
   const reliabilityBadges = getDataReliabilityBadges(d);
   el.innerHTML = `
@@ -865,11 +887,11 @@ function renderHeroDecisionSummary(d, scoreObj) {
       <strong>${scoreObj.score}점 · ${grade.label}</strong>
     </div>
     <div class="hds-grid">
-      <span class="hds-chip danger">장기지연 ${slowPct}%</span>
-      <span class="hds-chip danger">컴플레인 ${scoreObj.complaintPct}%</span>
-      <span class="hds-chip ${mgrConc.assignedPct > 60 ? 'danger' : 'good'}">편중 ${mgrConc.assignedPct}%</span>
-      <span class="hds-chip good">FRT ${frtMedian != null ? fmtMin(frtMedian) : '—'}</span>
-      <span class="hds-chip good">FCR ${fcrRate != null ? fcrRate + '%' : '—'}</span>
+      <span class="hds-chip ${slowTone}">장기지연 ${slowPct}%</span>
+      <span class="hds-chip ${complaintTone}">컴플레인 ${scoreObj.complaintPct}%</span>
+      <span class="hds-chip ${concentrationTone}">편중 ${mgrConc.assignedPct}%</span>
+      <span class="hds-chip ${frtTone}">FRT ${frtMedian != null ? fmtMin(frtMedian) : '—'}</span>
+      <span class="hds-chip ${fcrTone}">FCR ${fcrRate != null ? fcrRate + '%' : '—'}</span>
       ${sameAcrossPeriods ? '<span class="hds-chip warn">기간별 동일</span>' : ''}
       <span class="hds-chip neutral">${spanDays ? `실데이터 ${spanDays}일` : '실데이터'}</span>
       <span class="hds-chip neutral">${cacheMeta.shortLabel}</span>
@@ -881,6 +903,7 @@ function renderHeroDecisionSummary(d, scoreObj) {
 function renderKPIs(d, scoreObj) {
   const { summary } = d;
   const mgrConc = getManagerConcentration(d);
+  const activeManagerCount = (d.managers || []).filter((m) => !EXCLUDED_MANAGERS.includes(m.name) && m.count > 0).length;
   const topMgr = mgrConc.topMgr;
   const totalChats = summary.totalChats || 1;
   const openChats = summary.openChats || 0;
@@ -1063,7 +1086,7 @@ function renderKPIs(d, scoreObj) {
       <div class="kpi-value">${topPct}<span class="unit">%</span></div>
       <div class="kpi-meta">
         <span class="data-badge badge-calc">계산값</span>
-        <span class="delta ${topPct > 80 ? 'bad' : topPct > 60 ? 'neutral' : 'good'}">${topPct > 80 ? '과부하' : topPct > 60 ? '주의' : '분산 양호'}</span>
+        <span class="delta ${topPct > 80 && activeManagerCount > 2 ? 'bad' : topPct > 60 ? 'neutral' : 'good'}">${topPct > 80 ? (activeManagerCount <= 2 ? '구조 점검' : '과부하') : topPct > 60 ? '주의' : '분산 양호'}</span>
       </div>
       <div class="kpi-meta" style="margin-top:2px">
         <span style="font-size:10px;color:var(--muted)">${topMgr ? dispMgrName(topMgr.name) : '—'} · 전체 기준 ${mgrConc.totalPct}%</span>
@@ -2079,7 +2102,10 @@ function renderMgrRiskStrip(d) {
   const topMgr = mgrConc.topMgr;
   const topPct = mgrConc.assignedPct;
   const topName = topMgr ? dispMgrName(topMgr.name) : '—';
-  const concStatus = topPct > 80 ? { cls: 'danger', label: '과부하' } : topPct > 60 ? { cls: 'warn', label: '주의' } : { cls: 'good', label: '양호' };
+  const activeManagerCount = (d.managers || []).filter((m) => !EXCLUDED_MANAGERS.includes(m.name) && m.count > 0).length;
+  const concStatus = topPct > 80
+    ? { cls: activeManagerCount <= 2 ? 'warn' : 'danger', label: activeManagerCount <= 2 ? '구조 점검' : '과부하' }
+    : topPct > 60 ? { cls: 'warn', label: '주의' } : { cls: 'good', label: '양호' };
   const unaStatus = unassigned > 0 ? { cls: 'danger', label: '즉시 배정' } : { cls: 'good', label: '없음' };
   el.innerHTML = `
     <div class="mgr-risk-card mrc-${concStatus.cls}"><div class="mrc-icon"><span style="color:${topPct > 80 ? 'var(--rose)' : topPct > 60 ? 'var(--amber)' : 'var(--green)'}">●</span></div><div class="mrc-body"><div class="mrc-label">담당자 편중률 (배정 기준)</div><div class="mrc-value">${topName}${topMgr ? ' · ' + topMgr.count + '건' : ''} · ${topPct}% <span style="color:var(--muted);font-size:10px">전체 ${mgrConc.totalPct}%</span></div><div class="mrc-status ${concStatus.cls}">${concStatus.label}</div></div></div>
@@ -3754,6 +3780,69 @@ function initCollapsibles() {
   });
 }
 
+function initSectionNavigation() {
+  const nav = document.querySelector('.section-anchor-nav');
+  if (!nav) return;
+
+  const links = Array.from(nav.querySelectorAll('a[href^="#"]'));
+  const entries = links.map((link) => ({
+    link,
+    section: document.querySelector(link.getAttribute('href'))
+  })).filter((entry) => entry.section);
+
+  const setActive = (activeLink) => {
+    entries.forEach(({ link }) => {
+      const isActive = link === activeLink;
+      link.classList.toggle('active', isActive);
+      if (isActive) link.setAttribute('aria-current', 'location');
+      else link.removeAttribute('aria-current');
+    });
+  };
+
+  const revealAdvancedSection = (section) => {
+    const advancedContent = section.closest('#advContent');
+    if (!advancedContent || !advancedContent.classList.contains('hidden')) return;
+    advancedContent.classList.remove('hidden');
+    const toggle = document.querySelector('[data-target="advContent"]');
+    if (toggle) {
+      toggle.setAttribute('aria-expanded', 'true');
+      const arrow = toggle.querySelector('.adv-toggle');
+      if (arrow) arrow.textContent = '▾';
+    }
+    _initAdvPanelAccordions();
+  };
+
+  entries.forEach(({ link, section }) => {
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      revealAdvancedSection(section);
+      setActive(link);
+      requestAnimationFrame(() => {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        history.replaceState(null, '', link.getAttribute('href'));
+        setTimeout(() => setActive(link), 900);
+      });
+    });
+  });
+
+  if (!('IntersectionObserver' in window)) {
+    setActive(entries[0]?.link);
+    return;
+  }
+
+  const observer = new IntersectionObserver((observed) => {
+    const visible = observed
+      .filter((item) => item.isIntersecting)
+      .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+    if (!visible) return;
+    const match = entries.find(({ section }) => section === visible.target);
+    if (match) setActive(match.link);
+  }, { rootMargin: '-132px 0px -60% 0px', threshold: [0, 0.15, 0.4] });
+
+  entries.forEach(({ section }) => observer.observe(section));
+  setActive(entries[0]?.link);
+}
+
 /* ─── Events / DOMContentLoaded ─────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
   // 새로고침 버튼
@@ -3809,6 +3898,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   initCollapsibles();
+  initSectionNavigation();
   initFilterDrawer();
   initSlaTargetControls();
   initMobileAccordions();

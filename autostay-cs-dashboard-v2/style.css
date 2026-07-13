@@ -4093,6 +4093,108 @@ a.ops-status-item {
   box-shadow: none;
   padding: 8px 0;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* V4.8 — Navigation, hierarchy, and responsive polish                       */
+/* ══════════════════════════════════════════════════════════════════════════ */
+.hero-title {
+  max-width: 100%;
+  font-size: 32px;
+  line-height: 1.22;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+.hero-desc,
+.loading-logo-text {
+  letter-spacing: 0;
+}
+.section-anchor-nav {
+  top: 64px;
+  width: calc(100% - 48px);
+  max-width: var(--ops-page-max);
+  margin: 8px auto 4px;
+  padding: 4px;
+  gap: 2px;
+  border: 1px solid #E5E8EB;
+  border-radius: 12px;
+  background: rgba(255,255,255,.96);
+  box-shadow: 0 1px 2px rgba(25,31,40,.04);
+  scrollbar-width: none;
+}
+.section-anchor-nav::-webkit-scrollbar {
+  display: none;
+}
+.section-anchor-nav a {
+  min-height: 30px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #6B7684;
+  line-height: 1;
+  letter-spacing: 0;
+}
+.section-anchor-nav a:hover {
+  border-color: transparent;
+  background: #F2F4F6;
+  color: #191F28;
+}
+.section-anchor-nav a.active,
+.section-anchor-nav a[aria-current="location"] {
+  background: #E8F3FF;
+  color: #1B64DA;
+}
+#section-kpis,
+#section-trends,
+#section-voc,
+#section-resolution,
+#section-advanced,
+#section-diagnostics {
+  scroll-margin-top: 132px;
+}
+.hds-chip,
+.hds-status,
+.range-tab,
+.toolbar-btn {
+  letter-spacing: 0;
+}
+
+@media (max-width: 700px) {
+  .hero-title {
+    font-size: 26px;
+  }
+  .section-anchor-nav {
+    width: calc(100% - 24px);
+  }
+}
+
+@media (max-width: 430px) {
+  .hero-title {
+    font-size: 22px;
+  }
+  .section-anchor-nav {
+    top: 58px;
+    width: 100%;
+    margin: 0;
+    padding: 5px 12px;
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+  }
+  .section-anchor-nav a {
+    min-height: 28px;
+    padding: 6px 10px;
+    font-size: 10.5px;
+  }
+  #section-kpis,
+  #section-trends,
+  #section-voc,
+  #section-resolution,
+  #section-advanced,
+  #section-diagnostics {
+    scroll-margin-top: 118px;
+  }
+}
 .toolbar-inner {
   min-height: 46px;
   height: auto;
@@ -4129,6 +4231,7 @@ a.ops-status-item {
     border-radius: 0;
     border-left: 0;
     border-right: 0;
+    justify-content: flex-start;
   }
   .range-tabs {
     max-width: none;
@@ -4140,5 +4243,12 @@ a.ops-status-item {
   }
   .section-anchor-nav {
     top: 58px;
+  }
+  .toolbar-actions {
+    position: static;
+    right: auto;
+    z-index: auto;
+    background: transparent;
+    box-shadow: none;
   }
 }
