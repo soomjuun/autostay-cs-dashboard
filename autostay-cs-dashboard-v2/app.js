@@ -865,9 +865,7 @@ function renderHeroDecisionSummary(d, scoreObj) {
   const slow8h = rb['8시간+'] || 0;
   const slowPct = Math.round(slow8h / resTotal * 100);
   const mgrConc = getManagerConcentration(d);
-  const cacheMeta = getCacheMeta(d.diagnostics || {});
   const dataNote = d.dataNote || {};
-  const spanDays = getDataSpanDays(dataNote);
   const sameAcrossPeriods = isSameAcrossMainPeriods(dataNote);
   const fcrRate = d.fcrStats?.fcrRate;
   const frtMedian = d.frtStats?.median;
@@ -893,8 +891,6 @@ function renderHeroDecisionSummary(d, scoreObj) {
       <span class="hds-chip ${frtTone}">FRT ${frtMedian != null ? fmtMin(frtMedian) : '—'}</span>
       <span class="hds-chip ${fcrTone}">FCR ${fcrRate != null ? fcrRate + '%' : '—'}</span>
       ${sameAcrossPeriods ? '<span class="hds-chip warn">기간별 동일</span>' : ''}
-      <span class="hds-chip neutral">${spanDays ? `실데이터 ${spanDays}일` : '실데이터'}</span>
-      <span class="hds-chip neutral">${cacheMeta.shortLabel}</span>
       ${reliabilityBadges}
     </div>`;
 }
