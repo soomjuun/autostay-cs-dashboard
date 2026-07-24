@@ -1,10 +1,10 @@
-// [OPS] 채널톡 CS 대시보드 — Channel.io API Proxy v4.0
+// [OPS] 채널톡 CS 대시보드 — Channel.io API Proxy v4.1
 // ─────────────────────────────────────────────────────────────────────────────
-// v4.0 (2026-04): 고도화 9종 통합
-//   B-1: FRT (First Response Time) — operationWaitingTime, firstAssigneeId 활용
-//   B-2: 재오픈/FCR — state 전환 + reopened 추적
+// v4.1 (2026-07): 데이터 신뢰성·기간 집계·접근 제어 보강
+//   B-1: FRT (First Response Time) — operationWaitingTime 활용
+//   B-2: 재오픈/FCR — 목록 API만으로 산출하지 않고 이벤트 적재 필요 상태 표시
 //   B-3: 컴플레인 세분화 — 서비스/시스템/가격/탈퇴 4 카테고리
-//   B-7: 수집 한도 1000건 (10페이지 × 100)
+//   B-7: 수집 한도 1000건 (2페이지 × 500, since 커서)
 //   D-1: Vercel KV 캐싱 (5분 TTL, KV 없으면 메모리 fallback)
 //   고객 반복 문의 (repeat customer) 추적
 //   메시지 카운트 분석
@@ -14,23 +14,71 @@
 const { cacheGet, cacheSet, persistentGet, persistentSet, KV_ENABLED } = require('./_cache');
 
 const SNAPSHOT_KEY = 'cs:daily-snapshots:v1';
-const FALLBACK_DASHBOARD_TOKEN = 'autostay-cs-2026';
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const UNKNOWN_TAG_PATTERNS = ['파악불가', '미분류', '태그없음', '태그 없음', 'unknown', 'uncategorized'];
 
 function kstDateKey(ts = Date.now()) {
-  const d = new Date(ts + 9 * 3600 * 1000);
+  const d = new Date(ts + KST_OFFSET_MS);
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, '0');
   const day = String(d.getUTCDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
 
+function kstDayStartMs(ts = Date.now()) {
+  const d = new Date(ts + KST_OFFSET_MS);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - KST_OFFSET_MS;
+}
+
+function dateKeyFromKstDayOffset(offset, baseTs = Date.now()) {
+  return kstDateKey(kstDayStartMs(baseTs) + offset * DAY_MS);
+}
+
+function shortDateLabel(dateKey) {
+  const [, month, day] = String(dateKey).split('-');
+  return `${Number(month)}/${Number(day)}`;
+}
+
+function formatTrendLabels(dateKeys) {
+  const years = new Set(dateKeys.map((key) => String(key).slice(0, 4)));
+  return dateKeys.map((key) => years.size > 1
+    ? `${String(key).slice(2, 4)}.${Number(String(key).slice(5, 7))}.${Number(String(key).slice(8, 10))}`
+    : shortDateLabel(key));
+}
+
+function isUnknownTag(tag) {
+  const normalized = String(tag || '').trim().toLowerCase();
+  return UNKNOWN_TAG_PATTERNS.some((pattern) => normalized.includes(pattern.toLowerCase()));
+}
+
+function uniqueTags(tags) {
+  return Array.from(new Set((Array.isArray(tags) ? tags : [])
+    .map((tag) => String(tag || '').trim())
+    .filter(Boolean)));
+}
+
+function classifyVoc(tags) {
+  const normalizedTags = uniqueTags(tags);
+  const tagText = normalizedTags.join(' ');
+  if (normalizedTags.some((tag) => tag.includes('컴플레인'))) return 'complaint';
+  if (/정기구독|구독/.test(tagText)) return 'subscribe';
+  if (/이용|단순문의|안내/.test(tagText)) return 'inquiry';
+  const meaningfulTags = normalizedTags.filter((tag) => !isUnknownTag(tag));
+  if (!meaningfulTags.length) return 'unknown';
+  return 'other';
+}
+
 function compactSnapshot(result) {
   const today = kstDateKey();
-  const todayLabel = today.slice(5).replace(/^0/, '').replace('-0', '/').replace('-', '/');
+  const todayLabel = shortDateLabel(today);
   const trendLabels = result.dailyTrend?.labels || [];
+  const trendDateKeys = result.dailyTrend?.dateKeys || [];
   const trendValues = result.dailyTrend?.values || [];
   const complaintValues = result.complaintTrend?.complaints || [];
-  const todayIdx = trendLabels.lastIndexOf(todayLabel);
+  const todayIdx = trendDateKeys.length
+    ? trendDateKeys.lastIndexOf(today)
+    : trendLabels.lastIndexOf(todayLabel);
   const dailyTotal = todayIdx >= 0 ? (trendValues[todayIdx] || 0) : 0;
   const dailyComplaints = todayIdx >= 0 ? (complaintValues[todayIdx] || 0) : 0;
   const windowTotal = result.summary?.totalChats || 0;
@@ -50,10 +98,7 @@ function compactSnapshot(result) {
     fcrRate: result.fcrStats?.fcrRate ?? null,
     frtMedian: result.frtStats?.median ?? null,
     resolutionSampleN: Object.values(result.resolutionBuckets || {}).reduce((a, b) => a + b, 0),
-    unknownTagCount: (result.tags?.labels || []).reduce((sum, label, i) => {
-      const normalized = String(label || '').toLowerCase();
-      return sum + (['파악불가', '미분류', '태그없음', '태그 없음', 'unknown', 'uncategorized'].some((p) => normalized.includes(p.toLowerCase())) ? (result.tags.values?.[i] || 0) : 0);
-    }, 0),
+    unknownTagCount: result.taggingQuality?.unknownCount || 0,
   };
 }
 
@@ -71,7 +116,10 @@ async function recordDailySnapshot(result) {
       acc[key] = byDate[key];
       return acc;
     }, {});
-    await persistentSet(SNAPSHOT_KEY, { updatedAt: new Date().toISOString(), byDate: trimmed });
+    const stored = await persistentSet(SNAPSHOT_KEY, { updatedAt: new Date().toISOString(), byDate: trimmed });
+    if (!stored) {
+      return { enabled: false, source: 'error', count: 0, firstDate: null, lastDate: null, message: '스냅샷 저장 실패' };
+    }
     const dates = Object.keys(trimmed).sort();
     const trend = {
       labels: dates,
@@ -118,7 +166,12 @@ function parseCookie(str) {
   const out = {};
   (str || '').split(';').forEach((part) => {
     const [k, ...v] = part.trim().split('=');
-    if (k) out[k.trim()] = decodeURIComponent(v.join('='));
+    if (!k) return;
+    try {
+      out[k.trim()] = decodeURIComponent(v.join('='));
+    } catch (_) {
+      out[k.trim()] = v.join('=');
+    }
   });
   return out;
 }
@@ -148,31 +201,36 @@ async function safeFetch(url, opts, label) {
 }
 
 function pct(arr, p) {
-  if (!arr.length) return 0;
+  if (!arr.length) return null;
   const sorted = arr.slice().sort((a, b) => a - b);
   const idx = Math.min(Math.floor(sorted.length * p), sorted.length - 1);
   return Math.round(sorted[idx]);
 }
 
 function detectAnomalies(values) {
-  if (values.length < 5) return [];
-  const nonZero = values.filter((v) => v > 0);
-  if (nonZero.length < 5) return [];
-  const mean = nonZero.reduce((a, b) => a + b, 0) / nonZero.length;
-  const variance = nonZero.reduce((a, b) => a + (b - mean) ** 2, 0) / nonZero.length;
-  const sd = Math.sqrt(variance) || 1;
+  if (values.length < 14) return [];
+  const sorted = values.slice().sort((a, b) => a - b);
+  const q1 = pct(sorted, 0.25);
+  const q3 = pct(sorted, 0.75);
+  const iqr = q3 - q1;
+  if (iqr <= 0) return [];
+  const lower = Math.max(0, q1 - 1.5 * iqr);
+  const upper = q3 + 1.5 * iqr;
   return values.map((v, i) => ({
-    idx: i, val: v, z: (v - mean) / sd,
-    isHigh: v > 0 && (v - mean) / sd >= 1.8,
-    isLow: v > 0 && (v - mean) / sd <= -1.8,
+    idx: i,
+    val: v,
+    lower: Math.round(lower * 10) / 10,
+    upper: Math.round(upper * 10) / 10,
+    isHigh: v > upper,
+    isLow: v < lower,
   })).filter((d) => d.isHigh || d.isLow);
 }
 
 // ── 컴플레인 세분화 분류 ────────────────────────────────────────────────
 function classifyComplaint(tags) {
   const tagStr = (tags || []).join(' ');
-  if (/이용불가|시스템|오류|버그|결제|앱|로그인|접속/.test(tagStr)) return 'system';
   if (/요금|가격|환불|취소|결제|할인|불만/.test(tagStr) && tagStr.includes('컴플레인')) return 'pricing';
+  if (/이용불가|시스템|오류|버그|앱|로그인|접속/.test(tagStr)) return 'system';
   if (/탈퇴|해지/.test(tagStr)) return 'churn';
   if (/응대|직원|매장|세차|품질|불친절/.test(tagStr) && tagStr.includes('컴플레인')) return 'service';
   if (tagStr.includes('컴플레인')) return 'other';
@@ -181,22 +239,26 @@ function classifyComplaint(tags) {
 
 module.exports = async function handler(req, res) {
   // ── 인증 게이트 ─────────────────────────────────────────────────────
-  const DASHBOARD_TOKEN = process.env.DASHBOARD_TOKEN || FALLBACK_DASHBOARD_TOKEN;
-  if (DASHBOARD_TOKEN) {
-    const cookieKey = process.env.COOKIE_KEY || 'ds_auth';
-    const cookie = parseCookie(req.headers.cookie);
-    if (cookie[cookieKey] !== DASHBOARD_TOKEN) {
-      res.setHeader('Content-Type', 'application/json');
-      return res.status(401).json({ error: 'Unauthorized', redirect: '/api/auth' });
-    }
+  const DASHBOARD_TOKEN = process.env.DASHBOARD_TOKEN;
+  if (!DASHBOARD_TOKEN) {
+    return res.status(503).json({ error: 'Dashboard authentication is not configured' });
+  }
+  const cookieKey = process.env.COOKIE_KEY || 'ds_auth';
+  const cookie = parseCookie(req.headers.cookie);
+  if (cookie[cookieKey] !== DASHBOARD_TOKEN) {
+    res.setHeader('Content-Type', 'application/json');
+    return res.status(401).json({ error: 'Unauthorized', redirect: '/api/auth' });
   }
 
-  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.setHeader('Pragma', 'no-cache');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'GET') {
+    res.setHeader('Allow', 'GET, OPTIONS');
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
 
   const ACCESS_KEY = process.env.CHANNEL_ACCESS_KEY;
   const ACCESS_SECRET = process.env.CHANNEL_ACCESS_SECRET;
@@ -209,11 +271,24 @@ module.exports = async function handler(req, res) {
   const BASE = 'https://api.channel.io/open/v5';
 
   const daysParam = req.query && req.query.days;
-  const days = (!daysParam || daysParam === 'all') ? null : parseInt(daysParam) || 30;
+  const allowedDays = new Set(['7', '14', '30', 'all']);
+  const normalizedDaysParam = !daysParam ? '7' : String(daysParam);
+  if (!allowedDays.has(normalizedDaysParam)) {
+    return res.status(400).json({ error: 'Invalid days parameter', allowed: Array.from(allowedDays) });
+  }
+  const days = normalizedDaysParam === 'all' ? null : Number(normalizedDaysParam);
   const skipCache = req.query && req.query.fresh === '1';
 
-  const KST_MS = 9 * 3600 * 1000;
-  const toKST = (ts) => new Date(ts + KST_MS);
+  const getKstParts = (ts) => {
+    const d = new Date(ts + KST_OFFSET_MS);
+    return {
+      year: d.getUTCFullYear(),
+      month: d.getUTCMonth() + 1,
+      day: d.getUTCDate(),
+      weekday: d.getUTCDay(),
+      hour: d.getUTCHours(),
+    };
+  };
 
   const startedAt = Date.now();
   const diagnostics = { calls: [], warnings: [], cacheHit: false, kvEnabled: KV_ENABLED };
@@ -244,8 +319,8 @@ module.exports = async function handler(req, res) {
     // ── 메타 데이터 병렬 조회 ────────────────────────────────────────
     const [channelR, managersR, openR, groupsR, botsR] = await Promise.all([
       safeFetch(`${BASE}/channel`, { headers }, 'channel'),
-      safeFetch(`${BASE}/managers?limit=30&sortField=name`, { headers }, 'managers'),
-      safeFetch(`${BASE}/user-chats?limit=50&state=opened&sortOrder=desc`, { headers }, 'open-chats'),
+      safeFetch(`${BASE}/managers?limit=500&sortField=name`, { headers }, 'managers'),
+      safeFetch(`${BASE}/user-chats?limit=500&state=opened&sortOrder=desc`, { headers }, 'open-chats'),
       safeFetch(`${BASE}/groups`, { headers }, 'groups'),
       safeFetch(`${BASE}/bots`, { headers }, 'bots'),
     ]);
@@ -261,13 +336,16 @@ module.exports = async function handler(req, res) {
     const groupsData = groupsR.data || {};
     const botsData = botsR.data || {};
 
-    // ── B-7: 수집 한도 1000건 (10 × 100) ───────────────────────────
-    const PAGE_SIZE = 100;
-    const MAX_PAGES = 10;
+    // Channel Open API v5: limit 최대 500, 응답 next 값은 since로 전달
+    const PAGE_SIZE = 500;
+    const MAX_PAGES = 2;
     const HARD_LIMIT = PAGE_SIZE * MAX_PAGES;
     let allChats = [];
     let nextCursor = null;
     let pageCount = 0;
+    let rawFetched = 0;
+    let paginationLoopDetected = false;
+    const seenCursors = new Set();
     const pageT0 = Date.now();
 
     for (let page = 0; page < MAX_PAGES && allChats.length < HARD_LIMIT; page++) {
@@ -276,7 +354,7 @@ module.exports = async function handler(req, res) {
         break;
       }
       const url = nextCursor
-        ? `${BASE}/user-chats?limit=${PAGE_SIZE}&state=closed&sortOrder=desc&next=${nextCursor}`
+        ? `${BASE}/user-chats?limit=${PAGE_SIZE}&state=closed&sortOrder=desc&since=${encodeURIComponent(nextCursor)}`
         : `${BASE}/user-chats?limit=${PAGE_SIZE}&state=closed&sortOrder=desc`;
       const r = await safeFetch(url, { headers }, `closed-page-${page + 1}`);
       diagnostics.calls.push({ label: r.label, ok: r.ok, status: r.status, ms: r.ms });
@@ -286,9 +364,18 @@ module.exports = async function handler(req, res) {
       }
       const chats = (r.data && r.data.userChats) || [];
       if (!chats.length) break;
+      rawFetched += chats.length;
       allChats = allChats.concat(chats);
-      nextCursor = r.data.next;
       pageCount = page + 1;
+      const next = r.data.next || null;
+      if (next && seenCursors.has(next)) {
+        paginationLoopDetected = true;
+        diagnostics.warnings.push(`pagination cursor repeated at page ${page + 1}`);
+        nextCursor = next;
+        break;
+      }
+      if (next) seenCursors.add(next);
+      nextCursor = next;
       if (!nextCursor) break;
     }
     diagnostics.paginationMs = Date.now() - pageT0;
@@ -296,28 +383,36 @@ module.exports = async function handler(req, res) {
 
     // dedup
     const seenIds = new Set();
+    const beforeDedupCount = allChats.length;
     allChats = allChats.filter((c) => {
       const key = c.id || (c.createdAt + '-' + (c.assigneeId || 'X'));
       if (seenIds.has(key)) return false;
       seenIds.add(key);
       return true;
     });
+    const duplicatesRemoved = beforeDedupCount - allChats.length;
 
-    const cutoffMs = days ? (Date.now() - days * 24 * 3600 * 1000) : null;
+    const currentPeriodStartMs = days ? kstDayStartMs() - (days - 1) * DAY_MS : null;
+    const previousPeriodStartMs = days ? currentPeriodStartMs - days * DAY_MS : null;
+    const cutoffMs = currentPeriodStartMs;
+    const periodTimestamp = (c) => c.closedAt || c.updatedAt || c.createdAt || null;
+    const collectedTimes = allChats.map(periodTimestamp).filter(Number.isFinite);
+    const oldestCollectedAt = collectedTimes.length ? Math.min(...collectedTimes) : null;
+    const newestCollectedAt = collectedTimes.length ? Math.max(...collectedTimes) : null;
+    const hitHardLimit = allChats.length >= HARD_LIMIT;
+    const hasMore = Boolean(nextCursor) && (hitHardLimit || paginationLoopDetected);
+    const currentPeriodComplete = !days || !hasMore || (oldestCollectedAt != null && oldestCollectedAt <= currentPeriodStartMs);
+    const baselineComplete = !days || !hasMore || (oldestCollectedAt != null && oldestCollectedAt <= previousPeriodStartMs);
 
     // ── 컨테이너 ───────────────────────────────────────────────────
     const dayCounts = {};
     const dayCountsPrev = {};
-    const windowDays = days || 90;
-    const nowKST = toKST(Date.now());
-    for (let i = windowDays - 1; i >= 0; i--) {
-      const d2 = new Date(nowKST.getTime() - i * 24 * 3600 * 1000);
-      dayCounts[`${d2.getMonth() + 1}/${d2.getDate()}`] = 0;
-    }
     if (days) {
+      for (let i = days - 1; i >= 0; i--) {
+        dayCounts[dateKeyFromKstDayOffset(-i)] = 0;
+      }
       for (let i = days * 2 - 1; i >= days; i--) {
-        const d2 = new Date(nowKST.getTime() - i * 24 * 3600 * 1000);
-        dayCountsPrev[`${d2.getMonth() + 1}/${d2.getDate()}`] = 0;
+        dayCountsPrev[dateKeyFromKstDayOffset(-i)] = 0;
       }
     }
 
@@ -329,6 +424,7 @@ module.exports = async function handler(req, res) {
     const mgrResTimes = {};
     const mgrFrtTimes = {};            // B-1: 담당자별 FRT
     const mgrTagCounts = {};
+    const mgrComplaintCounts = {};
     const resTimes = [];
     const frtTimes = [];               // B-1: 전체 FRT 배열
     const longChats = [];
@@ -351,24 +447,25 @@ module.exports = async function handler(req, res) {
     const agingBuckets = { lt8h: 0, h8_24: 0, d1_3: 0, d3_7: 0, d7plus: 0 };
 
     // B-2 재오픈 추적
-    let reopenedCount = 0;
     const userChatCount = {};          // userId → 채팅 수 (반복 문의)
+    let unknownChatCount = 0;
+    let noTagChatCount = 0;
+    const vocCategories = { unknown: 0, complaint: 0, subscribe: 0, inquiry: 0, other: 0 };
 
     // B-3 컴플레인 세분화
     const complaintCategories = {
       service: 0, system: 0, pricing: 0, churn: 0, other: 0
     };
     const complaintCategoryDaily = {}; // {dayKey: {service, system, ...}}
-    const getPeriodTs = (c) => c.closedAt || c.updatedAt || c.createdAt;
+    const getPeriodTs = periodTimestamp;
 
     // ── 채팅 처리 ──────────────────────────────────────────────────
     for (const c of allChats) {
       const periodTs = getPeriodTs(c);
       if (!periodTs) continue;
       if (cutoffMs && periodTs < cutoffMs) {
-        if (days && periodTs >= cutoffMs - days * 24 * 3600 * 1000) {
-          const dt = toKST(periodTs);
-          const k = `${dt.getMonth() + 1}/${dt.getDate()}`;
+        if (days && periodTs >= previousPeriodStartMs) {
+          const k = kstDateKey(periodTs);
           if (k in dayCountsPrev) dayCountsPrev[k]++;
         }
         continue;
@@ -379,22 +476,19 @@ module.exports = async function handler(req, res) {
 
       if (!c.assigneeId) unassigned++;
 
-      // B-2: 재오픈 추적 — openedAt이 createdAt + 1h 이상 차이나면 재오픈
-      if (c.openedAt && c.createdAt && c.openedAt > c.createdAt + 3600000) {
-        reopenedCount++;
-      }
       // B-2: 반복 문의
       if (c.userId) {
         userChatCount[c.userId] = (userChatCount[c.userId] || 0) + 1;
       }
 
-      const dt = toKST(periodTs);
-      const dayKey = `${dt.getMonth() + 1}/${dt.getDate()}`;
-      if (dayKey in dayCounts) dayCounts[dayKey]++;
+      const dateParts = getKstParts(periodTs);
+      const dayKey = kstDateKey(periodTs);
+      if (!(dayKey in dayCounts)) dayCounts[dayKey] = 0;
+      dayCounts[dayKey]++;
 
-      const rawDay = dt.getDay();
+      const rawDay = dateParts.weekday;
       const wd = rawDay === 0 ? 6 : rawDay - 1;
-      const hr = dt.getHours();
+      const hr = dateParts.hour;
       heatmapData[`${wd}-${hr}`] = (heatmapData[`${wd}-${hr}`] || 0) + 1;
       hourLoad[hr]++;
       weekdayLoad[wd]++;
@@ -408,14 +502,17 @@ module.exports = async function handler(req, res) {
       peakDayData[dayKey].hours[hr] = (peakDayData[dayKey].hours[hr] || 0) + 1;
       if (c.assigneeId) peakDayData[dayKey].assignees[c.assigneeId] = (peakDayData[dayKey].assignees[c.assigneeId] || 0) + 1;
 
-      const rawTags = (c.tags || []).slice();
-      let hasComplaint = false;
+      const rawTags = uniqueTags(c.tags);
+      const hasComplaint = rawTags.some((tag) => tag.includes('컴플레인'));
+      const hasUnknownTag = rawTags.some(isUnknownTag);
+      if (hasUnknownTag) unknownChatCount++;
+      if (!rawTags.length) noTagChatCount++;
+      vocCategories[classifyVoc(rawTags)]++;
       for (const tag of rawTags) {
         tagCounts[tag] = (tagCounts[tag] || 0) + 1;
         peakDayData[dayKey].tags[tag] = (peakDayData[dayKey].tags[tag] || 0) + 1;
-        if (tag.includes('컴플레인') && !hasComplaint) hasComplaint = true;
       }
-      if (hasComplaint && rawTags.filter((t) => t.includes('컴플레인')).length > 0) {
+      if (hasComplaint) {
         const exactExists = rawTags.some((t) => t === '컴플레인');
         if (!exactExists) tagCounts['컴플레인(전체)'] = (tagCounts['컴플레인(전체)'] || 0) + 1;
       }
@@ -429,17 +526,23 @@ module.exports = async function handler(req, res) {
           if (!complaintCategoryDaily[dayKey]) complaintCategoryDaily[dayKey] = { service: 0, system: 0, pricing: 0, churn: 0, other: 0 };
           complaintCategoryDaily[dayKey][cat]++;
         }
+        if (c.assigneeId) {
+          mgrComplaintCounts[c.assigneeId] = (mgrComplaintCounts[c.assigneeId] || 0) + 1;
+        }
       }
 
-      const uniqTags = Array.from(new Set(rawTags));
-      for (let i = 0; i < uniqTags.length; i++) {
-        for (let j = i + 1; j < uniqTags.length; j++) {
-          const key = [uniqTags[i], uniqTags[j]].sort().join('||');
+      for (let i = 0; i < rawTags.length; i++) {
+        for (let j = i + 1; j < rawTags.length; j++) {
+          const key = [rawTags[i], rawTags[j]].sort().join('||');
           tagCooccur[key] = (tagCooccur[key] || 0) + 1;
         }
       }
 
-      const medium = c.source && c.source.medium ? c.source.medium.mediumType : 'other';
+      const medium = c.contactMediumType
+        || c.source?.medium?.mediumType
+        || c.source?.medium
+        || c.source?.type
+        || 'other';
       let srcKey = 'other';
       if (medium === 'native') { sourceCounts.native++; peakDayData[dayKey].sources.native++; srcKey = 'native'; }
       else if (medium === 'phone') { sourceCounts.phone++; peakDayData[dayKey].sources.phone++; srcKey = 'phone'; }
@@ -451,8 +554,8 @@ module.exports = async function handler(req, res) {
       }
 
       // B-1: FRT 측정 (operationWaitingTime이 있으면 사용 — 채널톡 제공 필드)
-      const frtMs = c.operationWaitingTime;
-      if (frtMs && frtMs > 0) {
+      const frtMs = Number(c.operationWaitingTime);
+      if (Number.isFinite(frtMs) && frtMs >= 0) {
         const frtMin = frtMs / 1000 / 60;
         frtTimes.push(frtMin);
         if (c.assigneeId) {
@@ -461,8 +564,8 @@ module.exports = async function handler(req, res) {
         }
       }
 
-      const resTime = c.resolutionTime;
-      if (resTime && resTime > 0) {
+      const resTime = Number(c.resolutionTime);
+      if (Number.isFinite(resTime) && resTime >= 0) {
         const mins = resTime / 1000 / 60;
         resTimes.push(mins);
         if (mins < 5) resBuckets['0~5분']++;
@@ -512,15 +615,20 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    // ── trim & 분석 ────────────────────────────────────────────────
-    let trendDayCounts = dayCounts;
-    if (!days) {
-      const entries = Object.entries(dayCounts);
-      const firstNonZero = entries.findIndex(([, v]) => v > 0);
-      if (firstNonZero > 0) {
-        trendDayCounts = Object.fromEntries(entries.slice(Math.max(0, firstNonZero - 1)));
+    // 전체 기간도 상담이 없었던 날짜를 0건으로 채워 추세 축이 연속되도록 함.
+    if (!days && Number.isFinite(processedMinAt) && Number.isFinite(processedMaxAt)) {
+      const firstDayMs = kstDayStartMs(processedMinAt);
+      const lastDayMs = kstDayStartMs(processedMaxAt);
+      for (let dayMs = firstDayMs; dayMs <= lastDayMs; dayMs += DAY_MS) {
+        const key = kstDateKey(dayMs);
+        if (!(key in dayCounts)) dayCounts[key] = 0;
       }
     }
+
+    // ── trim & 분석 ────────────────────────────────────────────────
+    const trendDateKeys = Object.keys(dayCounts).sort();
+    const trendDayCounts = Object.fromEntries(trendDateKeys.map((key) => [key, dayCounts[key]]));
+    const trendLabels = formatTrendLabels(trendDateKeys);
 
     const peakEntry = Object.entries(trendDayCounts).sort((a, b) => b[1] - a[1])[0];
     let peakAnalysis = null;
@@ -533,7 +641,7 @@ module.exports = async function handler(req, res) {
         const pkTotal = peakEntry[1] || 1;
         const pkSrc = pk.sources || {};
         peakAnalysis = {
-          date: peakEntry[0], count: peakEntry[1],
+          date: shortDateLabel(peakEntry[0]), count: peakEntry[1],
           topTags: topTags3, topAssignees: topAssignees3,
           peakHour: peakHourEntry ? { hour: parseInt(peakHourEntry[0]), cnt: peakHourEntry[1] } : null,
           sources: { native: pkSrc.native || 0, phone: pkSrc.phone || 0, other: pkSrc.other || 0 },
@@ -552,7 +660,6 @@ module.exports = async function handler(req, res) {
         const mAvgFrt = mFrt.length ? Math.round(mFrt.reduce((a, b) => a + b, 0) / mFrt.length) : null;
         const mTags = mgrTagCounts[m.id] || {};
         const topTags = Object.entries(mTags).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([tag, cnt]) => ({ tag, cnt }));
-        const complaintHandled = Object.entries(mTags).filter(([t]) => t.includes('컴플레인')).reduce((a, [, c]) => a + c, 0);
         return {
           id: m.id, name: m.name,
           operatorScore: Math.round((m.operatorScore || 0) * 10) / 10,
@@ -563,7 +670,7 @@ module.exports = async function handler(req, res) {
           p90ResolutionMin: pct(mTimes, 0.9),
           avgFrtMin: mAvgFrt,                             // B-1
           medianFrtMin: pct(mFrt, 0.5),                   // B-1
-          topTags, complaintHandled,
+          topTags, complaintHandled: mgrComplaintCounts[m.id] || 0,
         };
       })
       .sort((a, b) => b.count - a.count);
@@ -597,11 +704,6 @@ module.exports = async function handler(req, res) {
     const p95Res = pct(resTimes, 0.95);
     const timesEx8h = resTimes.filter((t) => t < 480);
     const avgEx8h = timesEx8h.length ? Math.round(timesEx8h.reduce((a, b) => a + b, 0) / timesEx8h.length) : null;
-    const unknownTagCount = Object.entries(tagCounts).reduce((sum, [tag, count]) => {
-      const normalized = String(tag || '').toLowerCase();
-      return sum + (['파악불가', '미분류', '태그없음', '태그 없음', 'unknown', 'uncategorized'].some((p) => normalized.includes(p.toLowerCase())) ? count : 0);
-    }, 0);
-
     // B-1: FRT 통계
     const frtStats = frtTimes.length ? {
       avg: Math.round(frtTimes.reduce((a, b) => a + b, 0) / frtTimes.length),
@@ -615,11 +717,13 @@ module.exports = async function handler(req, res) {
       frtStats.sla30min.rate = frtStats.sla30min.total > 0 ? Math.round((frtStats.sla30min.count / frtStats.sla30min.total) * 100) : 0;
     }
 
-    // B-2: 재오픈/FCR
+    // 목록 API에는 상태 전환 이력이 없어 재오픈/FCR을 신뢰성 있게 계산할 수 없음
     const fcrStats = {
-      reopenedCount,
-      reopenedRate: processed > 0 ? Math.round((reopenedCount / processed) * 100 * 10) / 10 : 0,
-      fcrRate: processed > 0 ? Math.round(((processed - reopenedCount) / processed) * 100 * 10) / 10 : 100,
+      available: false,
+      reopenedCount: null,
+      reopenedRate: null,
+      fcrRate: null,
+      note: 'UserChat 목록 응답에는 종결 후 재오픈 상태 전환 이력이 없어 FCR을 산출하지 않습니다. 웹훅 또는 상태 이벤트 적재가 필요합니다.',
     };
 
     // B-2: 반복 문의 고객
@@ -648,26 +752,27 @@ module.exports = async function handler(req, res) {
       currentTotal: totalCurr, previousTotal: totalPrev,
       delta: totalCurr - totalPrev,
       deltaPct: totalPrev > 0 ? Math.round(((totalCurr - totalPrev) / totalPrev) * 100) : null,
+      baselineComplete,
     } : null;
 
     const complaintTrend = {
-      labels: Object.keys(trendDayCounts),
+      labels: trendLabels,
       total: Object.values(trendDayCounts),
-      complaints: Object.keys(trendDayCounts).map((k) => dailyComplaints[k] || 0),
+      complaints: trendDateKeys.map((k) => dailyComplaints[k] || 0),
     };
 
     // B-3: 컴플레인 세분화 일별
     const complaintCategoryTrend = {
-      labels: Object.keys(trendDayCounts),
-      service: Object.keys(trendDayCounts).map((k) => (complaintCategoryDaily[k] || {}).service || 0),
-      system: Object.keys(trendDayCounts).map((k) => (complaintCategoryDaily[k] || {}).system || 0),
-      pricing: Object.keys(trendDayCounts).map((k) => (complaintCategoryDaily[k] || {}).pricing || 0),
-      churn: Object.keys(trendDayCounts).map((k) => (complaintCategoryDaily[k] || {}).churn || 0),
-      other: Object.keys(trendDayCounts).map((k) => (complaintCategoryDaily[k] || {}).other || 0),
+      labels: trendLabels,
+      service: trendDateKeys.map((k) => (complaintCategoryDaily[k] || {}).service || 0),
+      system: trendDateKeys.map((k) => (complaintCategoryDaily[k] || {}).system || 0),
+      pricing: trendDateKeys.map((k) => (complaintCategoryDaily[k] || {}).pricing || 0),
+      churn: trendDateKeys.map((k) => (complaintCategoryDaily[k] || {}).churn || 0),
+      other: trendDateKeys.map((k) => (complaintCategoryDaily[k] || {}).other || 0),
     };
 
     const anomalies = detectAnomalies(Object.values(trendDayCounts)).map((a) => ({
-      ...a, label: Object.keys(trendDayCounts)[a.idx],
+      ...a, label: trendLabels[a.idx],
     }));
 
     const trendVals = Object.values(trendDayCounts);
@@ -695,6 +800,10 @@ module.exports = async function handler(req, res) {
         totalMs: Date.now() - startedAt,
         paginationMs: diagnostics.paginationMs,
         pages: diagnostics.pages,
+        pageSize: PAGE_SIZE,
+        rawFetched,
+        duplicatesRemoved,
+        paginationLoopDetected,
         warnings: diagnostics.warnings,
         callTiming: diagnostics.calls,
         anyFailure: diagnostics.warnings.length > 0,
@@ -702,12 +811,25 @@ module.exports = async function handler(req, res) {
         kvEnabled: KV_ENABLED,
       },
       dataNote: {
-        collected: allChats.length, processed, limit: HARD_LIMIT,
-        isSampled: allChats.length >= HARD_LIMIT,
+        collected: allChats.length,
+        rawFetched,
+        duplicatesRemoved,
+        processed,
+        limit: HARD_LIMIT,
+        isSampled: hasMore,
+        hasMore,
+        paginationLoopDetected,
+        currentPeriodComplete,
+        baselineComplete,
+        oldestCollectedAt,
+        newestCollectedAt,
         processedMinAt: processedMinAt === Infinity ? null : processedMinAt,
         processedMaxAt: processedMaxAt === -Infinity ? null : processedMaxAt,
         daysParam: days,
-        periodBasis: 'closedAt || updatedAt || createdAt',
+        periodBasis: 'closedAt 우선 (없으면 updatedAt, createdAt)',
+        periodTimezone: 'Asia/Seoul',
+        periodWindow: days ? `KST calendar days (${days})` : 'latest chats up to limit',
+        openChatsSampled: Boolean(openData.next),
       },
       channel: { name: channelInfo.name || '오토스테이 CS', id: channelInfo.id || null },
       summary: {
@@ -715,7 +837,7 @@ module.exports = async function handler(req, res) {
         openChats: openChats.length,
         unassignedChats: openUnassigned,
         avgResolutionMin: avgRes,
-        peakDay: peakEntry ? { label: peakEntry[0], count: peakEntry[1] } : null,
+        peakDay: peakEntry ? { label: shortDateLabel(peakEntry[0]), count: peakEntry[1] } : null,
       },
       resolutionStats: {
         avg: avgRes, median: medianRes, p75: p75Res, p90: p90Res, p95: p95Res, avgEx8h,
@@ -723,18 +845,21 @@ module.exports = async function handler(req, res) {
         agentHandleTimeNote: 'Channel Talk chat list 응답에는 고객 미응답 구간을 제거할 이벤트/메시지 타임라인이 포함되지 않아 순수 상담원 처리시간은 별도 메시지 수집 API가 필요합니다.',
       },
       taggingQuality: {
-        unknownCount: unknownTagCount,
-        unknownRate: processed > 0 ? Math.round((unknownTagCount / processed) * 100) : 0,
+        unknownCount: unknownChatCount,
+        unknownRate: processed > 0 ? Math.round((unknownChatCount / processed) * 100) : 0,
+        noTagCount: noTagChatCount,
+        unit: 'unique chats',
         autoTaggingAvailable: false,
         blocker: '현재 API 응답에는 상담 본문 텍스트가 없어 LLM 본문 자동분류를 실행할 수 없습니다. user-chat 메시지 본문 수집 후 서버 분류 파이프라인이 필요합니다.',
       },
       frtStats,                                  // B-1: FRT 통계
       fcrStats,                                  // B-2: FCR
       repeatStats,                               // B-2: 반복 문의
+      vocCategories,                             // 채팅 단위 배타 분류
       complaintCategories,                       // B-3: 컴플레인 세분화 합계
       complaintCategoryTrend,                    // B-3: 일별 추이
       slaStats,
-      dailyTrend: { labels: Object.keys(trendDayCounts), values: Object.values(trendDayCounts) },
+      dailyTrend: { labels: trendLabels, dateKeys: trendDateKeys, values: Object.values(trendDayCounts) },
       complaintTrend, anomalies, forecast, wow,
       tags: { labels: topTags.map((t) => t[0]), values: topTags.map((t) => t[1]) },
       tagResolutionStats: tagResStats,
@@ -761,14 +886,13 @@ module.exports = async function handler(req, res) {
     if (result.snapshotStore.snapshotForecast) result.snapshotForecast = result.snapshotStore.snapshotForecast;
 
     // ── 캐시 저장 (5분 TTL) ──────────────────────────────────────
-    if (!skipCache) {
-      cacheSet(cacheKey, result, 300).catch(() => {}); // fire-and-forget
-    }
+    // 강제 갱신도 최신 응답을 저장해야 이후 일반 조회가 과거 캐시로 되돌아가지 않는다.
+    await cacheSet(cacheKey, result, 300);
 
     return res.json(result);
   } catch (err) {
     return res.status(500).json({
-      error: err.message, stack: err.stack,
+      error: 'Dashboard data request failed',
       diagnostics, elapsedMs: Date.now() - startedAt,
     });
   }
