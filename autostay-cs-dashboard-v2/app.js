@@ -1,5 +1,5 @@
-// [OPS] 채널톡 CS 대시보드 — app.js v4.0
-// 추가: Hero 액션 박스, 탭 통합, FRT/FCR/반복문의, 컴플레인 세분화,
+// [OPS] 채널톡 CS 대시보드 — app.js v4.1
+// 추가: Hero 액션 박스, 탭 통합, FRT/반복문의, 컴플레인 세분화,
 //       채널톡 딥링크, 필터 시스템, KV 캐시 표시
 'use strict';
 
@@ -145,17 +145,23 @@ function isSameAcrossMainPeriods(dataNote = {}) {
   const collected = Number(dataNote.collected || 0);
   const processed = Number(dataNote.processed || 0);
   const limit = Number(dataNote.limit || 1000);
-  return Boolean(spanDays && spanDays <= 7 && collected > 0 && collected === processed && collected < limit && !dataNote.isSampled);
+  return Boolean(
+    spanDays
+    && spanDays <= 7
+    && collected > 0
+    && collected === processed
+    && collected < limit
+    && !dataNote.isSampled
+    && dataNote.currentPeriodComplete !== false
+    && !dataNote.paginationLoopDetected
+  );
 }
 function getUnknownTagStats(d) {
-  const tags = d.tags || { labels: [], values: [] };
   const total = d.summary?.totalChats || 0;
-  const unknownPatterns = ['파악불가', '미분류', '태그없음', '태그 없음', 'unknown', 'uncategorized'];
-  const count = (tags.labels || []).reduce((sum, label, i) => {
-    const normalized = String(label || '').toLowerCase();
-    const isUnknown = unknownPatterns.some((p) => normalized.includes(p.toLowerCase()));
-    return sum + (isUnknown ? (tags.values?.[i] || 0) : 0);
-  }, 0);
+  const serverCount = Number(d.taggingQuality?.unknownCount);
+  const count = Number.isFinite(serverCount)
+    ? serverCount
+    : 0;
   const pct = total ? Math.round(count / total * 100) : 0;
   const cls = pct >= 40 ? 'danger' : pct >= 20 ? 'warn' : 'good';
   return { count, pct, total, classified: Math.max(total - count, 0), cls, isHigh: pct >= 30 };
@@ -206,7 +212,14 @@ function hasPeriodBaseline(d) {
   const previousTotal = Number(w.previousTotal || 0);
   const currentTotal = Number(w.currentTotal || d.summary?.totalChats || 0);
   const hasSnapshotBaseline = Boolean(d.snapshotWow && history.historyDays >= 14);
-  return Boolean(history.historyDays >= 14 && previousTotal >= 20 && currentTotal >= 20 && (hasSnapshotBaseline || !isSameAcrossMainPeriods(d.dataNote || {})));
+  const baselineComplete = d.dataNote?.baselineComplete !== false && w.baselineComplete !== false;
+  return Boolean(
+    baselineComplete
+    && history.historyDays >= 14
+    && previousTotal >= 20
+    && currentTotal >= 20
+    && (hasSnapshotBaseline || !isSameAcrossMainPeriods(d.dataNote || {}))
+  );
 }
 function getDataReliabilityBadges(d) {
   const badges = [];
@@ -216,6 +229,7 @@ function getDataReliabilityBadges(d) {
   const history = getDurableHistoryStatus(d);
   if (unknown.isHigh) badges.push(`<span class="hds-chip ${unknown.cls}">VOC 미분류 ${unknown.pct}%</span>`);
   if (sample.n && sample.n < 80) badges.push(`<span class="hds-chip ${sample.cls}">해결시간 n=${sample.n} ${sample.label}</span>`);
+  if (d.dataNote?.openChatsSampled) badges.push('<span class="hds-chip warn">오픈 큐 500건 상한</span>');
   if (!history.configured) badges.push('<span class="hds-chip danger">스냅샷 미설정</span>');
   else if (history.historyDays < 14) badges.push(`<span class="hds-chip warn">${history.label} · 누적 중</span>`);
   else if (spanDays && spanDays < 14) badges.push(`<span class="hds-chip good">${history.label}</span>`);
@@ -273,10 +287,6 @@ function chatTalkUrl(chatId) {
   const cid = getChannelId();
   if (!cid || !chatId) return null;
   return `https://desk.channel.io/#/channels/${cid}/user_chats/${chatId}`;
-}
-function chatTalkChannel() {
-  const cid = getChannelId();
-  return cid ? `https://desk.channel.io/#/channels/${cid}` : 'https://desk.channel.io';
 }
 function chatTalkOpenUrl() {
   const cid = getChannelId();
@@ -431,8 +441,18 @@ function updateFilterBadges() {
 function applyFilteredRender() {
   if (!lastData) return;
   const filtered = applyFilters(lastData);
-  lastFilteredData = filtered;
-  fullRender(filtered);
+  lastFilteredData = activeFilterCount() > 0 ? filtered : null;
+  const viewData = lastFilteredData || lastData;
+  // 이 필터는 원시 대화 전체를 재집계하지 않으므로 전역 KPI는 변경하지 않는다.
+  // 필터 적용이 가능한 목록/분석 모듈만 다시 그려 부분 필터가 전역 수치처럼 보이는 오류를 막는다.
+  safeRender(() => renderVOC(viewData), 'filter.voc');
+  safeRender(() => renderVocRiskSection(viewData), 'filter.vocRisk');
+  safeRender(() => renderTagRes(viewData), 'filter.tagRes');
+  safeRender(() => renderTagCooccur(viewData), 'filter.tagCooccur');
+  safeRender(() => renderManagers(viewData), 'filter.managers');
+  safeRender(() => renderMgrQuadrant(viewData), 'filter.mgrQuadrant');
+  safeRender(() => renderMgrFrtTable(viewData), 'filter.mgrFrt');
+  safeRender(() => renderLongDelayPanel(viewData), 'filter.longDelay');
   // 필터 적용 범위 안내 배너
   const count = activeFilterCount();
   let scopeEl = document.getElementById('filterScopeNote');
@@ -727,6 +747,7 @@ function renderHealthScore(scoreObj, d) {
       rows.push(`<div class="hdd-row hdd-total"><span class="hdd-label">총 감점</span><span class="hdd-val" style="color:var(--rose)">-${totalDeduct2}점</span></div>`);
       deductDetail.innerHTML = rows.join('');
       deductDetail.style.display = 'none';
+      deductBtn.setAttribute('aria-expanded', 'false');
     } else {
       deductBtn.style.display = 'none';
       deductDetail.style.display = 'none';
@@ -740,7 +761,10 @@ function toggleHealthDeduct() {
   if (!detail) return;
   const isOpen = detail.style.display !== 'none';
   detail.style.display = isOpen ? 'none' : 'block';
-  if (btn) btn.textContent = isOpen ? '감점 내역 보기' : '감점 내역 닫기';
+  if (btn) {
+    btn.textContent = isOpen ? '감점 내역 보기' : '감점 내역 닫기';
+    btn.setAttribute('aria-expanded', String(!isOpen));
+  }
 }
 
 /* ─── Insights / Alert (기존 유지) ──────────────────────────────────── */
@@ -762,15 +786,15 @@ function generateInsights(d, scoreObj) {
     else if (topPct > 60) insights.push({ type: 'warn', icon: '주의', short: `${topName} ${topPct}%`, detail: `${topName} 처리 집중도 ${topPct}% — 편중 주의` });
   }
   const slowPct = Math.round((rb['8시간+'] || 0) / resTotal * 100);
-  if (slowPct > 30) insights.push({ type: 'warn', icon: '지연', short: `8h+ ${slowPct}%`, detail: `8시간 초과 해결 ${slowPct}% — 장기지연 비율 높음` });
+  if (slowPct > 30) insights.push({ type: 'warn', icon: '지연', short: `8h+ ${slowPct}%`, detail: `8시간 이상 해결 ${slowPct}% — 장기지연 비율 높음` });
   // FRT 인사이트
   if (d.frtStats && d.frtStats.median > 30) {
     insights.push({ type: 'warn', icon: 'FRT', short: `P50 ${fmtMin(d.frtStats.median)}`, detail: `첫 응답 중앙값 ${fmtMin(d.frtStats.median)} — 30분 초과, 응답 속도 개선 필요` });
   } else if (d.frtStats && d.frtStats.median <= 5) {
     insights.push({ type: 'good', icon: 'FRT', short: `P50 ${fmtMin(d.frtStats.median)}`, detail: `첫 응답 중앙값 ${fmtMin(d.frtStats.median)} — 신속 대응 양호` });
   }
-  // FCR
-  if (d.fcrStats && d.fcrStats.fcrRate < 80) {
+  // FCR은 재오픈 이벤트가 실제로 수집될 때만 운영 인사이트에 사용
+  if (d.fcrStats?.available && d.fcrStats.fcrRate != null && d.fcrStats.fcrRate < 80) {
     insights.push({ type: 'warn', icon: 'FCR', short: `FCR ${d.fcrStats.fcrRate}%`, detail: `1차 해결률 ${d.fcrStats.fcrRate}% — 재오픈 ${d.fcrStats.reopenedCount}건` });
   }
   return insights;
@@ -848,7 +872,7 @@ function renderHeroQuickStats(d, scoreObj) {
 
   const elFcr = document.getElementById('himFcr');
   if (elFcr) {
-    elFcr.textContent = fcrRate != null ? fcrRate + '%' : '—';
+    elFcr.textContent = fcrRate != null ? fcrRate + '%' : '측정 불가';
     elFcr.style.color = fcrRate == null ? '#8B95A1' : fcrRate >= 90 ? '#047857' : fcrRate >= 75 ? '#B45309' : '#BE123C';
   }
 
@@ -889,7 +913,7 @@ function renderHeroDecisionSummary(d, scoreObj) {
       <span class="hds-chip ${complaintTone}">컴플레인 ${scoreObj.complaintPct}%</span>
       <span class="hds-chip ${concentrationTone}">편중 ${mgrConc.assignedPct}%</span>
       <span class="hds-chip ${frtTone}">FRT ${frtMedian != null ? fmtMin(frtMedian) : '—'}</span>
-      <span class="hds-chip ${fcrTone}">FCR ${fcrRate != null ? fcrRate + '%' : '—'}</span>
+      <span class="hds-chip ${fcrTone}" title="${fcrRate == null ? '재오픈 상태 이력 미수집' : ''}">FCR ${fcrRate != null ? fcrRate + '%' : '측정 불가'}</span>
       ${sameAcrossPeriods ? '<span class="hds-chip warn">기간별 동일</span>' : ''}
       ${reliabilityBadges}
     </div>`;
@@ -1005,8 +1029,11 @@ function renderKPIs(d, scoreObj) {
       const missingDays = Math.round((actualStartMs - expectedStartMs) / (86400 * 1000));
       if (missingDays < 2) return ''; // 2일 미만 차이는 정상 범위
       const actualSpanDays = Math.max(1, Math.round((dataNote.processedMaxAt - dataNote.processedMinAt) / (86400 * 1000)) + 1);
+      const completeness = dataNote.currentPeriodComplete === false
+        ? '수집 상한 때문에 선택 기간 전체를 보장할 수 없음'
+        : '해당 구간 완료 상담이 없거나 원천 데이터가 존재하지 않음';
       return ` · <span style="color:var(--amber);font-size:10px;font-weight:700;cursor:help"
-        data-tip="최근 ${currentDays}일 선택 / 실제 수집 범위: ${_dateRangeStr || '?'} (${actualSpanDays}일치)&#10;약 ${missingDays}일 이전 데이터 없음 — API 수집 시작 이전 기간&#10;한도 미도달 · 수집된 전체 데이터를 정상 반영 중"
+        data-tip="최근 ${currentDays}일 선택 / 실제 포함 범위: ${_dateRangeStr || '?'} (${actualSpanDays}일치)&#10;${completeness}&#10;수집 완결: ${dataNote.currentPeriodComplete === false ? '미보장' : '확인'}"
         tabindex="0">실데이터 ${actualSpanDays}/${currentDays}일 ⓘ</span>`;
     })();
     kpiBasisHeaderEl.innerHTML = `
@@ -1057,7 +1084,7 @@ function renderKPIs(d, scoreObj) {
       </div>` : ''}
     </a>` },
     { sev: _kpiSev(_c3), html: `<div class="kpi-card a-${_c3}" onclick="openLongChatsPanel()"
-      data-tip="【8시간+ 해결시간】&#10;출처: 서버 계산값&#10;정의: 종결 채팅 중 해결시간 > 480분(8h) 케이스 수&#10;계산: closed 채팅의 resolutionMin > 480 건수&#10;분모: 해결시간 집계 가능한 closed 채팅 전체(${resTotal}건)&#10;비율: ${slow8hPct}% (${slow8h}/${resTotal})&#10;※ 오픈 대기중인 건이 아닌 완료된 채팅 기준" tabindex="0">
+      data-tip="【8시간+ 해결시간】&#10;출처: 서버 계산값&#10;정의: 종결 채팅 중 해결시간 ≥ 480분(8h) 케이스 수&#10;계산: closed 채팅의 resolutionMin ≥ 480 건수&#10;분모: 해결시간 집계 가능한 closed 채팅 전체(${resTotal}건)&#10;비율: ${slow8hPct}% (${slow8h}/${resTotal})&#10;※ 오픈 대기중인 건이 아닌 완료된 채팅 기준" tabindex="0">
       <div class="kpi-label">장기지연</div>
       <div class="kpi-value">${fmt(slow8h)}<span class="unit">건</span></div>
       <div class="kpi-meta">
@@ -1540,78 +1567,41 @@ function renderComplaintCategory(d) {
 
 /* ─── Category Bars ───────────────────────────────────────────────────── */
 function renderCategoryBars(d) {
-  const { tags, summary } = d;
+  const { summary } = d;
   const total = summary.totalChats || 1;
   const unknownStats = getUnknownTagStats(d);
-  const cats = {
-    unknown:   { label: '미분류',    color: '#64748b', count: 0, children: {} },
-    complaint: { label: '컴플레인', color: '#be123c', count: 0, children: {} },
-    subscribe:  { label: '구독 관련',  color: '#0f766e', count: 0, children: {} },
-    inquiry:    { label: '이용 문의',  color: '#1d4ed8', count: 0, children: {} },
-    etc:        { label: '기타/운영',  color: '#6d28d9', count: 0, children: {} },
-  };
-  (tags?.labels || []).forEach((lbl, i) => {
-    const val = tags.values[i] || 0;
-    if (!val) return;
-    const normalized = String(lbl || '').toLowerCase();
-    if (['파악불가', '미분류', '태그없음', '태그 없음', 'unknown', 'uncategorized'].some((p) => normalized.includes(p.toLowerCase()))) {
-      cats.unknown.count += val;
-      cats.unknown.children[lbl] = (cats.unknown.children[lbl] || 0) + val;
-    } else if (lbl.includes('컴플레인')) {
-      cats.complaint.count += val;
-      const sub = lbl.replace('컴플레인', '').replace(/^[/\-_\s]+/, '').trim() || '일반';
-      cats.complaint.children[sub] = (cats.complaint.children[sub] || 0) + val;
-    } else if (lbl.includes('구독') || lbl.includes('정기구독')) {
-      cats.subscribe.count += val;
-      cats.subscribe.children[lbl] = (cats.subscribe.children[lbl] || 0) + val;
-    } else if (lbl.includes('이용') || lbl.includes('단순문의') || lbl.includes('안내')) {
-      cats.inquiry.count += val;
-      cats.inquiry.children[lbl] = (cats.inquiry.children[lbl] || 0) + val;
-    } else {
-      cats.etc.count += val;
-      cats.etc.children[lbl] = (cats.etc.children[lbl] || 0) + val;
-    }
-  });
-  const parents = Object.values(cats).filter(c => c.count > 0).sort((a, b) => b.count - a.count);
-  const maxCount = Math.max(...parents.map(p => p.count), 1);
+  const raw = d.vocCategories || {};
+  const cats = [
+    { key: 'complaint', label: '컴플레인', color: '#be123c', count: Number(raw.complaint || 0), desc: '컴플레인 태그 포함' },
+    { key: 'subscribe', label: '구독 관련', color: '#0f766e', count: Number(raw.subscribe || 0), desc: '구독·정기구독 태그' },
+    { key: 'inquiry', label: '이용 문의', color: '#1d4ed8', count: Number(raw.inquiry || 0), desc: '이용·안내 태그' },
+    { key: 'unknown', label: '미분류', color: '#64748b', count: Number(raw.unknown || 0), desc: '유효 분류 태그 없음' },
+    { key: 'other', label: '기타/운영', color: '#6d28d9', count: Number(raw.other || 0), desc: '그 외 유효 태그' },
+  ].filter((cat) => cat.count > 0).sort((a, b) => b.count - a.count);
+  const hasServerCategories = Object.keys(raw).length > 0;
+  const categoryTotal = cats.reduce((sum, cat) => sum + cat.count, 0);
   const el = document.getElementById('categoryBars');
   if (!el) return;
-  el.innerHTML = renderDataQualityNote(unknownStats, '카테고리') + parents.map((cat) => {
-    const childEntries = Object.entries(cat.children).sort((a, b) => b[1] - a[1]).slice(0, 4);
-    const showChildren = childEntries.length > 1 || (childEntries.length === 1 && childEntries[0][0] !== '일반');
-    const childHtml = showChildren ? `<div class="cat-children">${
-      childEntries.map(([subLbl, subCnt]) => `
-        <div class="cat-child-row">
-          <div class="cat-child-label">↳ ${subLbl}</div>
-          <div class="cat-child-bar-wrap"><div class="cat-child-bar" style="width:${Math.max(subCnt / cat.count * 100, 3)}%;background:${cat.color}"></div></div>
-          <div class="cat-child-count">${subCnt}건<span class="cat-child-pct"> ${Math.round(subCnt / total * 100)}%</span></div>
-        </div>`).join('')
-    }</div>` : '';
-    const catId = `cat-${cat.label.replace(/\s+/g,'_')}`;
-    const hasChildren = showChildren && childEntries.length > 0;
-    return `
-    <div class="cat-parent-row${hasChildren ? ' cat-expandable' : ''}" ${hasChildren ? `onclick="toggleCatChildren('${catId}')" aria-expanded="false"` : ''}>
-      <div class="cat-parent-label">${cat.label}${hasChildren ? '<span class="cat-chevron" id="' + catId + '-chev" aria-hidden="true"> ›</span>' : ''}</div>
+
+  if (!hasServerCategories) {
+    el.innerHTML = `<div class="analysis-hold-card">
+      <div class="hold-label">카테고리 집계 보류</div>
+      <div class="hold-title">채팅 단위 분류 데이터 없음</div>
+      <div class="hold-foot">태그 발생 횟수를 채팅 수처럼 표시하지 않기 위해 구형 응답의 카테고리 추정치는 숨깁니다.</div>
+    </div>`;
+    return;
+  }
+
+  const maxCount = Math.max(...cats.map((cat) => cat.count), 1);
+  el.innerHTML = renderDataQualityNote(unknownStats, '카테고리') + cats.map((cat) => `
+    <div class="cat-parent-row">
+      <div class="cat-parent-label">${cat.label}</div>
       <div class="cat-parent-bar-wrap"><div class="cat-parent-bar" style="width:${Math.max(cat.count / maxCount * 100, 3)}%;background:${cat.color}"></div></div>
       <div class="cat-parent-count">${cat.count}건<span class="cat-parent-pct"> ${Math.round(cat.count / total * 100)}%</span></div>
-    </div>
-    ${hasChildren ? `<div class="cat-children-wrap" id="${catId}" style="display:none">${childHtml}</div>` : childHtml}`;
-  }).join('') + '<div class="cat-hierarchy-note">ⓘ 태그명 기반 자동 분류 — <strong>미분류</strong>: 파악불가·태그없음 / <strong>컴플레인</strong>: "컴플레인" 포함 태그 / <strong>구독 관련</strong>: "구독"·"정기구독" 포함 / <strong>이용 문의</strong>: "이용"·"단순문의" 포함 / 나머지 기타. 색상뿐 아니라 HIGH/MID/LOW·주의 라벨을 함께 표시합니다.</div>';
-}
-
-/* ─── ChannelTalk Link Helper ─────────────────────────────────────────── */
-function openChannelTalkWithGuide(url) {
-  if (!url || url === '#') {
-    showToast('⚠ 채널톡 URL을 설정하세요 (CHANNEL_TALK_BASE_URL)', 'warn', 4000);
-    return;
-  }
-  const w = window.open(url, '_blank');
-  if (!w) {
-    showToast('팝업이 차단되었습니다 — 브라우저에서 팝업 허용 후 다시 시도하세요', 'warn', 5000);
-    return;
-  }
-  // 2초 후 로그인 안내 (세션 없을 수 있음)
-  setTimeout(() => showToast('채널톡 로그인 세션이 필요합니다 (desk.channel.io)', 'info', 4000), 1800);
+      <span class="sr-only">${cat.desc}</span>
+    </div>`).join('') + `
+    <div class="cat-hierarchy-note">ⓘ 채팅 1건을 하나의 카테고리에만 배정한 배타 집계입니다. 합계 ${categoryTotal}건 / 분석 대상 ${summary.totalChats || 0}건.
+    분류 우선순위: 컴플레인 → 구독 → 이용 → 미분류 → 기타. VOC 미분류율은 미분류 태그가 하나라도 붙은 채팅 기준이라 카테고리의 ‘미분류’와 다를 수 있습니다.</div>`;
 }
 
 /* ─── Category Toggle ──────────────────────────────────────────────────── */
@@ -1685,7 +1675,7 @@ function renderResolution(d) {
     { label: '5~30분', val: rb['5~30분'] || 0, cls: 'ok', note: '신속' },
     { label: '30분~2시간', val: rb['30분~2시간'] || 0, cls: 'warn', note: '일반' },
     { label: '2~8시간', val: rb['2~8시간'] || 0, cls: 'warn', note: '지연' },
-    { label: '8시간+', val: rb['8시간+'] || 0, cls: 'bad', note: '8시간 초과' },
+    { label: '8시간+', val: rb['8시간+'] || 0, cls: 'bad', note: '8시간 이상' },
   ];
   const resList = document.getElementById('resList');
   if (resList) {
@@ -1735,7 +1725,7 @@ function renderLongDelayPanel(d) {
     el.innerHTML = `<div class="long-delay-ok"><div class="ld-ok-icon">✓</div><div class="ld-ok-text">8시간+ 케이스 없음</div></div>`;
     return;
   }
-  const longChats = d.longChats || [];
+  const longChats = [...(d.longChats || [])].sort((a, b) => (b.resolutionMin || 0) - (a.resolutionMin || 0));
   const mgrMap = {};
   (d.managers || []).forEach((m) => { mgrMap[m.id] = m.name; });
   const top5Html = longChats.slice(0, 5).map((c) => {
@@ -1744,7 +1734,7 @@ function renderLongDelayPanel(d) {
     const timeStr = days >= 1 ? `${days}일 ${hrs % 24}시간` : `${hrs}시간`;
     const rawMgr4 = c.assigneeId ? (mgrMap[c.assigneeId] || c.assigneeId) : null;
     const mgrName = rawMgr4 ? dispMgrName(rawMgr4) : '미배정';
-    const timeColor = (c.resolutionMin || 0) > 2880 ? 'var(--rose)' : 'var(--amber)';
+    const timeColor = (c.resolutionMin || 0) >= 2880 ? 'var(--rose)' : 'var(--amber)';
     const safeTags4 = Array.isArray(c.tags) ? c.tags : [];
     const tagsStr = safeTags4.slice(0, 2).map((t) => `#${t}`).join(' ') || '태그없음';
     const url = chatTalkUrl(c.id);
@@ -1808,7 +1798,7 @@ function openLongChatsPanel(keepFilter) {
 
   // 용어 정의 안내 (미배정·미해결·장기지연 혼동 방지)
   const termNote = `<div style="font-size:10.5px;color:var(--muted);background:var(--bg2);border-radius:6px;padding:6px 10px;margin-bottom:8px;line-height:1.6">
-    <strong>용어 안내</strong> · <span style="color:var(--rose)">장기지연</span>: 종결(closed) 채팅 중 해결시간 8시간+ 초과 건 &nbsp;·&nbsp; <span style="color:var(--amber)">미해결</span>: 현재 진행 중(open) 채팅 &nbsp;·&nbsp; <span style="color:var(--text)">담당자 없음</span>: 해당 채팅 종결 시 배정 기록 없음 (KPI 미배정과 다름)
+    <strong>용어 안내</strong> · <span style="color:var(--rose)">장기지연</span>: 종결(closed) 채팅 중 해결시간 8시간 이상 건 &nbsp;·&nbsp; <span style="color:var(--amber)">미해결</span>: 현재 진행 중(open) 채팅 &nbsp;·&nbsp; <span style="color:var(--text)">담당자 없음</span>: 해당 채팅 종결 시 배정 기록 없음 (KPI 미배정과 다름)
   </div>`;
   const sortLabel = `<div class="lc-sort-label">가장 오래 지연된 상담부터 확인하세요</div>`;
   const filterBar = hasQfOptions ? `
@@ -2165,7 +2155,7 @@ function renderManagers(d) {
   if (inactiveMgrs.length > 0) {
     const toggleTr = document.createElement('tr');
     toggleTr.innerHTML = `<td colspan="8" style="text-align:center;padding:5px 0;border-top:1px solid var(--border)">
-      <button id="inactiveToggleBtn" style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 14px;font-size:11px;color:var(--muted);cursor:pointer">
+      <button id="inactiveToggleBtn" type="button" aria-expanded="false" aria-controls="inactiveRowsGroup" style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 14px;font-size:11px;color:var(--muted);cursor:pointer">
         ▾ 비활성 담당자 ${inactiveMgrs.length}명 보기
       </button></td>`;
     tbody.appendChild(toggleTr);
@@ -2180,6 +2170,7 @@ function renderManagers(d) {
       this.textContent = hidden
         ? `▴ 비활성 담당자 ${inactiveMgrs.length}명 숨기기`
         : `▾ 비활성 담당자 ${inactiveMgrs.length}명 보기`;
+      this.setAttribute('aria-expanded', String(hidden));
     });
   }
 
@@ -2232,10 +2223,10 @@ function renderBotsGroups(d) {
   const { bots, summary, resolutionBuckets, tags, sources } = d;
   const rb = resolutionBuckets || {};
   const resTotal = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
-  const botResCount = rb['0~5분'] || 0;
-  const botResPct = Math.round((botResCount / resTotal) * 100);
-  const selfResCount = rb['5~30분'] || 0;
-  const selfResPct = Math.round((selfResCount / resTotal) * 100);
+  const under5Count = rb['0~5분'] || 0;
+  const under5Pct = Math.round((under5Count / resTotal) * 100);
+  const min5to30Count = rb['5~30분'] || 0;
+  const min5to30Pct = Math.round((min5to30Count / resTotal) * 100);
   const totalChats = summary.totalChats || 1;
   const top5Tags = (tags?.labels || []).slice(0, 5).map((lbl, i) => ({
     label: lbl, count: tags.values[i] || 0, pct: Math.round(((tags.values[i] || 0) / totalChats) * 100),
@@ -2244,14 +2235,14 @@ function renderBotsGroups(d) {
   const botPanel = document.getElementById('botPanel');
   if (botPanel) {
     botPanel.innerHTML = `
-      <div class="panel-header"><div><div class="panel-title">자동화 효과</div><div class="panel-sub">챗봇 · FAQ · 셀프 해결</div></div><span class="data-badge badge-analyze">≈ 추정</span></div>
+      <div class="panel-header"><div><div class="panel-title">해결 속도 참고</div><div class="panel-sub">자동화 기여도와 구분된 종결 속도</div></div><span class="data-badge badge-calc">계산값</span></div>
       <div class="auto-kpi-row">
-        <div class="auto-kpi-card"><div class="auto-kpi-label">챗봇 빠른 해결률</div><div class="auto-kpi-val">${botResPct}<span class="auto-kpi-unit">%</span></div><div class="auto-kpi-sub">${botResCount.toLocaleString()}건 · 5분 내 종결</div><div class="auto-kpi-bar"><div class="auto-kpi-fill" style="width:${Math.min(botResPct,100)}%"></div></div></div>
-        <div class="auto-kpi-card"><div class="auto-kpi-label">셀프 해결률</div><div class="auto-kpi-val">${selfResPct}<span class="auto-kpi-unit">%</span></div><div class="auto-kpi-sub">${selfResCount.toLocaleString()}건 · 5~30분</div><div class="auto-kpi-bar"><div class="auto-kpi-fill" style="width:${Math.min(selfResPct,100)}%"></div></div></div>
+        <div class="auto-kpi-card"><div class="auto-kpi-label">5분 내 해결</div><div class="auto-kpi-val">${under5Pct}<span class="auto-kpi-unit">%</span></div><div class="auto-kpi-sub">${under5Count.toLocaleString()}건 · 자동화 여부 미구분</div><div class="auto-kpi-bar"><div class="auto-kpi-fill" style="width:${Math.min(under5Pct,100)}%"></div></div></div>
+        <div class="auto-kpi-card"><div class="auto-kpi-label">5~30분 해결</div><div class="auto-kpi-val">${min5to30Pct}<span class="auto-kpi-unit">%</span></div><div class="auto-kpi-sub">${min5to30Count.toLocaleString()}건 · 자동화 여부 미구분</div><div class="auto-kpi-bar"><div class="auto-kpi-fill" style="width:${Math.min(min5to30Pct,100)}%"></div></div></div>
       </div>
       <div class="auto-faq-title">TOP 5 문의 유형</div>
       <div class="auto-faq-list">${top5Tags.map((t, i) => `<div class="auto-faq-row"><span class="auto-faq-rank rank-${i+1}">${i+1}</span><span class="auto-faq-label">${t.label}</span><span class="auto-faq-count">${t.count}회</span><span class="auto-faq-pct">${t.pct}%</span></div>`).join('')}</div>
-      ${botNames.length ? `<div class="bot-names" style="margin-top:10px">${botNames.map((n) => `<span class="bot-name-tag">${n}</span>`).join('')}</div>` : ''}`;
+      ${botNames.length ? `<div class="bot-names" style="margin-top:10px"><span class="bot-name-tag">연결 봇</span>${botNames.map((n) => `<span class="bot-name-tag">${n}</span>`).join('')}</div>` : ''}`;
   }
   const openChats = summary.openChats || 0;
   const closedChats = totalChats;
@@ -2346,12 +2337,18 @@ function renderGaugeGrid(d) {
 
   // FCR (B-2)
   const fcr = d.fcrStats;
-  if (fcr) {
+  if (fcr?.available && fcr.fcrRate != null) {
     setG('fcr', fcr.fcrRate, fcr.fcrRate >= 90 ? 'gauge-fill--good' : fcr.fcrRate >= 75 ? 'gauge-fill--warn' : 'gauge-fill--danger');
     document.getElementById('gval-fcr').textContent = fcr.fcrRate + '%';
     document.getElementById('gsub-fcr').textContent = `재오픈 ${fcr.reopenedCount}건`;
-    document.getElementById('gsub-fcr').setAttribute('data-tip', `분모: 기간 내 최초 종결(closed) 상담 전체 기준&#10;재오픈: 종결 후 동일 사용자가 24시간 내 채팅 재개한 건수&#10;(봇 처리·미응답으로 자동 종결된 건 포함)`);
+    document.getElementById('gsub-fcr').setAttribute('data-tip', '재오픈 상태 이벤트 기준 실측값');
     setB('fcr', fcr.fcrRate >= 90 ? '양호' : fcr.fcrRate >= 75 ? '주의' : '위험', fcr.fcrRate >= 90 ? 'good' : fcr.fcrRate >= 75 ? 'warn' : 'danger');
+  } else {
+    setG('fcr', 0, 'gauge-fill--warn');
+    document.getElementById('gval-fcr').textContent = '측정 불가';
+    document.getElementById('gsub-fcr').textContent = '재오픈 이력 필요';
+    document.getElementById('gsub-fcr').setAttribute('data-tip', fcr?.note || '상태 전환 이력이 수집되지 않았습니다.');
+    setB('fcr', '미수집', 'warn');
   }
 
   // 편중도
@@ -2452,12 +2449,18 @@ function renderFcrPanel(d) {
   } else {
     cards.push({ icon: '', label: 'FRT', cls: 'warn', value: '—', sub: '채널톡 데이터 부족', bar: 0 });
   }
-  cards.push({
+  cards.push(fcr.available && fcr.fcrRate != null ? {
     icon: '', label: 'FCR (1차 해결률)',
     cls: fcr.fcrRate >= 90 ? 'good' : fcr.fcrRate >= 75 ? 'warn' : 'danger',
-    value: (fcr.fcrRate || 0) + '%',
-    sub: `재오픈 ${fcr.reopenedCount || 0}건 · 재오픈율 ${fcr.reopenedRate || 0}%`,
-    bar: fcr.fcrRate || 0,
+    value: fcr.fcrRate + '%',
+    sub: `재오픈 ${fcr.reopenedCount}건 · 재오픈율 ${fcr.reopenedRate}%`,
+    bar: fcr.fcrRate,
+  } : {
+    icon: '', label: 'FCR (1차 해결률)',
+    cls: 'warn',
+    value: '측정 불가',
+    sub: '재오픈 상태 이벤트 적재 필요',
+    bar: 0,
   });
   cards.push({
     icon: '', label: '반복 문의 고객',
@@ -2608,8 +2611,8 @@ function renderAnomaly(d) {
   if ((history.historyDays || spanDays) && (history.historyDays < 14 || total < 30)) {
     const holdTitle = history.configured ? '표본 부족' : '외부 스냅샷 미설정';
     const holdFoot = history.configured
-      ? 'Z-score는 최소 14일 이상, 30건 이상 누적 후 표시합니다.'
-      : 'Z-score 기준선 유지를 위해 KV/DB 일별 스냅샷 연결이 필요합니다.';
+      ? 'IQR 이상치 탐지는 최소 14일 이상, 30건 이상 누적 후 표시합니다.'
+      : 'IQR 기준선 유지를 위해 KV/DB 일별 스냅샷 연결이 필요합니다.';
     el.innerHTML = `<div class="analysis-hold-card">
       <div class="hold-label">이상치 탐지 보류</div>
       <div class="hold-title">${holdTitle}</div>
@@ -2618,12 +2621,13 @@ function renderAnomaly(d) {
     </div>`;
     return;
   }
-  if (!anom.length) { el.innerHTML = `<div class="anom-ok"><div class="anom-ok-icon">✓</div><div class="anom-ok-text">유의미한 이상치 없음</div><div class="anom-ok-sub">±1.8σ 범위 내 정상</div></div>`; return; }
+  if (!anom.length) { el.innerHTML = `<div class="anom-ok"><div class="anom-ok-icon">✓</div><div class="anom-ok-text">유의미한 이상치 없음</div><div class="anom-ok-sub">IQR 1.5배 기준 범위 내</div></div>`; return; }
   el.innerHTML = anom.map((a) => {
     const cls = a.isHigh ? 'anom-high' : 'anom-low';
     const icon = a.isHigh ? '↑' : '↓';
     const dir = a.isHigh ? '급증' : '급감';
-    return `<div class="anom-row ${cls}"><span class="anom-icon">${icon}</span><div class="anom-body"><div class="anom-date">${a.label}</div><div class="anom-detail">${a.val}건 · ${dir} (Z=${a.z.toFixed(1)}σ)</div></div><span class="anom-tag ${cls}">${dir}</span></div>`;
+    const threshold = a.isHigh ? `상한 ${a.upper}건` : `하한 ${a.lower}건`;
+    return `<div class="anom-row ${cls}"><span class="anom-icon">${icon}</span><div class="anom-body"><div class="anom-date">${a.label}</div><div class="anom-detail">${a.val}건 · ${dir} (IQR ${threshold})</div></div><span class="anom-tag ${cls}">${dir}</span></div>`;
   }).join('');
 }
 
@@ -2869,14 +2873,15 @@ function renderDiagnostics(d) {
         <div class="diag-stat"><span class="diag-stat-lbl">일별 스냅샷</span><span class="diag-stat-val ${d.snapshotStore?.enabled ? 'good' : 'danger'}">${d.snapshotStore?.enabled ? `${d.snapshotStore.count}일` : '미설정'}</span></div>
         <div class="diag-stat"><span class="diag-stat-lbl">자동 태깅</span><span class="diag-stat-val ${d.taggingQuality?.autoTaggingAvailable ? 'good' : 'danger'}">${d.taggingQuality?.autoTaggingAvailable ? '활성' : '본문 미수집'}</span></div>
         <div class="diag-stat"><span class="diag-stat-lbl">순처리시간</span><span class="diag-stat-val ${d.resolutionStats?.agentHandleTimeAvailable ? 'good' : 'danger'}">${d.resolutionStats?.agentHandleTimeAvailable ? '활성' : '미수집'}</span></div>
+        <div class="diag-stat"><span class="diag-stat-lbl">FCR</span><span class="diag-stat-val ${d.fcrStats?.available ? 'good' : 'danger'}">${d.fcrStats?.available ? '활성' : '재오픈 이력 미수집'}</span></div>
       </div>
       ${warnHtml}
       <table class="diag-tbl">
         <thead><tr><th>API 엔드포인트</th><th>상태</th><th class="num-r">HTTP</th><th class="num-r">응답시간</th></tr></thead>
         <tbody>${totalRows || '<tr><td colspan="4" class="diag-empty">호출 정보 없음</td></tr>'}</tbody>
       </table>
-      <div class="diag-note">v4.0 — ${cacheMeta.storageLabel} · 부분 실패 허용 · 1000건 한도</div>
-      <div class="diag-note" style="margin-top:8px">${d.snapshotStore?.message || '스냅샷 상태 없음'} · ${d.taggingQuality?.blocker || '자동 태깅 상태 없음'} · ${d.resolutionStats?.agentHandleTimeNote || '순처리시간 상태 없음'}</div>`;
+      <div class="diag-note">v4.1 — ${cacheMeta.storageLabel} · since 커서 페이지네이션 · 1000건 한도</div>
+      <div class="diag-note" style="margin-top:8px">${d.snapshotStore?.message || '스냅샷 상태 없음'} · ${d.taggingQuality?.blocker || '자동 태깅 상태 없음'} · ${d.resolutionStats?.agentHandleTimeNote || '순처리시간 상태 없음'} · ${d.fcrStats?.note || 'FCR 상태 없음'}</div>`;
   }
 
   // ── 캐시 탭 ──
@@ -2909,8 +2914,8 @@ function renderDiagnostics(d) {
     const pages = diag.pages || 0;
     const isSampledDiag = dn.isSampled || false;
     const sampledBadge = isSampledDiag
-      ? `<span style="color:var(--amber);font-weight:700">⚠ 수집 상한 도달 — 오래된 채팅 일부 제외</span>`
-      : `<span style="color:var(--teal)">전량 수집 완료 (한도 미도달)</span>`;
+      ? `<span style="color:var(--amber);font-weight:700">⚠ 추가 데이터 존재 — 1000건 이후 제외</span>`
+      : `<span style="color:var(--teal)">원천 목록 끝까지 수집</span>`;
 
     // 날짜 범위 — processedMinAt/processedMaxAt (서버 응답) 또는 dailyTrend fallback
     const _fmtTs = (ts) => {
@@ -2951,15 +2956,18 @@ function renderDiagnostics(d) {
       <div class="diag-summary">
         <div class="diag-stat"><span class="diag-stat-lbl">API 수집 한도</span><span class="diag-stat-val">${limitValDiag}건</span></div>
         <div class="diag-stat"><span class="diag-stat-lbl">수집 건수 (기간 필터 전)</span><span class="diag-stat-val">${collected}건</span></div>
+        <div class="diag-stat"><span class="diag-stat-lbl">원시 응답 / 중복 제거</span><span class="diag-stat-val">${dn.rawFetched ?? diag.rawFetched ?? collected}건 / ${dn.duplicatesRemoved ?? diag.duplicatesRemoved ?? 0}건</span></div>
         <div class="diag-stat"><span class="diag-stat-lbl">처리 건수 (기간 필터 후)</span><span class="diag-stat-val">${processedCnt}건</span></div>
-        <div class="diag-stat"><span class="diag-stat-lbl">페이지 수</span><span class="diag-stat-val">${pages}p</span></div>
+        <div class="diag-stat"><span class="diag-stat-lbl">페이지 수</span><span class="diag-stat-val">${pages}p · 페이지당 ${diag.pageSize || 500}건</span></div>
         <div class="diag-stat"><span class="diag-stat-lbl">데이터 날짜 범위</span><span class="diag-stat-val">${dateRangeStr}</span></div>
         <div class="diag-stat"><span class="diag-stat-lbl">기간 기준</span><span class="diag-stat-val">${dn.periodBasis || 'closedAt/updatedAt/createdAt'}</span></div>
+        <div class="diag-stat"><span class="diag-stat-lbl">현재 기간 완결</span><span class="diag-stat-val ${dn.currentPeriodComplete === false ? 'danger' : 'good'}">${dn.currentPeriodComplete === false ? '미보장' : '확인'}</span></div>
+        <div class="diag-stat"><span class="diag-stat-lbl">직전 동기간 완결</span><span class="diag-stat-val ${dn.baselineComplete === false ? 'danger' : 'good'}">${dn.baselineComplete === false ? '미보장' : '확인'}</span></div>
         <div class="diag-stat"><span class="diag-stat-lbl">요청 파라미터</span><span class="diag-stat-val"><code>days=${currentDays}</code></span></div>
         <div class="diag-stat"><span class="diag-stat-lbl">상한 도달 여부</span>${sampledBadge}</div>
       </div>
       ${sameNote}
-      <div class="diag-note" style="margin-top:8px">수집 한도(${limitValDiag}건)에 도달하면 기간 내 오래된 채팅이 집계에서 빠질 수 있습니다. 기간을 줄이거나 조건을 좁혀 전량 수집하세요.</div>`;
+      <div class="diag-note" style="margin-top:8px">Channel Talk Open API v5의 next 커서는 다음 요청의 since 파라미터로 전달합니다. 추가 데이터가 남은 상태에서 ${limitValDiag}건에 도달하면 현재 기간·직전 동기간 완결 여부를 각각 확인해야 합니다.</div>`;
   }
 
   // ── CSV 기준 탭 ──
@@ -2967,18 +2975,15 @@ function renderDiagnostics(d) {
   if (csvEl) {
     const btnHtml = `<button onclick="downloadCSV()" style="margin-top:12px;padding:8px 18px;border:none;border-radius:8px;background:var(--teal);color:#fff;font-size:13px;font-weight:600;cursor:pointer">CSV 내보내기</button>`;
     csvEl.innerHTML = `
-      <div class="diag-note" style="margin-bottom:10px">현재 기간·필터 조건의 closed 채팅 데이터를 CSV로 내보냅니다 (BOM 포함, UTF-8).</div>
+      <div class="diag-note" style="margin-bottom:10px">현재 기간의 집계표를 CSV로 내보냅니다 (BOM 포함, UTF-8). 원시 채팅 행 단위 파일이 아니며, 활성 필터는 담당자·VOC 목록에만 적용됩니다.</div>
       <table class="diag-tbl">
-        <thead><tr><th>컬럼명</th><th>내용</th><th>출처</th></tr></thead>
+        <thead><tr><th>섹션</th><th>내용</th><th>집계 단위</th></tr></thead>
         <tbody>
-          <tr><td>id</td><td>채팅 ID</td><td>실데이터</td></tr>
-          <tr><td>assigneeName</td><td>담당자 이름</td><td>실데이터</td></tr>
-          <tr><td>tags</td><td>태그 (쉼표 구분)</td><td>실데이터</td></tr>
-          <tr><td>source</td><td>채널 (native/phone/other)</td><td>실데이터</td></tr>
-          <tr><td>resolutionTimeSec</td><td>해결시간(초)</td><td>계산값</td></tr>
-          <tr><td>firstResponseSec</td><td>첫응답시간(초)</td><td>계산값</td></tr>
-          <tr><td>createdAt</td><td>생성일시 (KST)</td><td>실데이터</td></tr>
-          <tr><td>closedAt</td><td>종료일시 (KST)</td><td>실데이터</td></tr>
+          <tr><td>SLA</td><td>30분·2시간·8시간 준수율</td><td>해결시간 표본</td></tr>
+          <tr><td>담당자</td><td>처리량·FRT·해결시간·컴플레인</td><td>담당자 집계</td></tr>
+          <tr><td>해결시간</td><td>구간·에이징·백분위</td><td>측정 가능 closed 상담</td></tr>
+          <tr><td>VOC</td><td>태그·태그별 해결시간</td><td>태그 발생/채팅 표본</td></tr>
+          <tr><td>채널/컴플레인</td><td>채널 성능·일별 추이</td><td>기간 집계</td></tr>
         </tbody>
       </table>
       ${btnHtml}`;
@@ -2988,24 +2993,36 @@ function renderDiagnostics(d) {
 /* ─── Tabs ──────────────────────────────────────────────────────────── */
 function initTabs() {
   document.querySelectorAll('.cg-tabs').forEach((group) => {
-    const tabs = group.querySelectorAll('.cg-tab');
-    tabs.forEach((tab) => {
-      tab.addEventListener('click', () => {
-        const target = tab.dataset.tab;
-        const parent = group.closest('.cg-panel');
-        if (!parent) return;
-        parent.querySelectorAll('.cg-tab').forEach((t) => {
-          t.classList.remove('active');
-          t.setAttribute('aria-selected', 'false');
-        });
-        parent.querySelectorAll('.cg-tab-pane').forEach((p) => p.classList.remove('active'));
-        tab.classList.add('active');
-        tab.setAttribute('aria-selected', 'true');
-        const pane = parent.querySelector('#' + target);
-        if (pane) pane.classList.add('active');
-        // Re-render charts/content for the newly visible tab pane
-        const d = lastFilteredData || lastData;
-        if (d) setTimeout(() => _rerenderTab(target, d), 30);
+    const tabs = Array.from(group.querySelectorAll('.cg-tab'));
+    const activate = (tab, moveFocus = false) => {
+      const target = tab.dataset.tab;
+      const parent = group.closest('.cg-panel');
+      if (!parent) return;
+      tabs.forEach((item) => {
+        const isActive = item === tab;
+        item.classList.toggle('active', isActive);
+        item.setAttribute('aria-selected', String(isActive));
+        item.setAttribute('tabindex', isActive ? '0' : '-1');
+      });
+      parent.querySelectorAll('.cg-tab-pane').forEach((pane) => pane.classList.remove('active'));
+      const pane = parent.querySelector('#' + target);
+      if (pane) pane.classList.add('active');
+      if (moveFocus) tab.focus();
+      // Re-render charts/content for the newly visible tab pane
+      const d = lastFilteredData || lastData;
+      if (d) setTimeout(() => _rerenderTab(target, d), 30);
+    };
+    tabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => activate(tab));
+      tab.addEventListener('keydown', (event) => {
+        let nextIndex = null;
+        if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextIndex = (index + 1) % tabs.length;
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextIndex = (index - 1 + tabs.length) % tabs.length;
+        if (event.key === 'Home') nextIndex = 0;
+        if (event.key === 'End') nextIndex = tabs.length - 1;
+        if (nextIndex == null) return;
+        event.preventDefault();
+        activate(tabs[nextIndex], true);
       });
     });
   });
@@ -3016,7 +3033,7 @@ function initModalAccessibility() {
   // ESC 키로 열린 모달 닫기
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    const openModal = document.querySelector('.modal-overlay[aria-hidden="false"]');
+    const openModal = document.querySelector('.modal-overlay[aria-hidden="false"], #filterBottomSheet.is-open');
     if (!openModal) return;
     if (openModal.id === 'complaintModal') closeComplaintPanel();
     else if (openModal.id === 'longChatsModal') closeLongChatsPanel();
@@ -3025,7 +3042,7 @@ function initModalAccessibility() {
   // 포커스 트랩: Tab/Shift+Tab이 모달 내부에서만 순환
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Tab') return;
-    const openModal = document.querySelector('.modal-overlay[aria-hidden="false"]');
+    const openModal = document.querySelector('.modal-overlay[aria-hidden="false"], #filterBottomSheet.is-open');
     if (!openModal) return;
     const focusables = [...openModal.querySelectorAll(
       'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
@@ -3224,13 +3241,17 @@ function initFilterDrawer() {
     _fbsUpdateApplyBtn();
     fbsOverlay.classList.add('is-open');
     fbsOverlay.setAttribute('aria-hidden', 'false');
+    if (filterBtn) filterBtn.setAttribute('aria-expanded', 'true');
     document.body.style.overflow = 'hidden';
+    requestAnimationFrame(() => fbsCloseBtn?.focus());
   }
   function closeBottomSheet() {
     if (!fbsOverlay) return;
     fbsOverlay.classList.remove('is-open');
     fbsOverlay.setAttribute('aria-hidden', 'true');
+    if (filterBtn) filterBtn.setAttribute('aria-expanded', 'false');
     document.body.style.overflow = '';
+    if (fbsOverlay.contains(document.activeElement)) filterBtn?.focus();
   }
 
   // 필터 버튼: 모바일→바텀시트, PC→드로어
@@ -3264,8 +3285,8 @@ function initFilterDrawer() {
     const scopeEl = document.getElementById('filterScopeNote');
     if (scopeEl) scopeEl.style.display = 'none';
     lastFilteredData = null;
-    // 즉시 대시보드를 원본 데이터로 복원 (완료 버튼 없이 해제 가능)
-    if (lastData) fullRender(lastData);
+    // 즉시 필터 적용 대상 모듈만 원본 데이터로 복원
+    if (lastData) applyFilteredRender();
   };
   if (fbsApplyBtn) fbsApplyBtn.onclick = () => {
     applyFilteredRender();
@@ -3275,6 +3296,9 @@ function initFilterDrawer() {
   // 바텀시트 오버레이 탭 → 닫기
   if (fbsOverlay) fbsOverlay.addEventListener('click', (e) => {
     if (e.target === fbsOverlay) closeBottomSheet();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && fbsOverlay?.classList.contains('is-open')) closeBottomSheet();
   });
 
   // ── 필터 칩 이벤트 위임 (PC 드로어) ────────────────────────────────
@@ -3598,7 +3622,9 @@ function _triggerCSV(csvLines, filename) {
   const a    = document.createElement('a');
   a.href = url; a.download = filename;
   document.body.appendChild(a); a.click();
-  document.body.removeChild(a); URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+  // 다운로드 핸드오프 전에 URL을 해제하면 일부 브라우저에서 파일 생성이 누락될 수 있음.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function _csvHeader() {
@@ -3627,15 +3653,16 @@ function _csvHeader() {
 /* ─── CSV Download ──────────────────────────────────────────────────── */
 function downloadCSV() {
   if (!lastData) { showToast('데이터 없음 — 먼저 대시보드를 로드하세요', 'warn'); return; }
-  const managers  = (lastData.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
-  const total     = lastData.summary.totalChats || 1;
-  const rb        = lastData.resolutionBuckets || {};
+  const exportData = lastFilteredData || lastData;
+  const managers  = (exportData.managers || []).filter(m => !EXCLUDED_MANAGERS.includes(m.name));
+  const total     = exportData.summary.totalChats || 1;
+  const rb        = exportData.resolutionBuckets || {};
   const rbTotal   = Object.values(rb).reduce((a, b) => a + b, 0) || 1;
-  const tags      = lastData.tags || {};
-  const tagResStats  = lastData.tagResolutionStats || [];
-  const sourceStats  = lastData.sourceStats || [];
-  const aging        = lastData.agingBuckets || {};
-  const slaStats     = lastData.slaStats || {};
+  const tags      = exportData.tags || {};
+  const tagResStats  = exportData.tagResolutionStats || [];
+  const sourceStats  = exportData.sourceStats || [];
+  const aging        = exportData.agingBuckets || {};
+  const slaStats     = exportData.slaStats || {};
 
   const mgrRows = managers.map((m, i) => {
     const pct     = Math.round(m.count / total * 100);
@@ -3649,28 +3676,33 @@ function downloadCSV() {
     );
   });
 
-  const rbRows  = Object.entries(rb).map(([k, v]) => `${k},${v},${Math.round(v / rbTotal * 100)}%`);
+  const rbRows  = Object.entries(rb).map(([k, v]) => _csvRow(k, v, `${Math.round(v / rbTotal * 100)}%`));
   const tagRows = (tags.labels || []).map((lbl, i) => {
     const cnt = tags.values[i]; const pct = Math.round(cnt / total * 100);
-    return `${lbl},${cnt},${pct}%,${pct >= 15 ? '위험' : pct >= 8 ? '주의' : '정상'}`;
+    return _csvRow(lbl, cnt, `${pct}%`, pct >= 15 ? '위험' : pct >= 8 ? '주의' : '정상');
   });
-  const tagResRows = tagResStats.map(s => `${s.tag},${s.count},${s.avg ?? ''},${s.median ?? ''},${s.p90 ?? ''}`);
+  const tagResRows = tagResStats.map(s => _csvRow(s.tag, s.count, s.avg ?? '', s.median ?? '', s.p90 ?? ''));
   const srcRows    = sourceStats.filter(s => s.count > 0)
-    .map(s => `${s.source},${s.count},${s.avgResolutionMin ?? ''},${s.medianResolutionMin ?? ''},${s.p90ResolutionMin ?? ''}`);
+    .map(s => _csvRow(s.source, s.count, s.avgResolutionMin ?? '', s.medianResolutionMin ?? '', s.p90ResolutionMin ?? ''));
   const agingRows = [
-    `<8h,${aging.lt8h || 0}`, `8-24h,${aging.h8_24 || 0}`,
-    `1-3d,${aging.d1_3 || 0}`, `3-7d,${aging.d3_7 || 0}`, `7d+,${aging.d7plus || 0}`,
+    _csvRow('<8h', aging.lt8h || 0), _csvRow('8-24h', aging.h8_24 || 0),
+    _csvRow('1-3d', aging.d1_3 || 0), _csvRow('3-7d', aging.d3_7 || 0), _csvRow('7d+', aging.d7plus || 0),
   ];
   const slaRows = [
-    `30분 SLA,${slaStats.sla30Min?.rate || 0}%,${slaStats.sla30Min?.count || 0}/${slaStats.sla30Min?.total || 0}`,
-    `2시간 SLA,${slaStats.sla2Hour?.rate || 0}%,${slaStats.sla2Hour?.count || 0}/${slaStats.sla2Hour?.total || 0}`,
-    `8시간 SLA,${slaStats.sla8Hour?.rate || 0}%,${slaStats.sla8Hour?.count || 0}/${slaStats.sla8Hour?.total || 0}`,
+    _csvRow('30분 SLA', `${slaStats.sla30Min?.rate || 0}%`, `${slaStats.sla30Min?.count || 0}/${slaStats.sla30Min?.total || 0}`),
+    _csvRow('2시간 SLA', `${slaStats.sla2Hour?.rate || 0}%`, `${slaStats.sla2Hour?.count || 0}/${slaStats.sla2Hour?.total || 0}`),
+    _csvRow('8시간 SLA', `${slaStats.sla8Hour?.rate || 0}%`, `${slaStats.sla8Hour?.count || 0}/${slaStats.sla8Hour?.total || 0}`),
   ];
 
   // 컴플레인 추이 (있으면)
-  const ct = lastData.complaintTrend;
+  const ct = exportData.complaintTrend;
   const ctRows = ct?.labels?.length
-    ? ct.labels.map((lbl, i) => `${lbl},${ct.complaints[i] || 0},${ct.total[i] || 0},${Math.round((ct.complaints[i] || 0) / (ct.total[i] || 1) * 100)}%`)
+    ? ct.labels.map((lbl, i) => _csvRow(
+      lbl,
+      ct.complaints[i] || 0,
+      ct.total[i] || 0,
+      `${Math.round((ct.complaints[i] || 0) / (ct.total[i] || 1) * 100)}%`,
+    ))
     : [];
 
   const lines = [
@@ -3715,12 +3747,12 @@ function downloadCSV() {
   _triggerCSV(lines, csvFilename);
   const dlRangeLabel = currentDays === 'all' ? '전체 기간' : `최근 ${currentDays}일`;
   const dlFilterLabel = activeFilterCount() > 0 ? ` · 필터 ${activeFilterCount()}개` : '';
-  const dlRowCount = lastData.summary?.totalChats ?? '?';
-  showToast(`CSV ${dlRowCount}건 내보내기 완료 · ${dlRangeLabel}${dlFilterLabel}`, 'success', 5000);
+  const dlRowCount = exportData.summary?.totalChats ?? '?';
+  showToast(`CSV 내보내기 완료 · 전체 기준 ${dlRowCount}건${dlFilterLabel} · ${dlRangeLabel}`, 'success', 5000);
 }
 
 async function copyOpsReport() {
-  const d = lastFilteredData || lastData;
+  const d = lastData;
   if (!d) { showToast('복사할 데이터가 아직 없습니다', 'info'); return; }
   const scoreObj = computeHealthScore(d);
   const unknown = getUnknownTagStats(d);
@@ -3736,7 +3768,7 @@ async function copyOpsReport() {
     `[OPS] 채널톡 CS 대시보드 요약`,
     `기간: ${currentDays === 'all' ? '전체' : `최근 ${currentDays}일`} · 총 ${total}건 · 건강점수 ${scoreObj.score}점`,
     `오픈 ${d.summary?.openChats || 0}건 · 미배정 ${d.summary?.unassignedChats || 0}건 · 장기지연 ${slow8h}/${resTotal}건(${Math.round(slow8h / resTotal * 100)}%)`,
-    `컴플레인 ${complaints}건(${complaintRate}%) · FRT ${d.frtStats?.median != null ? fmtMin(d.frtStats.median) : '—'} · FCR ${d.fcrStats?.fcrRate ?? '—'}%`,
+    `컴플레인 ${complaints}건(${complaintRate}%) · FRT ${d.frtStats?.median != null ? fmtMin(d.frtStats.median) : '—'} · FCR ${d.fcrStats?.fcrRate != null ? `${d.fcrStats.fcrRate}%` : '측정 불가(재오픈 이력 미수집)'}`,
     `데이터 신뢰도: VOC 미분류 ${unknown.pct}%(${unknown.count}/${unknown.total}) · 해결시간 n=${sample.n} ${sample.label} · ${history.label}`,
     `주의: 자동 태깅 ${d.taggingQuality?.autoTaggingAvailable ? '활성' : '미구현/본문 미수집'} · 순수 상담원 처리시간 ${d.resolutionStats?.agentHandleTimeAvailable ? '활성' : '미수집'}`,
   ].join('\n');
@@ -3853,6 +3885,12 @@ document.addEventListener('DOMContentLoaded', () => {
       tabBtn.classList.add('active');
       tabBtn.setAttribute('aria-pressed', 'true');
       currentDays = range === 'all' ? 'all' : parseInt(range);
+      // 기간이 바뀌면 이전 기간에서 선택한 목록 필터를 제거해 범위 혼선을 방지한다.
+      filterState.managers.clear();
+      filterState.tags.clear();
+      filterState.sources.clear();
+      lastFilteredData = null;
+      updateFilterBadges();
       // 기간 변경 시 집계 기준 안내 toast
       const rangeLabel = range === 'all' ? '전체 기간 (최대 1000건)' : `최근 ${range}일`;
       showToast(`${rangeLabel} 기준 조회 · 실제 데이터 범위가 같으면 핵심 지표도 동일합니다`, 'info', 3600);
@@ -3867,7 +3905,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (himRangeEl) himRangeEl.textContent = newRangeText;
       // 이전 기간 데이터 즉시 클리어 — 스켈레톤/빈 상태로 교체
       clearPeriodUI(range);
-      triggerFullReload();
+      triggerFullReload(false);
     });
   });
 
@@ -4055,12 +4093,12 @@ function clearPeriodUI(range) {
   if (gsubConc) gsubConc.textContent = '—';
 }
 
-function triggerFullReload() {
-  forceRefreshRequested = true; // 사용자 수동 클릭 표시
+function triggerFullReload(force = true) {
+  forceRefreshRequested = force;
   const ov = document.getElementById('loadingOverlay');
   if (ov) { ov.style.opacity = '1'; ov.style.display = 'flex'; }
   const loadText = document.getElementById('loadText');
-  if (loadText) loadText.textContent = '강제 갱신 중…';
+  if (loadText) loadText.textContent = force ? '강제 갱신 중…' : '기간 데이터 조회 중…';
   ['lstep-conn','lstep-api','lstep-charts','lstep-done'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.classList.remove('active','done');

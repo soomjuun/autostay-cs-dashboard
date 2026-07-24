@@ -1,7 +1,10 @@
 {
   "name": "autostay-cs-dashboard",
-  "version": "4.0.0",
-  "description": "[OPS] 채널톡 CS 대시보드 v4.0 — FRT/FCR/컴플레인 세분화/필터/딥링크/KV캐싱",
+  "version": "4.1.0",
+  "description": "[OPS] 채널톡 CS 대시보드 - 데이터 신뢰성, 운영 지표, VOC, SLA 분석",
+  "scripts": {
+    "test": "node --test"
+  },
   "engines": {
     "node": "22.x"
   }

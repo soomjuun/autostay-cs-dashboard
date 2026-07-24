@@ -42,7 +42,7 @@
 <div class="app">
 
   <!-- ────────────────────────────────────────────────────────
-       HERO — v4.0: 좌측 카피, 우측 "오늘 즉시 처리" 액션 박스
+       HERO — v4.1: 좌측 카피, 우측 운영 액션 박스
   ──────────────────────────────────────────────────────────── -->
   <section class="hero">
     <div class="hero-container">
@@ -50,7 +50,7 @@
         <div class="hero-copy">
           <div class="hero-eyebrow">
             <span>AUTOSTAY DIRECT STORES · CUSTOMER SUPPORT</span>
-            <span class="hero-version-pill">v4.0</span>
+            <span class="hero-version-pill">v4.1</span>
           </div>
           <h1 class="hero-title">[OPS] 채널톡 CS 대시보드</h1>
           <p class="hero-desc">채널톡 상담 운영 · SLA · VOC · 담당자 성과 통합 분석</p>
@@ -61,7 +61,7 @@
             <span class="him-divider">·</span>
             <span class="him-item"><span class="him-lbl">FRT</span><span id="himFrt" class="him-val">—</span></span>
             <span class="him-divider">·</span>
-            <span class="him-item"><span class="him-lbl">FCR</span><span id="himFcr" class="him-val">—</span></span>
+            <span class="him-item"><span class="him-lbl">FCR</span><span id="himFcr" class="him-val">측정 불가</span></span>
             <span class="him-divider">·</span>
             <span class="him-item"><span class="him-lbl">기간</span><span id="himRange" class="him-val">—</span></span>
           </div>
@@ -109,25 +109,25 @@
   <div class="toolbar-strip">
     <div class="toolbar-inner">
       <div id="rangeTabs" class="range-tabs">
-        <button class="range-tab active" data-days="7" aria-pressed="true">7일</button>
-        <button class="range-tab" data-days="14" aria-pressed="false">14일</button>
-        <button class="range-tab" data-days="30" aria-pressed="false">30일</button>
-        <button class="range-tab" data-days="all" aria-pressed="false">전체</button>
+        <button class="range-tab active" type="button" data-days="7" aria-pressed="true">7일</button>
+        <button class="range-tab" type="button" data-days="14" aria-pressed="false">14일</button>
+        <button class="range-tab" type="button" data-days="30" aria-pressed="false">30일</button>
+        <button class="range-tab" type="button" data-days="all" aria-pressed="false">전체</button>
       </div>
       <div class="toolbar-actions">
         <!-- C-2: 필터 버튼 -->
-        <button id="filterBtn" class="toolbar-btn toolbar-btn--ghost" aria-expanded="false" aria-controls="filterDrawer" aria-haspopup="dialog">
+        <button id="filterBtn" class="toolbar-btn toolbar-btn--ghost" type="button" aria-expanded="false" aria-controls="filterDrawer filterBottomSheet" aria-haspopup="dialog">
           <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12l-4.5 6V14L7 12.5V9L2 3z"/></svg>
           필터 <span id="filterCount" class="filter-count" style="display:none">0</span>
         </button>
-        <button id="csvDownloadBtn" class="toolbar-btn toolbar-btn--ghost">
+        <button id="csvDownloadBtn" class="toolbar-btn toolbar-btn--ghost" type="button">
           <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
           CSV
         </button>
-        <button id="reportCopyBtn" class="toolbar-btn toolbar-btn--ghost">
+        <button id="reportCopyBtn" class="toolbar-btn toolbar-btn--ghost" type="button">
           리포트 복사
         </button>
-        <button id="refreshBtn" class="toolbar-btn toolbar-btn--primary">
+        <button id="refreshBtn" class="toolbar-btn toolbar-btn--primary" type="button">
           <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M13.65 2.35A8 8 0 1 0 14.94 8H13a6 6 0 1 1-1.25-3.72L9 7h5V2l-.35.35z"/></svg>
           새로고침
         </button>
@@ -151,8 +151,8 @@
           <div id="filterSrcList" class="filter-chip-list"></div>
         </div>
         <div class="filter-actions">
-          <button id="filterClearBtn" class="filter-btn-ghost">전체 해제</button>
-          <button id="filterCloseBtn" class="filter-btn-primary">완료</button>
+          <button id="filterClearBtn" class="filter-btn-ghost" type="button">전체 해제</button>
+          <button id="filterCloseBtn" class="filter-btn-primary" type="button">완료</button>
         </div>
       </div>
     </div>
@@ -173,7 +173,7 @@
       <div class="fbs-handle"></div>
       <div class="fbs-header">
         <span class="fbs-title">필터</span>
-        <button id="fbsCloseBtn" class="fbs-close" aria-label="닫기">
+        <button id="fbsCloseBtn" class="fbs-close" type="button" aria-label="닫기">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M12.7 3.3a1 1 0 0 0-1.4 0L8 6.6 4.7 3.3a1 1 0 0 0-1.4 1.4L6.6 8l-3.3 3.3a1 1 0 1 0 1.4 1.4L8 9.4l3.3 3.3a1 1 0 0 0 1.4-1.4L9.4 8l3.3-3.3a1 1 0 0 0 0-1.4z"/></svg>
         </button>
       </div>
@@ -192,8 +192,8 @@
         </div>
       </div>
       <div class="fbs-footer">
-        <button id="fbsClearBtn" class="fbs-btn-clear">초기화</button>
-        <button id="fbsApplyBtn" class="fbs-btn-apply">적용</button>
+        <button id="fbsClearBtn" class="fbs-btn-clear" type="button">초기화</button>
+        <button id="fbsApplyBtn" class="fbs-btn-apply" type="button">적용</button>
       </div>
     </div>
   </div>
@@ -228,7 +228,7 @@
           </div>
         </div>
         <div id="healthSub" class="hgc-sub"></div>
-        <button id="healthDeductBtn" class="hgc-deduct-btn" onclick="toggleHealthDeduct()" style="display:none">감점 내역 보기</button>
+        <button id="healthDeductBtn" class="hgc-deduct-btn" type="button" aria-expanded="false" aria-controls="healthDeductDetail" onclick="toggleHealthDeduct()" style="display:none">감점 내역 보기</button>
         <div id="healthDeductDetail" class="hgc-deduct-detail" style="display:none"></div>
       </div>
       <div class="gauge-grid-inline">
@@ -244,7 +244,7 @@
           <div class="gauge-label" data-tip="계산값 — 해결시간 집계 가능한 closed 상담 기준 (봇 자동처리·미응답 제외). resolutionTime 필드 기반 서버 계산&#10;분모 상세는 하단 건수에 마우스를 올려 확인" tabindex="0" style="cursor:help">30분↓ 해결율 ⓘ</div>
           <div id="gsub-quick" class="gauge-sub"></div>
         </div>
-        <div class="gauge-panel" data-tip="계산값 — 해결시간 집계 가능한 closed 상담 기준 (봇 자동처리·미응답 제외). 해결시간 8시간 초과 케이스 비율&#10;분모 상세는 하단 건수에 마우스를 올려 확인" tabindex="0" style="cursor:help">
+        <div class="gauge-panel" data-tip="계산값 — 해결시간 집계 가능한 closed 상담 기준. 해결시간 8시간 이상 케이스 비율&#10;분모 상세는 하단 건수에 마우스를 올려 확인" tabindex="0" style="cursor:help">
           <div class="gauge-panel-badge" id="gbadge-slow"></div>
           <div class="gauge-arc-wrap">
             <svg class="gauge-arc-svg" viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
@@ -268,7 +268,7 @@
           <div class="gauge-label">FRT (첫 응답) ⓘ</div>
           <div id="gsub-frt" class="gauge-sub"></div>
         </div>
-        <div class="gauge-panel" data-tip="계산값 — 채팅 재오픈(openedAt-createdAt > 1h) 발생 비율로 1차 해결률 추정. 서버 계산값" tabindex="0" style="cursor:help">
+        <div class="gauge-panel" data-tip="현재 UserChat 목록 API에는 재오픈 상태 전환 이력이 없어 FCR을 산출하지 않습니다. 실제 측정에는 웹훅 또는 상태 이벤트 적재가 필요합니다." tabindex="0" style="cursor:help">
           <div class="gauge-panel-badge" id="gbadge-fcr"></div>
           <div class="gauge-arc-wrap">
             <svg class="gauge-arc-svg" viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
@@ -277,7 +277,7 @@
             </svg>
             <div class="gauge-center"><div id="gval-fcr" class="gauge-val">—</div></div>
           </div>
-          <div class="gauge-label">FCR (1차 해결률) ⓘ</div>
+          <div class="gauge-label" data-tip="FCR은 재오픈 상태 전환 이력이 있어야 산출할 수 있습니다. 현재 UserChat 목록 API만으로는 신뢰성 있게 측정할 수 없어 값을 표시하지 않습니다." tabindex="0">FCR (1차 해결률) ⓘ</div>
           <div id="gsub-fcr" class="gauge-sub"></div>
         </div>
         <div class="gauge-panel" data-tip="【담당자 편중 — 배정 처리 기준】&#10;계산: 최다 처리 담당자 수 ÷ 배정된 담당자 처리 건 합계 × 100&#10;분모: 시스템·제외 담당자를 뺀 실제 배정 처리 건 합계 (봇/미배정 제외)&#10;상단 KPI와 동일한 대표 기준이며, 전체 closed 기준은 보조값으로만 표시합니다." tabindex="0" style="cursor:help">
@@ -339,11 +339,11 @@
       <div class="cg-panel-header">
         <span class="cg-panel-title">VOC 분석</span>
         <div id="vocTabs" class="cg-tabs" role="tablist" aria-label="VOC 분석 탭">
-          <button class="cg-tab active" data-tab="voc-distribution" role="tab" aria-selected="true" aria-controls="voc-distribution">분포</button>
-          <button class="cg-tab" data-tab="voc-risk" role="tab" aria-selected="false" aria-controls="voc-risk">리스크</button>
-          <button class="cg-tab" data-tab="voc-resolution" role="tab" aria-selected="false" aria-controls="voc-resolution">해결시간</button>
-          <button class="cg-tab" data-tab="voc-cooccur" role="tab" aria-selected="false" aria-controls="voc-cooccur">동반 이슈 <span class="tab-tip-icon" tabindex="0" style="cursor:help" data-tip="같은 채팅에서 함께 등장한 태그 쌍을 분석합니다. 복합 이슈 패턴과 연관 문의를 파악하는 데 활용하세요.">ⓘ</span></button>
-          <button class="cg-tab" data-tab="voc-complaint" role="tab" aria-selected="false" aria-controls="voc-complaint">컴플레인 세분화</button>
+          <button id="voc-distribution-tab" class="cg-tab active" data-tab="voc-distribution" role="tab" tabindex="0" aria-selected="true" aria-controls="voc-distribution">분포</button>
+          <button id="voc-risk-tab" class="cg-tab" data-tab="voc-risk" role="tab" tabindex="-1" aria-selected="false" aria-controls="voc-risk">리스크</button>
+          <button id="voc-resolution-tab" class="cg-tab" data-tab="voc-resolution" role="tab" tabindex="-1" aria-selected="false" aria-controls="voc-resolution">해결시간</button>
+          <button id="voc-cooccur-tab" class="cg-tab" data-tab="voc-cooccur" role="tab" tabindex="-1" aria-selected="false" aria-controls="voc-cooccur">동반 이슈 <span class="tab-tip-icon" style="cursor:help" data-tip="같은 채팅에서 함께 등장한 태그 쌍을 분석합니다. 복합 이슈 패턴과 연관 문의를 파악하는 데 활용하세요.">ⓘ</span></button>
+          <button id="voc-complaint-tab" class="cg-tab" data-tab="voc-complaint" role="tab" tabindex="-1" aria-selected="false" aria-controls="voc-complaint">컴플레인 세분화</button>
         </div>
       </div>
       <div id="voc-distribution" class="cg-tab-pane active" role="tabpanel" aria-labelledby="voc-distribution-tab">
@@ -384,10 +384,10 @@
       <div class="cg-panel-header">
         <span class="cg-panel-title">담당자 분석</span>
         <div id="mgrTabs" class="cg-tabs" role="tablist" aria-label="담당자 분석 탭">
-          <button class="cg-tab active" data-tab="mgr-table" role="tab" aria-selected="true" aria-controls="mgr-table">성과 테이블</button>
-          <button class="cg-tab" data-tab="mgr-quadrant" role="tab" aria-selected="false" aria-controls="mgr-quadrant">분면도</button>
-          <button class="cg-tab" data-tab="mgr-conc" role="tab" aria-selected="false" aria-controls="mgr-conc">집중도</button>
-          <button class="cg-tab" data-tab="mgr-frt" role="tab" aria-selected="false" aria-controls="mgr-frt">FRT 비교</button>
+          <button id="mgr-table-tab" class="cg-tab active" data-tab="mgr-table" role="tab" tabindex="0" aria-selected="true" aria-controls="mgr-table">성과 테이블</button>
+          <button id="mgr-quadrant-tab" class="cg-tab" data-tab="mgr-quadrant" role="tab" tabindex="-1" aria-selected="false" aria-controls="mgr-quadrant">분면도</button>
+          <button id="mgr-conc-tab" class="cg-tab" data-tab="mgr-conc" role="tab" tabindex="-1" aria-selected="false" aria-controls="mgr-conc">집중도</button>
+          <button id="mgr-frt-tab" class="cg-tab" data-tab="mgr-frt" role="tab" tabindex="-1" aria-selected="false" aria-controls="mgr-frt">FRT 비교</button>
         </div>
       </div>
       <div id="mgr-table" class="cg-tab-pane active" role="tabpanel" aria-labelledby="mgr-table-tab">
@@ -433,9 +433,9 @@
       <div class="cg-panel-header">
         <span class="cg-panel-title">해결시간 분석</span>
         <div id="resTabs" class="cg-tabs" role="tablist" aria-label="해결시간 분석 탭">
-          <button class="cg-tab active" data-tab="res-dist" role="tab" aria-selected="true" aria-controls="res-dist">분포</button>
-          <button class="cg-tab" data-tab="res-longdelay" role="tab" aria-selected="false" aria-controls="res-longdelay">장기지연</button>
-          <button class="cg-tab" data-tab="res-percentile" role="tab" aria-selected="false" aria-controls="res-percentile">백분위</button>
+          <button id="res-dist-tab" class="cg-tab active" data-tab="res-dist" role="tab" tabindex="0" aria-selected="true" aria-controls="res-dist">분포</button>
+          <button id="res-longdelay-tab" class="cg-tab" data-tab="res-longdelay" role="tab" tabindex="-1" aria-selected="false" aria-controls="res-longdelay">장기지연</button>
+          <button id="res-percentile-tab" class="cg-tab" data-tab="res-percentile" role="tab" tabindex="-1" aria-selected="false" aria-controls="res-percentile">백분위</button>
         </div>
       </div>
       <div id="res-dist" class="cg-tab-pane active" role="tabpanel" aria-labelledby="res-dist-tab">
@@ -452,9 +452,9 @@
       </div>
     </div>
 
-    <!-- Row: 자동화(col-5) + 운영(col-4) + 채널(col-3) -->
+    <!-- Row: 해결속도(col-5) + 운영(col-4) + 채널(col-3) -->
     <div class="cg-panel col-5">
-      <div class="cg-panel-header"><span class="cg-panel-title">자동화 효과</span></div>
+      <div class="cg-panel-header"><span class="cg-panel-title">해결 속도 참고</span></div>
       <div id="botPanel" class="bot-panel"></div>
     </div>
 
@@ -478,9 +478,9 @@
     <div class="adv-section-banner collapse-toggle" data-target="advContent" role="button" tabindex="0" aria-expanded="false" aria-controls="advContent">
       <div class="adv-banner-text">
         <div class="adv-banner-title">고도화 분석 (Advanced Intelligence)</div>
-        <div class="adv-banner-sub">SLA · FRT · FCR · 시간대 부하 · 채널 성능 · 에이징 · 이상치 · 반복 문의</div>
+        <div class="adv-banner-sub">SLA · FRT · 반복 문의 · 시간대 부하 · 채널 성능 · 에이징 · 이상치</div>
       </div>
-      <span class="adv-banner-version">v4.0</span>
+      <span class="adv-banner-version">v4.1</span>
       <span class="adv-toggle" aria-hidden="true">▸</span>
     </div>
 
@@ -504,11 +504,11 @@
       </div>
     </div>
 
-    <!-- B-2: FCR + 반복 문의 + FRT 카드 -->
+    <!-- FRT + 반복 문의 + FCR 수집 상태 -->
     <div class="cg-panel col-12 adv-panel">
       <div class="cg-panel-header">
-        <span class="cg-panel-title">첫응답 / 재오픈 / 반복문의</span>
-        <span class="panel-badge adv-pb">FRT · FCR · Repeat</span>
+        <span class="cg-panel-title">첫응답 / 반복문의 / FCR 수집 상태</span>
+        <span class="panel-badge adv-pb">FRT · Repeat · Data gap</span>
       </div>
       <div id="fcrPanel" class="fcr-panel"></div>
     </div>
@@ -552,7 +552,7 @@
 
     <div class="cg-panel col-6 adv-panel">
       <div class="cg-panel-header">
-        <span class="cg-panel-title">이상치 탐지 (Z-score ≥ 1.8σ)</span>
+        <span class="cg-panel-title">이상치 탐지 (IQR 1.5배 기준)</span>
         <span class="panel-badge adv-pb">Anomaly</span>
       </div>
       <div id="anomalyPanel" class="anomaly-panel"></div>
@@ -583,10 +583,10 @@
         <span class="cg-panel-title">진단</span>
         <span class="panel-badge adv-pb">Diagnostics</span>
         <div id="diagTabs" class="cg-tabs" role="tablist" aria-label="진단 탭">
-          <button class="cg-tab active" data-tab="diag-api" role="tab" aria-selected="true" aria-controls="diag-api">API 상태</button>
-          <button class="cg-tab" data-tab="diag-cache" role="tab" aria-selected="false" aria-controls="diag-cache">캐시</button>
-          <button class="cg-tab" data-tab="diag-limit" role="tab" aria-selected="false" aria-controls="diag-limit">수집 한도</button>
-          <button class="cg-tab" data-tab="diag-csv" role="tab" aria-selected="false" aria-controls="diag-csv">CSV 기준</button>
+          <button id="diag-api-tab" class="cg-tab active" data-tab="diag-api" role="tab" tabindex="0" aria-selected="true" aria-controls="diag-api">API 상태</button>
+          <button id="diag-cache-tab" class="cg-tab" data-tab="diag-cache" role="tab" tabindex="-1" aria-selected="false" aria-controls="diag-cache">캐시</button>
+          <button id="diag-limit-tab" class="cg-tab" data-tab="diag-limit" role="tab" tabindex="-1" aria-selected="false" aria-controls="diag-limit">수집 한도</button>
+          <button id="diag-csv-tab" class="cg-tab" data-tab="diag-csv" role="tab" tabindex="-1" aria-selected="false" aria-controls="diag-csv">CSV 기준</button>
         </div>
       </div>
       <div id="diag-api" class="cg-tab-pane active" role="tabpanel" aria-labelledby="diag-api-tab">

@@ -1,32 +1,36 @@
-// middleware.js — Vercel Edge Middleware
-// 정적 리소스(HTML, CSS, JS) + API 모두에 인증 게이트 적용
-// 환경변수: DASHBOARD_TOKEN, COOKIE_KEY (선택, 기본 'ds_auth')
+// Vercel Edge Middleware
+// 정적 리소스와 API를 포함한 대시보드 전체에 인증 게이트를 적용한다.
 
 export const config = {
-  // /api/auth, /api/check, favicon, robots는 우회 (인증 없이 접근)
   matcher: [
     '/((?!api/auth|api/check|favicon\\.ico|robots\\.txt|sitemap\\.xml).*)',
   ],
 };
 
 export default function middleware(request) {
-  const validToken = process.env.DASHBOARD_TOKEN || 'autostay-cs-2026';
+  const validToken = process.env.DASHBOARD_TOKEN;
+  if (!validToken) {
+    return new Response('Dashboard authentication is not configured', {
+      status: 503,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-store',
+      },
+    });
+  }
 
   const cookieKey = process.env.COOKIE_KEY || 'ds_auth';
   const cookies = request.headers.get('cookie') || '';
-  const re = new RegExp(`(?:^|;\\s*)${cookieKey}=([^;]+)`);
-  const m = cookies.match(re);
-  const token = m ? decodeURIComponent(m[1]) : null;
-
-  // 인증 통과
+  const escapedCookieKey = cookieKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = cookies.match(new RegExp(`(?:^|;\\s*)${escapedCookieKey}=([^;]+)`));
+  let token = match ? match[1] : null;
+  try { token = token ? decodeURIComponent(token) : null; } catch (_) {}
   if (token === validToken) return;
 
-  // 인증 실패 처리
   const url = new URL(request.url);
   const path = url.pathname;
-
-  // 정적 리소스(.css/.js/.png/.svg 등)는 401 응답
   const isAsset = /\.(css|js|mjs|png|jpg|jpeg|svg|ico|woff2?|ttf|webp|gif|map)$/i.test(path);
+
   if (isAsset) {
     return new Response('Unauthorized', {
       status: 401,
@@ -37,7 +41,6 @@ export default function middleware(request) {
     });
   }
 
-  // /api/* 요청은 401 JSON 응답 (대시보드 페이지 fetch 시 처리 위함)
   if (path.startsWith('/api/')) {
     return new Response(JSON.stringify({ error: 'Unauthorized', redirect: '/api/auth' }), {
       status: 401,
@@ -48,6 +51,5 @@ export default function middleware(request) {
     });
   }
 
-  // HTML 페이지 요청 → 인증 페이지로 redirect
   return Response.redirect(new URL('/api/auth', request.url), 302);
 }
